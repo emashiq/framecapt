@@ -43,4 +43,4 @@ Framelet is GPL-3.0-only. The installer includes FFmpeg 9.0.2 (Gyan "essentials"
 
 ## Checksums
 
-`[OWNER: paste SHA-256 values from SHA256SUMS.txt of the release build]`. (A local build on 2026-10-02 produced `Framelet-Setup-0.1.0.exe` with a SHA-256 beginning `5fab53a2`; builds are not bit-for-bit reproducible, so use the checksum of the file you publish.)
+`[OWNER: paste SHA-256 values from SHA256SUMS.txt of the release build]`. (The final local build on 2026-10-03 produced `Framelet-Setup-0.1.0.exe` with a SHA-256 beginning `d7b52327`; builds are not bit-for-bit reproducible, so use the checksum of the file you publish.)

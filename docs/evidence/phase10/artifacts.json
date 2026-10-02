@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-02T16:46:13.191Z",
+  "date": "2026-10-02T19:56:12.551Z",
   "app": {
     "name": "Framelet",
     "version": "0.1.0"
@@ -13,24 +13,24 @@
   "artifacts": [
     {
       "path": "out/make/squirrel.windows/x64/Framelet-0.1.0-full.nupkg",
-      "bytes": 228392281,
-      "sha256": "ff3f4003e5a8cc20a6948db3d79b8f3fa899234b6e9045a84de7c4833ccb7e9a"
+      "bytes": 228412674,
+      "sha256": "4311d0672b129f6cf01c34e88dedc78c5dd80ea18a00cbd999803233f69a2c3f"
     },
     {
       "path": "out/make/squirrel.windows/x64/Framelet-Setup-0.1.0.exe",
-      "bytes": 228981760,
-      "sha256": "5fab53a2efc93e5e6b17c7a880fdb6621d672963a1f8bce8b893ecb6c9eb246f",
+      "bytes": 229001728,
+      "sha256": "d7b52327b5c7017850dc655a0ac9b108ded8f78176e1ffc4f7f0330c1268bce9",
       "authenticode": "NotSigned"
     },
     {
       "path": "out/make/squirrel.windows/x64/RELEASES",
       "bytes": 79,
-      "sha256": "dc1c7e4f8f85daf96a955bd2d5431f87f7eeb5b36c333bab90c299a56163e4e3"
+      "sha256": "12243c5d957b809a34c881c5402dcc30618380436f583158b6d0a1dba447b5ab"
     },
     {
       "path": "out/make/zip/win32/x64/Framelet-win32-x64-0.1.0.zip",
-      "bytes": 236122291,
-      "sha256": "36ddda97e71768e3b36db18ad2ec9db3565aaa0390e01205e8248046e6c06984"
+      "bytes": 236143000,
+      "sha256": "55d2b87899bc6647fb2edc1bc5ab777bab21ee032f205fa58b570d298ff0cf4b"
     }
   ]
 }

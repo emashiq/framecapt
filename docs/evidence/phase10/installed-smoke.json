@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-02T16:46:19.363Z",
+  "date": "2026-10-02T19:54:14.627Z",
   "host": {
     "os": "Windows_NT 10.0.26300 x64",
     "cpu": "AMD Ryzen 7 7700 8-Core Processor"
@@ -31,6 +31,11 @@
       "detail": "all present"
     },
     {
+      "name": "resources has the Framelet LICENSE and THIRD_PARTY_NOTICES.md",
+      "ok": true,
+      "detail": "all present"
+    },
+    {
       "name": "app.asar is present, resources are not unpacked",
       "ok": true,
       "detail": ""
@@ -48,7 +53,7 @@
     {
       "name": "the silent install finished quickly without any network wait (no iconUrl download)",
       "ok": true,
-      "detail": "6.006 s"
+      "detail": "5.963 s"
     },
     {
       "name": "--squirrel-firstrun starts the app and shows its window",
@@ -63,12 +68,12 @@
     {
       "name": "main.log shows the startup line",
       "ok": true,
-      "detail": "2026-10-02T16:46:31.762Z [info] Framelet 0.1.0 starting (electron 44.5.1)"
+      "detail": "2026-10-02T19:54:27.088Z [info] Framelet 0.1.0 starting (electron 44.5.1)"
     },
     {
       "name": "main.log shows the FFmpeg self-check (\"ffmpeg ok <version>\")",
       "ok": true,
-      "detail": "2026-10-02T16:46:31.985Z [info] ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the"
+      "detail": "2026-10-02T19:54:27.398Z [info] ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the"
     },
     {
       "name": "Settings: launch at login can be switched on in the installed app",
@@ -108,7 +113,7 @@
     {
       "name": "Update.exe --processStart (the shortcut path) starts the versioned exe",
       "ok": true,
-      "detail": "pid 54488"
+      "detail": "pid 63816"
     },
     {
       "name": "attached to the installed app",
@@ -143,7 +148,7 @@
     {
       "name": "a PNG was saved by the installed app",
       "ok": true,
-      "detail": "Framelet 2026-10-02 at 22.46.48.png"
+      "detail": "Framelet 2026-10-03 at 01.54.43.png"
     },
     {
       "name": "the screenshot is a PNG with the exact physical size of a display",
@@ -163,22 +168,22 @@
     {
       "name": "the recording was finalized to a .webm in the chosen folder",
       "ok": true,
-      "detail": "Framelet 2026-10-02 at 22.47.01.webm"
+      "detail": "Framelet 2026-10-03 at 01.54.55.webm"
     },
     {
       "name": "the WebM is a playable VP9 video of about 5 s (probed with the INSTALLED ffprobe)",
       "ok": true,
-      "detail": "{\"bytes\":2758993,\"container\":\"matroska,webm\",\"codec\":\"vp9\",\"width\":1920,\"height\":804,\"durationS\":7.493,\"decodesClean\":true}"
+      "detail": "{\"bytes\":2534524,\"container\":\"matroska,webm\",\"codec\":\"vp9\",\"width\":1920,\"height\":804,\"durationS\":7.424,\"decodesClean\":true}"
     },
     {
       "name": "the MP4 auto-export finished (installed FFmpeg encodes H.264)",
       "ok": true,
-      "detail": "Framelet 2026-10-02 at 22.47.01.mp4"
+      "detail": "Framelet 2026-10-03 at 01.54.55.mp4"
     },
     {
       "name": "the MP4 is H.264 yuv420p and decodes cleanly",
       "ok": true,
-      "detail": "{\"bytes\":382950,\"codec\":\"h264\",\"pixFmt\":\"yuv420p\",\"durationS\":7.5,\"decodesClean\":true}"
+      "detail": "{\"bytes\":340023,\"codec\":\"h264\",\"pixFmt\":\"yuv420p\",\"durationS\":7.433333,\"decodesClean\":true}"
     },
     {
       "name": "no TCP connection to a non-loopback address for 60 s of use (whole process tree)",
@@ -264,13 +269,13 @@
   ],
   "setup": {
     "file": "Framelet-Setup-0.1.0.exe",
-    "bytes": 228981760,
-    "sha256": "5fab53a2efc93e5e6b17c7a880fdb6621d672963a1f8bce8b893ecb6c9eb246f",
+    "bytes": 229001728,
+    "sha256": "d7b52327b5c7017850dc655a0ac9b108ded8f78176e1ffc4f7f0330c1268bce9",
     "authenticode": "NotSigned"
   },
   "install": {
     "exitCode": 0,
-    "seconds": 6.006
+    "seconds": 5.963
   },
   "installDir": "~\\AppData\\Local\\Framelet",
   "installedFiles": {
@@ -296,8 +301,8 @@
   },
   "silentInstallLaunchesApp": false,
   "firstRunLog": {
-    "starting": "2026-10-02T16:46:31.762Z [info] Framelet 0.1.0 starting (electron 44.5.1)",
-    "ffmpeg": "2026-10-02T16:46:31.985Z [info] ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
+    "starting": "2026-10-02T19:54:27.088Z [info] Framelet 0.1.0 starting (electron 44.5.1)",
+    "ffmpeg": "2026-10-02T19:54:27.398Z [info] ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
   },
   "launchAtLogin": {
     "name": "com.squirrel.Framelet.Framelet",
@@ -325,30 +330,30 @@
     }
   },
   "screenshot": {
-    "bytes": 979948,
+    "bytes": 938546,
     "width": 3440,
     "height": 1440,
     "matchesDisplay": true,
-    "ms": 2760
+    "ms": 2302
   },
   "recording": {
-    "bytes": 2758993,
+    "bytes": 2534524,
     "container": "matroska,webm",
     "codec": "vp9",
     "width": 1920,
     "height": 804,
-    "durationS": 7.493,
+    "durationS": 7.424,
     "decodesClean": true
   },
   "mp4": {
-    "bytes": 382950,
+    "bytes": 340023,
     "codec": "h264",
     "pixFmt": "yuv420p",
-    "durationS": 7.5,
+    "durationS": 7.433333,
     "decodesClean": true
   },
   "network": {
-    "watchedSeconds": 66,
+    "watchedSeconds": 64,
     "tcpSamples": [
       {
         "atS": 2,
@@ -357,7 +362,7 @@
         "nonLoopback": 0
       },
       {
-        "atS": 18,
+        "atS": 17,
         "processes": 8,
         "connections": 2,
         "nonLoopback": 0
@@ -369,43 +374,43 @@
         "nonLoopback": 0
       },
       {
-        "atS": 32,
+        "atS": 31,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
       },
       {
-        "atS": 38,
+        "atS": 37,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
       },
       {
-        "atS": 43,
+        "atS": 42,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
       },
       {
-        "atS": 49,
+        "atS": 48,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
       },
       {
-        "atS": 55,
+        "atS": 53,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
       },
       {
-        "atS": 60,
+        "atS": 59,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
       },
       {
-        "atS": 66,
+        "atS": 64,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
@@ -417,7 +422,7 @@
   "errorLines": [],
   "uninstall": {
     "exitCode": 0,
-    "seconds": 0.477,
+    "seconds": 0.843,
     "command": "Update.exe --uninstall -s",
     "installDirFullyRemoved": false,
     "leftovers": [
@@ -442,7 +447,7 @@
   },
   "userDataKeptAfterUninstall": true,
   "cleanup": [
-    "user data: 6 file(s) restored, 3 new file(s) removed",
+    "user data: 12 file(s) restored, 3 new file(s) removed",
     "install dir removed by cleanup (uninstall had left it)",
     "removed the empty Start Menu folder Squirrel left"
   ],

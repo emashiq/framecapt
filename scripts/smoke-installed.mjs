@@ -355,6 +355,14 @@ async function main() {
     missing.length === 0,
     missing.join(',') || 'all present',
   );
+  const notices = ['LICENSE', 'THIRD_PARTY_NOTICES.md'].filter(
+    (n) => !fs.existsSync(path.join(appDir, 'resources', n)),
+  );
+  check(
+    'resources has the Framelet LICENSE and THIRD_PARTY_NOTICES.md',
+    notices.length === 0,
+    notices.join(',') || 'all present',
+  );
   check(
     'app.asar is present, resources are not unpacked',
     fs.existsSync(path.join(appDir, 'resources', 'app.asar')),

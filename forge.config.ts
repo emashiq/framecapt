@@ -63,7 +63,8 @@ const config: ForgeConfig = {
     asar: true,
     // The pinned FFmpeg build (npm run fetch:ffmpeg, run by the prepackage/premake/prestart hooks).
     // extraResource copies the folder by its name: <resources>/ffmpeg/win32-x64/{ffmpeg,ffprobe}.exe.
-    extraResource: ['vendor/ffmpeg'],
+    // LICENSE (GPL-3.0) and THIRD_PARTY_NOTICES.md ship next to Electron's own license files.
+    extraResource: ['vendor/ffmpeg', 'LICENSE', 'THIRD_PARTY_NOTICES.md'],
     ...(windowsSign && { windowsSign }),
     // Pinned Electron zip checksum (from the official v44.5.1 SHASUMS256.txt, verified 2026-10-02).
     // Builds are reproducible and work from the local cache without re-fetching SHASUMS256.txt.

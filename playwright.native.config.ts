@@ -8,6 +8,7 @@ export default defineConfig({
   timeout: 180_000,
   reporter: 'list',
   outputDir: 'test-results',
+  globalTeardown: './tests/e2e/global-teardown.ts',
   use: {
     trace: 'retain-on-failure',
   },
