@@ -1,0 +1,17 @@
+import { pickDefaultFormat, RECORDER_CANDIDATES } from '../../shared/recorder-formats';
+
+export interface RecorderFormats {
+  /** MediaRecorder.isTypeSupported() for every candidate, in candidate order. */
+  supported: Record<string, boolean>;
+  /** First supported entry of the preference order (VP9 -> VP8 -> H.264 in WebM), or null. */
+  defaultMime: string | null;
+}
+
+/** Probes the runtime; the result is what the recorder uses, never a hard-coded assumption. */
+export function detectRecorderFormats(): RecorderFormats {
+  const supported: Record<string, boolean> = {};
+  for (const mime of RECORDER_CANDIDATES) {
+    supported[mime] = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mime);
+  }
+  return { supported, defaultMime: pickDefaultFormat(supported) };
+}

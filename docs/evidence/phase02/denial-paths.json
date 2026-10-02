@@ -1,0 +1,7 @@
+{
+  "details": "PASSbogus-grant: NOT_FOUND: That capture source is no longer available.PASSno-grant: AbortError: Invalid capture constraintsPASSone-shot: second request rejected: AbortError",
+  "mainLogDenials": [
+    "2026-10-02T07:21:25.937Z [warn] Display capture denied: no active grant (no-grant)",
+    "2026-10-02T07:21:26.411Z [warn] Display capture denied: no active grant (no-grant)"
+  ]
+}

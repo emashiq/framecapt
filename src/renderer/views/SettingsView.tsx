@@ -6,6 +6,7 @@ import { Card } from '../components/ui/Card';
 import { IconButton } from '../components/ui/IconButton';
 import type { AppInfo } from '../../shared/ipc-contract';
 import { useAppInfo } from '../lib/use-app-info';
+import { CaptureDiagnostics } from './diagnostics/CaptureDiagnostics';
 
 function infoRows(info: AppInfo): { id: string; label: string; value: string }[] {
   return [
@@ -104,7 +105,10 @@ export function SettingsView() {
         title="Settings"
         description="Shortcuts, appearance and save locations will live here. For now, here is what you are running."
       />
-      <About />
+      <div className="space-y-6">
+        <About />
+        <CaptureDiagnostics />
+      </div>
     </>
   );
 }

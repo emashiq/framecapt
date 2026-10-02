@@ -1,9 +1,13 @@
-import { app } from 'electron';
+import { app, session } from 'electron';
+import { installCaptureAuthorization } from './capture/authorization';
+import { registerDiagnosticsHandlers } from './capture/diagnostics';
+import type { CaptureProvider } from './capture/types';
+import { getOriginConfig } from './windows';
 import { handle } from './ipc';
 import { log } from './logger';
 
-/** Phase-01 channels. Later phases register theirs here (or in feature modules). */
-export function registerHandlers(): void {
+/** Registers every IPC channel. Feature modules own their channels (capture/, diagnostics). */
+export function registerHandlers(provider: CaptureProvider): void {
   handle('app:getInfo', { roles: ['main'] }, () => ({
     version: app.getVersion(),
     electron: process.versions.electron ?? '',
@@ -24,4 +28,14 @@ export function registerHandlers(): void {
       log.error(parts.join('\n'));
     },
   );
+
+  handle('capture:listDisplays', { roles: ['main'] }, () => provider.listDisplays());
+  handle('capture:listSources', { roles: ['main'] }, (request) =>
+    provider.listSources({
+      types: request.types,
+      ...(request.thumbnailWidth !== undefined && { thumbnailWidth: request.thumbnailWidth }),
+    }),
+  );
+  installCaptureAuthorization(session.defaultSession, provider, getOriginConfig);
+  registerDiagnosticsHandlers();
 }

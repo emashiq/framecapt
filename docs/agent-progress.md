@@ -13,7 +13,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 |---|---|---|
 | 00 Setup | VERIFIED | branch renamed master→main; agent defs; .gitignore |
 | 01 Foundation | VERIFIED | Forge 8 + Vite 8 + React 19 + TS 6; secure bridge; e2e 9/9 on host |
-| 02 Capture feasibility | NOT_STARTED | |
+| 02 Capture feasibility | VERIFIED | native 11/11 on host; exact-res screenshots both monitors; loopback audio captured |
 | 03 Selection & screenshots | NOT_STARTED | |
 | 04 Screenshot editor | NOT_STARTED | |
 | 05 Recording & audio | NOT_STARTED | |
@@ -35,6 +35,15 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Commands (lead re-ran): `npm run lint` exit 0; `npm run typecheck` exit 0; `npm test` 31/31. Implementer: `npm ci` ok; `npm run test:e2e` 9/9; `npm run package` → out/Framelet-win32-x64/Framelet.exe launched (4 processes) and killed.
 - Risks: electron binary downloads lazily on first require after npm ci; `npm run make`/Squirrel not yet exercised (phase 10).
 - Next: phase 02.
+
+### Phase 02 — Capture feasibility (VERIFIED 2026-10-02)
+- Files: src/main/capture/* (provider boundary, Electron + gated mock provider, one-shot grants, display-media handler, diagnostics save), src/renderer/capture/* (stream, frame, audio graph, region crop, format probe, resource counters), diagnostics view, tests/native/capture.native.spec.ts, playwright.native.config.ts, scripts/check-no-mocks.mjs, docs/capture-feasibility.md.
+- Host displays: 3440x1440 (primary) + 2560x1440, both scale 1 (mixed-DPI/rotation/negative origin not physically available → covered by unit tests only).
+- Results (native): screenshots exact physical size on both displays; system loopback + test tone 4 s → VP9 3440x1440 + Opus, mean −38 dB; region 1280x720 canvas+timer 29.8 fps, SSIM 0.98 vs 0.25 control; mic stream recorded; no-grant/bogus-source/camera requests denied; zero leaked tracks/contexts/timers.
+- Decisions: default `video/webm;codecs=vp9,opus`; frame grab via track processor with <video> fallback; frame size taken from decoded frame (track.getSettings unreliable pre-first-frame); canvas+timer crop for region video.
+- Commands (lead re-ran): lint 0, typecheck 0, `npm test` 61/61. Implementer: test:e2e 11/11 (incl. check:mocks), test:native 11/11.
+- Lead fix: redacted Windows username from evidence JSON; evidence dir excluded from prettier. Media evidence is gitignored (contains real desktop content).
+- Risks: system-audio-unavailable path untested natively; window-source capture & hidden-window throttling untested (phase 03/05).
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { app, BrowserWindow, Menu, nativeTheme, session } from 'electron';
+import { createCaptureProvider } from './capture';
 import { registerHandlers } from './handlers';
 import { initLogger, log } from './logger';
 import { installCsp, installNavigationLockdown, installPermissionHandlers } from './security';
@@ -43,7 +44,7 @@ function start(): void {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     const logger = initLogger(path.join(app.getPath('userData'), 'logs'));
     logger.info(`Framelet ${app.getVersion()} starting (electron ${process.versions.electron})`);
 
@@ -61,7 +62,7 @@ function start(): void {
 
     installCsp(session.defaultSession, getOriginConfig());
     installPermissionHandlers(session.defaultSession, getOriginConfig);
-    registerHandlers();
+    registerHandlers(await createCaptureProvider());
     createMainWindow();
   });
 }

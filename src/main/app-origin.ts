@@ -45,13 +45,17 @@ const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write']);
 
 /**
  * Permission policy: only `media` and `clipboard-sanitized-write`, only for the app's own pages.
- * Display capture is not a permission request; phase 02 handles it with
- * session.setDisplayMediaRequestHandler.
+ * `media` is for the microphone: a request that includes `video` (camera) is denied, because the
+ * MVP has no camera feature. Display capture is not a permission request; it is authorized by
+ * session.setDisplayMediaRequestHandler (capture/authorization.ts).
  */
 export function isPermissionAllowed(
   permission: string,
   requestingUrl: string | undefined | null,
   config: AppOriginConfig,
+  mediaTypes?: readonly string[],
 ): boolean {
-  return ALLOWED_PERMISSIONS.has(permission) && isAppUrl(requestingUrl, config);
+  if (!ALLOWED_PERMISSIONS.has(permission) || !isAppUrl(requestingUrl, config)) return false;
+  if (permission === 'media' && mediaTypes?.includes('video')) return false;
+  return true;
 }

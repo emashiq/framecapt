@@ -1,0 +1,97 @@
+{
+  "displayId": "3590684614",
+  "report": {
+    "auto": [
+      {
+        "ok": true,
+        "firstFrameMs": 37,
+        "totalMs": 79,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      },
+      {
+        "ok": true,
+        "firstFrameMs": 93,
+        "totalMs": 138,
+        "size": "2560x1440",
+        "settingsAfter": "3440x1440"
+      },
+      {
+        "ok": true,
+        "firstFrameMs": 8,
+        "totalMs": 66,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      }
+    ],
+    "video-element": [
+      {
+        "ok": true,
+        "firstFrameMs": 117,
+        "totalMs": 182,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      },
+      {
+        "ok": true,
+        "firstFrameMs": 134,
+        "totalMs": 170,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      },
+      {
+        "ok": true,
+        "firstFrameMs": 136,
+        "totalMs": 174,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      }
+    ],
+    "track-processor": [
+      {
+        "ok": true,
+        "firstFrameMs": 84,
+        "totalMs": 122,
+        "size": "2560x1440",
+        "settingsAfter": "3440x1440"
+      },
+      {
+        "ok": true,
+        "firstFrameMs": 8,
+        "totalMs": 45,
+        "size": "2560x1440",
+        "settingsAfter": "3440x1440"
+      },
+      {
+        "ok": true,
+        "firstFrameMs": 6,
+        "totalMs": 48,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      }
+    ],
+    "image-capture": [
+      {
+        "ok": true,
+        "firstFrameMs": 8,
+        "totalMs": 57,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      },
+      {
+        "ok": true,
+        "firstFrameMs": 107,
+        "totalMs": 143,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      },
+      {
+        "ok": true,
+        "firstFrameMs": 97,
+        "totalMs": 135,
+        "size": "2560x1440",
+        "settingsAfter": "2560x1440"
+      }
+    ]
+  }
+}

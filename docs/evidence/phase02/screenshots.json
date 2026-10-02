@@ -1,0 +1,30 @@
+[
+  {
+    "displayId": "3590684614",
+    "primary": false,
+    "expected": "2560x1440",
+    "actual": "2560x1440",
+    "trackSettingsBefore": "3440x1440",
+    "trackSettingsAfter": "2560x1440",
+    "method": "track-processor",
+    "acquireMs": 500,
+    "firstFrameMs": 104,
+    "totalMs": 200,
+    "pngBytes": 1850349,
+    "evidence": "docs/evidence/phase02/screenshot-display-3590684614.png"
+  },
+  {
+    "displayId": "111732923",
+    "primary": true,
+    "expected": "3440x1440",
+    "actual": "3440x1440",
+    "trackSettingsBefore": "3440x1440",
+    "trackSettingsAfter": "3440x1440",
+    "method": "track-processor",
+    "acquireMs": 222,
+    "firstFrameMs": 50,
+    "totalMs": 99,
+    "pngBytes": 1268521,
+    "evidence": "docs/evidence/phase02/screenshot-display-111732923.png"
+  }
+]

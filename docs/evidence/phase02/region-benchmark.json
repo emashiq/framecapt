@@ -1,0 +1,182 @@
+{
+  "canvas-rvfc": {
+    "ok": true,
+    "ui": {
+      "mimeType": "video/webm;codecs=vp9,opus",
+      "bytes": 465122,
+      "path": "C:\\Users\\USER\\AppData\\Local\\Temp\\framelet-native-r2PK8a\\diagnostics\\recording-2026-10-02T07-21-03-612Z-251ded.webm",
+      "wallMs": 4009.0999999940395,
+      "framesDelivered": 116,
+      "measuredFps": 28.93345305805271,
+      "requestedFps": 30,
+      "videoWidth": 1280,
+      "videoHeight": 720,
+      "hasAudio": false,
+      "audioSources": [],
+      "peakLevels": {},
+      "tracksAtStop": [
+        {
+          "where": "display",
+          "kind": "video",
+          "readyState": "live",
+          "muted": false,
+          "enabled": true
+        },
+        {
+          "where": "recorded",
+          "kind": "video",
+          "readyState": "live",
+          "muted": false,
+          "enabled": true
+        }
+      ],
+      "tracksAfterRelease": [
+        {
+          "where": "display",
+          "kind": "video",
+          "readyState": "ended",
+          "muted": false,
+          "enabled": true
+        },
+        {
+          "where": "recorded",
+          "kind": "video",
+          "readyState": "ended",
+          "muted": false,
+          "enabled": true
+        }
+      ],
+      "endedEarly": [],
+      "cropMethod": "none",
+      "cropFramesOut": 119
+    },
+    "ffprobeSize": "1280x720",
+    "audioStreams": 0,
+    "durationSeconds": 4.02,
+    "videoPackets": 116,
+    "packetFps": 28.9,
+    "ssimSameRegion": 0.976786,
+    "ssimWrongRegion": 0.24589,
+    "evidence": "docs/evidence/phase02/recording-region-canvas-rvfc.webm"
+  },
+  "canvas-timer": {
+    "ok": true,
+    "ui": {
+      "mimeType": "video/webm;codecs=vp9,opus",
+      "bytes": 463399,
+      "path": "C:\\Users\\USER\\AppData\\Local\\Temp\\framelet-native-r2PK8a\\diagnostics\\recording-2026-10-02T07-21-09-076Z-42f655.webm",
+      "wallMs": 4000.100000023842,
+      "framesDelivered": 120,
+      "measuredFps": 29.998500074862154,
+      "requestedFps": 30,
+      "videoWidth": 1280,
+      "videoHeight": 720,
+      "hasAudio": false,
+      "audioSources": [],
+      "peakLevels": {},
+      "tracksAtStop": [
+        {
+          "where": "display",
+          "kind": "video",
+          "readyState": "live",
+          "muted": false,
+          "enabled": true
+        },
+        {
+          "where": "recorded",
+          "kind": "video",
+          "readyState": "live",
+          "muted": false,
+          "enabled": true
+        }
+      ],
+      "tracksAfterRelease": [
+        {
+          "where": "display",
+          "kind": "video",
+          "readyState": "ended",
+          "muted": false,
+          "enabled": true
+        },
+        {
+          "where": "recorded",
+          "kind": "video",
+          "readyState": "ended",
+          "muted": false,
+          "enabled": true
+        }
+      ],
+      "endedEarly": [],
+      "cropMethod": "none",
+      "cropFramesOut": 121
+    },
+    "ffprobeSize": "1280x720",
+    "audioStreams": 0,
+    "durationSeconds": 4.03,
+    "videoPackets": 120,
+    "packetFps": 29.8,
+    "ssimSameRegion": 0.97652,
+    "ssimWrongRegion": 0.245814,
+    "evidence": "docs/evidence/phase02/recording-region-canvas-timer.webm"
+  },
+  "track-processor": {
+    "ok": true,
+    "ui": {
+      "mimeType": "video/webm;codecs=vp9,opus",
+      "bytes": 205222,
+      "path": "C:\\Users\\USER\\AppData\\Local\\Temp\\framelet-native-r2PK8a\\diagnostics\\recording-2026-10-02T07-21-14-220Z-3524e2.webm",
+      "wallMs": 4005.199999988079,
+      "framesDelivered": 94,
+      "measuredFps": 23.469489663507385,
+      "requestedFps": 30,
+      "videoWidth": 1280,
+      "videoHeight": 720,
+      "hasAudio": false,
+      "audioSources": [],
+      "peakLevels": {},
+      "tracksAtStop": [
+        {
+          "where": "display",
+          "kind": "video",
+          "readyState": "live",
+          "muted": false,
+          "enabled": true
+        },
+        {
+          "where": "recorded",
+          "kind": "video",
+          "readyState": "live",
+          "muted": false,
+          "enabled": true
+        }
+      ],
+      "tracksAfterRelease": [
+        {
+          "where": "display",
+          "kind": "video",
+          "readyState": "ended",
+          "muted": false,
+          "enabled": true
+        },
+        {
+          "where": "recorded",
+          "kind": "video",
+          "readyState": "ended",
+          "muted": false,
+          "enabled": true
+        }
+      ],
+      "endedEarly": [],
+      "cropMethod": "none",
+      "cropFramesOut": 96
+    },
+    "ffprobeSize": "1280x720",
+    "audioStreams": 0,
+    "durationSeconds": 3.95,
+    "videoPackets": 94,
+    "packetFps": 23.8,
+    "ssimSameRegion": 0.979206,
+    "ssimWrongRegion": 0.250923,
+    "evidence": "docs/evidence/phase02/recording-region-track-processor.webm"
+  }
+}

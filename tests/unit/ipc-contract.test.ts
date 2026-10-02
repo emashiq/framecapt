@@ -11,8 +11,16 @@ import {
 import { ROLES } from '../../src/shared/types';
 
 describe('ipc contract', () => {
-  it('lists the phase-01 channels', () => {
-    expect([...IPC_CHANNELS].sort()).toEqual(['app:getInfo', 'app:reportError']);
+  it('lists the registered channels', () => {
+    expect([...IPC_CHANNELS].sort()).toEqual([
+      'app:getInfo',
+      'app:reportError',
+      'capture:grant',
+      'capture:listDisplays',
+      'capture:listSources',
+      'diagnostics:revealFolder',
+      'diagnostics:saveRecording',
+    ]);
     expect(IPC_EVENTS).toEqual(['app:themeChanged']);
   });
 

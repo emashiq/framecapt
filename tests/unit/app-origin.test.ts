@@ -65,6 +65,12 @@ describe('isPermissionAllowed', () => {
     expect(isPermissionAllowed('clipboard-sanitized-write', url, prod)).toBe(true);
   });
 
+  it('allows the microphone but denies any media request that includes video', () => {
+    expect(isPermissionAllowed('media', url, prod, ['audio'])).toBe(true);
+    expect(isPermissionAllowed('media', url, prod, ['video'])).toBe(false);
+    expect(isPermissionAllowed('media', url, prod, ['audio', 'video'])).toBe(false);
+  });
+
   it('denies other permissions and foreign origins', () => {
     for (const permission of [
       'geolocation',

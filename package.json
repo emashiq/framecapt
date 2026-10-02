@@ -15,7 +15,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "electron-forge package && playwright test",
+    "check:mocks": "node scripts/check-no-mocks.mjs",
+    "test:e2e": "electron-forge package && npm run check:mocks && playwright test",
+    "test:native": "electron-forge package && npm run check:mocks && playwright test -c playwright.native.config.ts",
     "format": "prettier --write ."
   },
   "devDependencies": {

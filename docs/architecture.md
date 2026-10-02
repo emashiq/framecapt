@@ -4,12 +4,12 @@ Status legend: **Implemented** = in the repository and exercised by tests; **Pla
 
 ## Processes
 
-| Process  | Code                   | Responsibility                                                                                                                                                          | Status                                                                     |
-| -------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Main     | `src/main/`            | Lifecycle, windows and their roles, security policy (CSP, navigation, permissions), IPC handlers, logging, later: source discovery, tray, shortcuts, filesystem, FFmpeg | Implemented (lifecycle, windows, security, IPC, logger); the rest Planned  |
-| Preload  | `src/preload/index.ts` | The only bridge: `window.framelet.invoke` / `on`, restricted to the shared contract                                                                                     | Implemented                                                                |
-| Renderer | `src/renderer/`        | Product UI, later editor, preview and the browser media pipeline                                                                                                        | Implemented (shell, Capture/History/Settings placeholders, error boundary) |
-| Shared   | `src/shared/`          | IPC contract (zod schemas, channel map, result types), CSP strings, role type. Bundled into main and preload by Vite                                                    | Implemented                                                                |
+| Process  | Code                   | Responsibility                                                                                                                                                                                                                                            | Status                                                                                                                         |
+| -------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Main     | `src/main/`            | Lifecycle, windows and their roles, security policy (CSP, navigation, permissions), IPC handlers, logging, source discovery and capture authorization (`src/main/capture/`), diagnostics file storage, later: tray, shortcuts, session filesystem, FFmpeg | Implemented (lifecycle, windows, security, IPC, logger, CaptureProvider, authorization, diagnostics storage); the rest Planned |
+| Preload  | `src/preload/index.ts` | The only bridge: `window.framelet.invoke` / `on`, restricted to the shared contract                                                                                                                                                                       | Implemented                                                                                                                    |
+| Renderer | `src/renderer/`        | Product UI, browser media pipeline (`src/renderer/capture/`), later editor and preview                                                                                                                                                                    | Implemented (shell, placeholders, error boundary, capture library prototypes, Capture diagnostics in Settings)                 |
+| Shared   | `src/shared/`          | IPC contract (zod schemas, channel map, result types), CSP strings, role type. Bundled into main and preload by Vite                                                                                                                                      | Implemented                                                                                                                    |
 
 The renderer uses `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, `webSecurity: true`. There is no remote content: every window shows the bundled UI only.
 
@@ -76,10 +76,26 @@ The preload never exposes `ipcRenderer`, Node APIs or arbitrary channels. Sandbo
 
 CSP note: in Electron 44 on Windows, `onHeadersReceived` was observed to fire for `file://` requests (checked with a temporary log line). The `<meta>` tag is kept as a second layer so production does not depend on that behavior. The `<meta>` variant omits `frame-ancestors`, which is not supported there.
 
-## Planned capture pipeline (Planned, phases 02+)
+## Capture (phase 02 prototype: Implemented and verified on the host; product flows are Planned)
 
-- **Source discovery**: `desktopCapturer.getSources` in main enumerates screens and windows (thumbnails only for the picker).
-- **Authorization**: capture is granted through `session.setDisplayMediaRequestHandler` with a source selected in main, not by exposing source ids to arbitrary renderer code. A TODO marker for this is in `security.ts`.
+Measured results and the API details are in [capture-feasibility.md](capture-feasibility.md).
+
+| Part                                                                                                                                  | Code                                                                          | Status                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `CaptureProvider` interface (`listDisplays`, `listSources`)                                                                           | `src/main/capture/types.ts`                                                   | Implemented                                                        |
+| Electron provider over `screen` + `desktopCapturer`; excludes Framelet's own windows                                                  | `src/main/capture/electron-provider.ts`                                       | Implemented, verified on the host                                  |
+| Mock provider for UI tests; reachable only in builds made with `FRAMELET_E2E_BUILD=1` and a runtime env flag                          | `src/main/capture/mock-provider.ts`, `index.ts`, `scripts/check-no-mocks.mjs` | Implemented; `npm run check:mocks` proves a normal bundle has none |
+| Authorization: `setDisplayMediaRequestHandler` answering only from one-shot, 5 s, webContents-bound grants created by `capture:grant` | `src/main/capture/authorization.ts`, `grants.ts`                              | Implemented, verified (denial paths, one-shot)                     |
+| Renderer library: `stream.ts`, `frame.ts`, `audio-graph.ts`, `region-crop.ts`, `recorder-probe.ts`, `resource-registry.ts`            | `src/renderer/capture/`                                                       | Implemented as prototypes, verified on the host                    |
+| Diagnostics view (Settings) and main-owned `userData/diagnostics/` storage                                                            | `src/renderer/views/diagnostics/`, `src/main/capture/diagnostics.ts`          | Implemented. Whole-blob saving is for this bounded prototype only  |
+| Overlay, toolbar, recorder window, disk-backed sessions, FFmpeg                                                                       |                                                                               | Planned                                                            |
+
+Channels added: `capture:listDisplays`, `capture:listSources` (main), `capture:grant` (main, recorder), `diagnostics:saveRecording`, `diagnostics:revealFolder` (main). The permission handler now denies `media` requests that include video (camera).
+
+## Planned capture pipeline (Planned, phases 03+)
+
+- **Source discovery**: implemented in phase 02 (see above).
+- **Authorization**: implemented in phase 02 (see above).
 - **Screenshots**: a freeze-frame of the chosen display (a live video frame at full resolution, never an upscaled thumbnail) is shown in an overlay window for region selection; the selection is cropped from that frame. Coordinates are mapped from display-independent units to pixels, accounting for negative monitor origins and scale factors. Region capture is limited to one monitor.
 - **Recording**: a hidden `recorder` window owns a single recorder (MediaRecorder; WebM chosen after runtime `isTypeSupported` checks). Audio (microphone and system audio) is mixed in an explicit Web Audio graph into one track.
 - **Persistence**: disk-backed WebM sessions. The renderer sends sequenced, size-capped chunks over IPC with acknowledgements and a bounded queue; main appends to a session file and keeps a manifest. Session ids and sequence numbers are validated at the IPC boundary. Finalization runs an FFmpeg remux so the output is a clean playable file (chunks are never concatenated blindly). Recovery after a crash is best effort.

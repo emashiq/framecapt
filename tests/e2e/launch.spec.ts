@@ -92,6 +92,35 @@ test('navigating to Settings shows About with the Electron version from app:getI
   });
 });
 
+test('Settings has a Capture diagnostics section with the recorder format probe', async () => {
+  await page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('button', { name: 'Settings' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Capture diagnostics' })).toBeVisible();
+  await expect(page.getByTestId('diag-displays')).toBeAttached();
+  await expect(page.getByTestId('rec-start')).toBeAttached();
+  // The format list comes from MediaRecorder.isTypeSupported at runtime; WebM VP9/VP8 is expected
+  // in every Chromium build, so a default must have been picked.
+  await expect(page.getByTestId('format-default')).not.toContainText('none supported');
+  await expect(page.getByTestId('diag-resources')).toHaveAttribute('data-live-tracks', '0');
+});
+
+test('capture grants are refused for unknown sources and malformed ids', async () => {
+  const grant = await page.evaluate(() =>
+    window.framelet.invoke('capture:grant', { sourceId: 'screen:987654:0', systemAudio: false }),
+  );
+  expect(grant).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } });
+
+  const badId = await page.evaluate(() =>
+    (window.framelet.invoke as (c: string, p: unknown) => Promise<unknown>)('capture:grant', {
+      sourceId: '../etc',
+      systemAudio: false,
+    }),
+  );
+  expect(badId).toMatchObject({ ok: false, error: { code: 'INVALID_PAYLOAD' } });
+});
+
 test('renderer has no Node access and a minimal bridge', async () => {
   const surface = await page.evaluate(() => ({
     require: typeof (window as unknown as { require?: unknown }).require,

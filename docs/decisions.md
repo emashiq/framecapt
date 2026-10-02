@@ -71,3 +71,15 @@ Decision: the Squirrel.Windows maker is configured and `src/main/squirrel.ts` ha
 ## ADR-012: Styling
 
 Decision: Tailwind v4 through `@tailwindcss/vite`. Colors are CSS variables defined with `light-dark()`, so they follow the system theme via `color-scheme`; `<html data-theme="light|dark">` overrides it for a future settings switch. Inter (variable) is bundled locally from `@fontsource-variable/inter` (OFL). Icons: lucide-react. Toasts: sonner. Tooltips: Radix.
+
+## ADR-013: Browser capture pipeline, grants and region crop (phase 02)
+
+Decision: keep capture in the renderer (`getDisplayMedia` + MediaRecorder) behind a main-process `CaptureProvider` for discovery and a main-owned authorization step.
+
+- Authorization: `session.setDisplayMediaRequestHandler(handler, { useSystemPicker: false })` answers only from a one-shot grant (5 s, bound to one webContents, source validated against a fresh `desktopCapturer` listing). Anything else calls back with `{}`, which rejects `getDisplayMedia` with `AbortError` in Electron 44; the renderer maps that to `denied`.
+- Frame size: `track.getSettings()` is not trusted (on the second monitor it reported the other display's size until the first frame). The real frame size is read from the decoded frame.
+- Screenshots: default method `auto` = `MediaStreamTrackProcessor` first, `<video>` + `requestVideoFrameCallback` as fallback (the video path waits for a new frame and was up to 2 s slow on a static screen).
+- Region crop: canvas crop is the shipping candidate (works, correct pixels, 29-30 fps with a timer-backed driver). The track-processor crop also works and is cheaper but delivered 23-29 fps; keep it as a measured alternative, no switch yet. No native backend is needed on this evidence.
+- Default recorder format: first supported of WebM VP9+Opus, VP8+Opus, H.264+Opus (runtime `isTypeSupported`).
+- Mock provider: only in builds made with `FRAMELET_E2E_BUILD=1` (Vite `define`) plus a runtime env flag; `npm run check:mocks` fails if a normal bundle contains it.
+- Diagnostics saves whole blobs (<= 200 MB, 3-10 s clips) into `userData/diagnostics/`. This is a prototype shortcut; phase 06 replaces it with disk-backed sessions.

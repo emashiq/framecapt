@@ -1,0 +1,107 @@
+{
+  "status": "recorded",
+  "devices": [
+    {
+      "id": "default",
+      "label": "Default - Microphone (Brio 100) (046d:094c)"
+    },
+    {
+      "id": "communications",
+      "label": "Communications - Microphone (Brio 100) (046d:094c)"
+    },
+    {
+      "id": "6ef59437d78023b9fc0fb825a83b66f2b35088a544872a0e340e6b4037679716",
+      "label": "Microphone (Jabra Evolve 10) (0b0e:2e5f)"
+    },
+    {
+      "id": "28f241322cfaac1dcd6d5b3699614fbd2f528faff19eb490803eed680d004830",
+      "label": "Microphone (Brio 100) (046d:094c)"
+    }
+  ],
+  "ui": {
+    "mimeType": "video/webm;codecs=vp9,opus",
+    "bytes": 1048500,
+    "path": "C:\\Users\\USER\\AppData\\Local\\Temp\\framelet-native-r2PK8a\\diagnostics\\recording-2026-10-02T07-21-18-502Z-461dac.webm",
+    "wallMs": 3000.5,
+    "framesDelivered": 87,
+    "measuredFps": 28.994201159825643,
+    "requestedFps": 30,
+    "videoWidth": 3440,
+    "videoHeight": 1440,
+    "hasAudio": true,
+    "audioSources": [
+      "mic"
+    ],
+    "peakLevels": {
+      "mic": 0.010717785760651393
+    },
+    "tracksAtStop": [
+      {
+        "where": "display",
+        "kind": "video",
+        "readyState": "live",
+        "muted": false,
+        "enabled": true
+      },
+      {
+        "where": "mic",
+        "kind": "audio",
+        "readyState": "live",
+        "muted": false,
+        "enabled": true
+      },
+      {
+        "where": "recorded",
+        "kind": "audio",
+        "readyState": "live",
+        "muted": false,
+        "enabled": true
+      },
+      {
+        "where": "recorded",
+        "kind": "video",
+        "readyState": "live",
+        "muted": false,
+        "enabled": true
+      }
+    ],
+    "tracksAfterRelease": [
+      {
+        "where": "display",
+        "kind": "video",
+        "readyState": "ended",
+        "muted": false,
+        "enabled": true
+      },
+      {
+        "where": "mic",
+        "kind": "audio",
+        "readyState": "ended",
+        "muted": false,
+        "enabled": true
+      },
+      {
+        "where": "recorded",
+        "kind": "audio",
+        "readyState": "ended",
+        "muted": false,
+        "enabled": true
+      },
+      {
+        "where": "recorded",
+        "kind": "video",
+        "readyState": "ended",
+        "muted": false,
+        "enabled": true
+      }
+    ],
+    "endedEarly": [],
+    "cropMethod": "none"
+  },
+  "volume": {
+    "mean": -49.6,
+    "max": -23.3,
+    "raw": "    Metadata:\r\n      encoder         : Lavc62.28.101 pcm_s16le\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] n_samples: 288000\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] mean_volume: -49.6 dB\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] max_volume: -23.3 dB\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_23db: 6\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_24db: 12\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_25db: 62\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_26db: 70\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_27db: 114\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_28db: 200\r\n[out#0/null @ 000001bfe8ca0300] video:0KiB audio:562KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\r\nsize=N/A time=00:00:03.00 bitrate=N/A speed= 440x elapsed=0:00:00.00    \r\n"
+  },
+  "evidence": "docs/evidence/phase02/recording-microphone.webm"
+}

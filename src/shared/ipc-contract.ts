@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import {
+  CaptureGrantRequestSchema,
+  CaptureGrantResponseSchema,
+  DisplayInfoSchema,
+  ListSourcesRequestSchema,
+  SaveDiagnosticsRequestSchema,
+  SaveDiagnosticsResponseSchema,
+  SourceInfoSchema,
+} from './capture-schemas';
 import { ROLES, type Role } from './types';
 
 const ALL_ROLES: readonly Role[] = ROLES;
@@ -48,6 +57,31 @@ export const ipcContract = {
     request: ReportErrorSchema,
     response: z.void(),
     roles: ALL_ROLES,
+  },
+  'capture:listDisplays': {
+    request: z.undefined(),
+    response: z.array(DisplayInfoSchema),
+    roles: ['main'],
+  },
+  'capture:listSources': {
+    request: ListSourcesRequestSchema,
+    response: z.array(SourceInfoSchema),
+    roles: ['main'],
+  },
+  'capture:grant': {
+    request: CaptureGrantRequestSchema,
+    response: CaptureGrantResponseSchema,
+    roles: ['main', 'recorder'],
+  },
+  'diagnostics:saveRecording': {
+    request: SaveDiagnosticsRequestSchema,
+    response: SaveDiagnosticsResponseSchema,
+    roles: ['main'],
+  },
+  'diagnostics:revealFolder': {
+    request: z.undefined(),
+    response: z.void(),
+    roles: ['main'],
   },
 } as const satisfies Record<string, ChannelDef>;
 
