@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+.vite/
+coverage/
+vendor/ffmpeg/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+docs/evidence/**/*.webm
+docs/evidence/**/*.mp4
+docs/evidence/**/*.png
+!docs/evidence/**/*-sample.png
