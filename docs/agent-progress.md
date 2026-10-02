@@ -17,7 +17,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 03 Selection & screenshots | VERIFIED | native 18/18; region inset exact on both displays; e2e 28/28 |
 | 04 Screenshot editor | VERIFIED | editor + pixel-exact capture; redaction pixels verified PNG/JPEG/clipboard |
 | 05 Recording & audio | VERIFIED | native 29/29; ~30 fps all modes; toolbar excluded from capture |
-| 06 Storage & recovery | NOT_STARTED | |
+| 06 Storage & recovery | VERIFIED | FFmpeg 9.0.2 bundled (SHA-pinned); remux finalize; forced-kill recovery verified natively |
 | 07 Export & history | NOT_STARTED | |
 | 08 Desktop polish | NOT_STARTED | |
 | 09 Security/reliability/perf | NOT_STARTED | |
@@ -64,6 +64,13 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Native results (VP9/Opus WebM): no-audio 1920x804 29.7 fps; system+tone with 2 s pause → file 6.10 s = active time (pause excluded), A/V length diff 0.02 s; mic only; mic+system mixed into one Opus track; region 1280x720 on second display; source preset 3440x1440; window fixture 642x432. Hidden recorder window ~30 fps (backgroundThrottling false). Toolbar exclusion via setContentProtection: 0 red pixels in recording vs 460 in unprotected control.
 - Results: lint/typecheck 0; unit 318/318 (lead re-ran); e2e 70/70; native 29/29.
 - Open (→ phase 06): no duration/cues until remux; session dir duplicates output; no recovery/disk checks; quit-cap & forced-kill untested. Real mic signal was silent in room (stream present) — manual speaking test pending. Mic unplug / missing loopback not physically exercised.
+
+### Phase 06 — Storage & recovery (VERIFIED 2026-10-02)
+- Files: scripts/fetch-ffmpeg.mjs (Gyan 9.0.2 essentials, SHA-256 60f46726…, idempotent; npm pre-hooks), src/main/media/ffmpeg.ts, src/main/recording/{manifest,session-fs,finalize,recovery,recovery-handlers,session-service}.ts, src/main/recorder/quit-cap.ts, RecoveryBanner, docs/{recording-persistence,ffmpeg}.md, tests (unit + real-ffmpeg integration, e2e recovery.spec.ts, native recovery.native.spec.ts).
+- Behaviour: chunks appended in sequence to one stream.webm; finalize = ffmpeg -c copy remux → probe → atomic publish → session dir deleted (completed/<id>.json kept). Owner-bound sessions, SHA-1 idempotent duplicates, disk checks (start <1 GB refuse; <500 MB stop safely), quit cap 15 s → resume finalization next start.
+- Native: 6 s recording format.duration 6.039 s with cues, -ss 3 decodes. Forced kill after 2.3/3.7/5.0 s → recovered 1.97/2.99/5.04 s, video+audio, clean decode. Packaged exe logged "ffmpeg ok 9.0.2".
+- Results: lint/typecheck 0; unit 407/407 (lead re-ran); e2e 76/76; native 31/31. E2E-only env hooks gated by __FRAMELET_E2E__ (lead reviewed) and listed in check-no-mocks.
+- Risks: per-chunk fsync not done (OS crash may lose cached data); orphaned ffmpeg after main death untested; real disk-full only simulated; sub-100 ms recordings saved raw; FFmpeg adds ~211 MB; GPL source offer = owner task.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

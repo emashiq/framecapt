@@ -1,64 +1,43 @@
-import { randomBytes, randomUUID } from 'node:crypto';
-import fs from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { MAX_CHUNK_BYTES, type RecordOptions } from '../../shared/recorder-ipc';
-import { defaultRecordingFileName, withCollisionSuffix } from '../../shared/recording';
+import { defaultRecordingFileName } from '../../shared/recording';
 import { IpcError } from '../ipc-core';
+import { log } from '../logger';
+import type { FfmpegProgress, MediaTools } from '../media/ffmpeg';
 import { isInsideDir } from '../shots/session-store';
+import {
+  completeSessionOnDisk,
+  copyRawAsOutput,
+  remuxToOutput,
+  writeFinalizeLog,
+  type RemuxRequest,
+} from './finalize';
+import {
+  freshStats,
+  isSessionId,
+  MANIFEST_FILE,
+  partialFileName,
+  STREAM_FILE,
+  type PausedInterval,
+  type SessionManifest,
+  type SessionState,
+} from './manifest';
+import {
+  freeBytes,
+  MIN_FREE_TO_START,
+  MIN_FREE_WHILE_RECORDING,
+  nodeSessionFs,
+  type SessionFileHandle,
+  type SessionFs,
+} from './session-fs';
 
-/** The slice of node:fs/promises the service uses, so tests can inject failures. */
-export interface SessionFileHandle {
-  write(buffer: Uint8Array, offset: number, length: number): Promise<{ bytesWritten: number }>;
-  sync(): Promise<void>;
-  close(): Promise<void>;
-}
+export type { PausedInterval, SessionFileHandle, SessionFs, SessionManifest, SessionState };
+export { isSessionId, MANIFEST_FILE, STREAM_FILE };
 
-export interface SessionFs {
-  mkdir(dir: string, options: { recursive: true }): Promise<unknown>;
-  open(file: string, flags: string): Promise<SessionFileHandle>;
-  writeFile(file: string, data: string): Promise<void>;
-  rename(from: string, to: string): Promise<void>;
-  rm(target: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
-  copyFile(from: string, to: string, mode?: number): Promise<void>;
-  stat(file: string): Promise<{ size: number }>;
-}
-
-export const STREAM_FILE = 'stream.webm';
-export const MANIFEST_FILE = 'manifest.json';
 export const MANIFEST_EVERY_MS = 5000;
 export const MANIFEST_EVERY_CHUNKS = 10;
-
-export type SessionState = 'recording' | 'stopped' | 'completed' | 'failed';
-
-export interface PausedInterval {
-  /** Epoch ms. */
-  from: number;
-  to: number | null;
-}
-
-/** `manifest.json`: everything needed to understand (and later recover) a session directory. */
-export interface SessionManifest {
-  version: 1;
-  sessionId: string;
-  createdAt: number;
-  state: SessionState;
-  mime: string;
-  source: { kind: 'screen' | 'window' | 'region'; name: string };
-  options: RecordOptions;
-  width: number;
-  height: number;
-  chunksWritten: number;
-  bytesWritten: number;
-  lastSeq: number;
-  pausedIntervals: PausedInterval[];
-  updatedAt: number;
-  /** Set when the file may be shorter than the recording (write failure, engine lost). */
-  truncated?: true;
-  /** Why the session ended early, when it did. */
-  endReason?: string;
-  failureCode?: string;
-  outputPath?: string;
-}
+export const DISK_CHECK_EVERY_MS = 30_000;
 
 export interface SessionConfig {
   mime: string;
@@ -72,18 +51,46 @@ interface ActiveSession {
   manifest: SessionManifest;
   dir: string;
   file: SessionFileHandle | null;
-  /** Length of the chunk written last (to recognise an idempotent retry). */
+  /** The recorder window that created the session: the only one allowed to send data for it. */
+  owner: number;
+  /** Length and SHA-1 of the chunk written last (to recognise an idempotent retry). */
   lastLength: number;
+  lastSha1: string;
   lastManifestAt: number;
   chunksSinceManifest: number;
   /** Serializes operations of one session. */
   tail: Promise<unknown>;
+  /** Operations queued or running in main. */
+  queued: number;
+  /** Cached outcome so a second finalize returns the same result. */
+  finalized: FinalizeResult | null;
 }
 
-const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export interface FinalizeResult {
+  outputPath: string;
+  bytes: number;
+  /** Container duration of the finished file; null for an unindexed raw copy. */
+  durationMs: number | null;
+  /** The output is a raw copy without a duration or seek index (the remux failed). */
+  unindexed: boolean;
+}
 
-export function isSessionId(value: string): boolean {
-  return ID_PATTERN.test(value);
+export interface FinalizeRequest {
+  outputDir: string;
+  tools: MediaTools;
+  signal?: AbortSignal;
+  date?: Date;
+  onProgress?: (progress: FfmpegProgress) => void;
+}
+
+export interface SessionServiceOptions {
+  fs?: SessionFs;
+  now?: () => number;
+  appVersion?: string;
+  /** Called (once per session) when free space drops below the running minimum. */
+  onDiskLow?: (sessionId: string, freeBytes: number) => void;
+  /** Disk polling period while sessions are recording; 0 disables the timer (tests call checkDisk). */
+  diskCheckEveryMs?: number;
 }
 
 /** Maps a filesystem error to the code the renderer reacts to (it stops the recorder either way). */
@@ -102,26 +109,37 @@ function writeError(error: unknown, what: string): IpcError {
   );
 }
 
+const ACCEPTING: readonly SessionState[] = ['recording', 'stopping'];
+
 /**
  * Disk-backed recording sessions: `<root>/<sessionId>/{manifest.json, stream.webm}`. The renderer
- * sends sequenced chunks; every chunk is validated (session, size, sequence), appended with a
- * real write and acknowledged only after the write finished. The manifest is rewritten atomically
- * (temp file + rename) at most every 5 s or 10 chunks and at every state change.
+ * sends sequenced chunks; every chunk is validated (owner, session, size, sequence), appended with
+ * a real write and acknowledged only after the write finished. The manifest is rewritten
+ * atomically (temp file, fsync, rename) at most every 5 s or 10 chunks and at every state change.
  *
  * MediaRecorder WebM is one continuous stream, not independent clips: chunks are appended in
- * order and never reordered or concatenated blindly. Phase 06 remuxes the result with FFmpeg.
+ * order and never reordered or concatenated blindly. Finalization remuxes the stream with FFmpeg
+ * (`-c copy`) into the output folder and then removes the session. See
+ * docs/recording-persistence.md.
  */
 export class SessionService {
   private readonly sessions = new Map<string, ActiveSession>();
   private readonly fsApi: SessionFs;
   private readonly now: () => number;
+  private readonly appVersion: string;
+  private readonly onDiskLow: ((sessionId: string, free: number) => void) | undefined;
+  private readonly diskCheckEveryMs: number;
+  private diskTimer: NodeJS.Timeout | undefined;
 
   constructor(
     readonly rootDir: string,
-    options: { fs?: SessionFs; now?: () => number } = {},
+    options: SessionServiceOptions = {},
   ) {
-    this.fsApi = options.fs ?? (fs.promises as unknown as SessionFs);
+    this.fsApi = options.fs ?? nodeSessionFs;
     this.now = options.now ?? Date.now;
+    this.appVersion = options.appVersion ?? '0.0.0';
+    this.onDiskLow = options.onDiskLow;
+    this.diskCheckEveryMs = options.diskCheckEveryMs ?? DISK_CHECK_EVERY_MS;
   }
 
   /** The session directory for an id, or null when the id is not a plain uuid. */
@@ -135,6 +153,13 @@ export class SessionService {
     return this.sessions.has(sessionId);
   }
 
+  /** Ids of sessions that main is writing right now (recovery must not touch them). */
+  activeIds(): string[] {
+    return [...this.sessions.entries()]
+      .filter(([, session]) => session.manifest.state !== 'completed')
+      .map(([id]) => id);
+  }
+
   manifestOf(sessionId: string): SessionManifest | undefined {
     const session = this.sessions.get(sessionId);
     return session ? structuredClone(session.manifest) : undefined;
@@ -145,10 +170,32 @@ export class SessionService {
     return session ? path.join(session.dir, STREAM_FILE) : undefined;
   }
 
-  async create(config: SessionConfig, sessionId: string = randomUUID()): Promise<string> {
+  /** Free bytes of the volume that holds the sessions, or null when unknown. */
+  async freeBytes(): Promise<number | null> {
+    await this.fsApi.mkdir(this.rootDir, { recursive: true }).catch(() => undefined);
+    return freeBytes(this.fsApi, this.rootDir);
+  }
+
+  /** A recording must not start with less than 1 GB free. */
+  async ensureSpaceToStart(): Promise<void> {
+    const free = await this.freeBytes();
+    if (free !== null && free < MIN_FREE_TO_START) {
+      throw new IpcError(
+        'LOW_DISK',
+        'There is not enough free disk space to record (Framelet needs at least 1 GB).',
+      );
+    }
+  }
+
+  async create(
+    config: SessionConfig,
+    sessionId: string = randomUUID(),
+    owner = -1,
+  ): Promise<string> {
     const dir = this.dirFor(sessionId);
     if (!dir) throw new IpcError('INVALID_PAYLOAD', 'Not a valid session id.');
     if (this.sessions.has(sessionId)) throw new IpcError('BUSY', 'That session already exists.');
+    await this.ensureSpaceToStart();
     try {
       await this.fsApi.mkdir(dir, { recursive: true });
       const file = await this.fsApi.open(path.join(dir, STREAM_FILE), 'a');
@@ -168,17 +215,24 @@ export class SessionService {
           bytesWritten: 0,
           lastSeq: -1,
           pausedIntervals: [],
+          stats: freshStats(),
+          appVersion: this.appVersion,
           updatedAt: now,
         },
         dir,
         file,
+        owner,
         lastLength: 0,
+        lastSha1: '',
         lastManifestAt: now,
         chunksSinceManifest: 0,
         tail: Promise.resolve(),
+        queued: 0,
+        finalized: null,
       };
       this.sessions.set(sessionId, session);
       await this.writeManifest(session);
+      this.startDiskWatch();
     } catch (error) {
       this.sessions.delete(sessionId);
       await this.fsApi.rm(dir, { recursive: true, force: true }).catch(() => undefined);
@@ -189,47 +243,102 @@ export class SessionService {
 
   /** Runs `task` after the earlier operations of the same session (strictly one at a time). */
   private serial<T>(session: ActiveSession, task: () => Promise<T>): Promise<T> {
+    session.queued += 1;
+    const stats = session.manifest.stats;
+    stats.mainQueueHighWater = Math.max(stats.mainQueueHighWater, session.queued);
     const run = session.tail.then(task, task);
-    session.tail = run.catch(() => undefined);
+    session.tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    void session.tail.then(() => {
+      session.queued -= 1;
+    });
     return run;
   }
 
-  private require(sessionId: string): ActiveSession {
+  private require(sessionId: string, owner?: number): ActiveSession {
     const session = this.sessions.get(sessionId);
     if (!session) throw new IpcError('NOT_FOUND', 'There is no such recording session.');
+    if (owner !== undefined && session.owner !== owner) {
+      log.warn(`Session ${sessionId.slice(0, 8)}: rejected a request from another window`);
+      throw new IpcError('FORBIDDEN', 'That recording belongs to another window.');
+    }
     return session;
+  }
+
+  private reject(session: ActiveSession, seq: number, code: IpcError['code'], text: string): never {
+    log.warn(`Session ${session.manifest.sessionId.slice(0, 8)}: chunk ${seq} rejected (${code})`);
+    throw new IpcError(code, text);
   }
 
   /**
    * Appends chunk `seq`. The sequence must be exactly last + 1; the previous chunk sent again with
-   * the same length is acknowledged without writing (an idempotent retry); anything else is an
-   * error. The returned promise resolves only after the bytes were written.
+   * identical length and SHA-1 is acknowledged without writing (an idempotent retry); any other
+   * duplicate is `DUPLICATE_MISMATCH`, a jump is `SEQ_GAP`. The returned promise resolves only
+   * after the bytes were written.
    */
   async append(
     sessionId: string,
     seq: number,
     bytes: Uint8Array,
+    owner?: number,
+    queued?: { chunks: number; bytes: number },
   ): Promise<{ duplicate: boolean; lastSeq: number }> {
-    const session = this.require(sessionId);
+    const session = this.require(sessionId, owner);
+    if (queued) {
+      const stats = session.manifest.stats;
+      stats.queueHighWaterChunks = Math.max(stats.queueHighWaterChunks, queued.chunks);
+      stats.queueHighWaterBytes = Math.max(stats.queueHighWaterBytes, queued.bytes);
+    }
     return this.serial(session, async () => {
       const { manifest } = session;
-      if (manifest.state !== 'recording' || !session.file) {
-        throw new IpcError('SESSION_INACTIVE', 'That recording is no longer accepting data.');
+      if (!ACCEPTING.includes(manifest.state) || !session.file) {
+        return this.reject(
+          session,
+          seq,
+          'SESSION_INACTIVE',
+          'That recording is no longer accepting data.',
+        );
       }
-      if (bytes.byteLength === 0) throw new IpcError('INVALID_PAYLOAD', 'Empty chunk.');
+      if (!(bytes instanceof Uint8Array)) {
+        return this.reject(session, seq, 'INVALID_PAYLOAD', 'Chunk data must be binary.');
+      }
+      if (bytes.byteLength === 0)
+        return this.reject(session, seq, 'INVALID_PAYLOAD', 'Empty chunk.');
       if (bytes.byteLength > MAX_CHUNK_BYTES) {
-        throw new IpcError('CHUNK_TOO_LARGE', 'That chunk is larger than the allowed maximum.');
+        return this.reject(
+          session,
+          seq,
+          'CHUNK_TOO_LARGE',
+          'That chunk is larger than the allowed maximum.',
+        );
       }
-      if (seq === manifest.lastSeq && bytes.byteLength === session.lastLength) {
-        return { duplicate: true, lastSeq: manifest.lastSeq };
+      const sha1 = createHash('sha1').update(bytes).digest('hex');
+      if (seq === manifest.lastSeq) {
+        if (bytes.byteLength === session.lastLength && sha1 === session.lastSha1) {
+          return { duplicate: true, lastSeq: manifest.lastSeq };
+        }
+        return this.reject(
+          session,
+          seq,
+          'DUPLICATE_MISMATCH',
+          `Chunk ${seq} was already written with different data.`,
+        );
+      }
+      if (seq < manifest.lastSeq) {
+        return this.reject(session, seq, 'DUPLICATE_MISMATCH', `Chunk ${seq} was already written.`);
       }
       if (seq > manifest.lastSeq + 1) {
-        throw new IpcError('SEQ_GAP', `Expected chunk ${manifest.lastSeq + 1}, got ${seq}.`);
-      }
-      if (seq !== manifest.lastSeq + 1) {
-        throw new IpcError('SEQ_CONFLICT', `Chunk ${seq} was already written.`);
+        return this.reject(
+          session,
+          seq,
+          'SEQ_GAP',
+          `Expected chunk ${manifest.lastSeq + 1}, got ${seq}.`,
+        );
       }
 
+      const started = performance.now();
       try {
         let offset = 0;
         while (offset < bytes.byteLength) {
@@ -242,14 +351,18 @@ export class SessionService {
           offset += bytesWritten;
         }
       } catch (error) {
-        await this.fail(session, writeErrorCode(error));
+        const code = writeErrorCode(error);
+        log.error(`Session ${sessionId.slice(0, 8)}: write failed (${code})`);
+        await this.fail(session, code, writeError(error, 'chunk').message);
         throw writeError(error, 'chunk');
       }
+      manifest.stats.maxWriteMs = Math.max(manifest.stats.maxWriteMs, performance.now() - started);
 
       manifest.lastSeq = seq;
       manifest.chunksWritten += 1;
       manifest.bytesWritten += bytes.byteLength;
       session.lastLength = bytes.byteLength;
+      session.lastSha1 = sha1;
       session.chunksSinceManifest += 1;
       if (
         session.chunksSinceManifest >= MANIFEST_EVERY_CHUNKS ||
@@ -264,10 +377,10 @@ export class SessionService {
   }
 
   /** The session can take no more data: close the file and say why in the manifest. */
-  private async fail(session: ActiveSession, code: string): Promise<void> {
+  private async fail(session: ActiveSession, code: string, message: string): Promise<void> {
     const { manifest } = session;
     manifest.state = 'failed';
-    manifest.failureCode = code;
+    manifest.error = { code, message };
     manifest.truncated = true;
     const file = session.file;
     session.file = null;
@@ -275,21 +388,37 @@ export class SessionService {
     await this.writeManifest(session).catch(() => undefined);
   }
 
+  /** The stop was requested: the last chunks may still arrive. Idempotent. */
+  async markStopping(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    await this.serial(session, async () => {
+      if (session.manifest.state !== 'recording') return;
+      session.manifest.state = 'stopping';
+      await this.writeManifest(session).catch(() => undefined);
+    });
+  }
+
   /**
    * The renderer finished: `lastSeq` must equal the last chunk main wrote (a mismatch means data
    * went missing). Flushes the file to disk, closes it and marks the session stopped. Idempotent.
    */
-  async finish(sessionId: string, lastSeq: number): Promise<{ chunks: number; bytes: number }> {
-    const session = this.require(sessionId);
+  async finish(
+    sessionId: string,
+    lastSeq: number,
+    owner?: number,
+  ): Promise<{ chunks: number; bytes: number }> {
+    const session = this.require(sessionId, owner);
     return this.serial(session, async () => {
       const { manifest } = session;
-      if (manifest.state === 'recording' && manifest.lastSeq !== lastSeq) {
+      const accepting = ACCEPTING.includes(manifest.state);
+      if (accepting && manifest.lastSeq !== lastSeq) {
         throw new IpcError(
           'SEQ_GAP',
           `The recorder reports ${lastSeq + 1} chunks but ${manifest.lastSeq + 1} were written.`,
         );
       }
-      if (manifest.state === 'recording') await this.closeStopped(session);
+      if (accepting) await this.closeStopped(session);
       else if (manifest.lastSeq !== lastSeq && manifest.state !== 'failed') {
         throw new IpcError('SEQ_GAP', 'The session already ended with a different length.');
       }
@@ -304,7 +433,7 @@ export class SessionService {
   ): Promise<void> {
     const session = this.require(sessionId);
     return this.serial(session, async () => {
-      if (session.manifest.state !== 'recording') return;
+      if (!ACCEPTING.includes(session.manifest.state)) return;
       if (options.truncated) session.manifest.truncated = true;
       if (options.reason) session.manifest.endReason = options.reason;
       await this.closeStopped(session);
@@ -320,7 +449,10 @@ export class SessionService {
     } catch (error) {
       await file?.close().catch(() => undefined);
       session.manifest.state = 'failed';
-      session.manifest.failureCode = writeErrorCode(error);
+      session.manifest.error = {
+        code: writeErrorCode(error),
+        message: 'Flushing the recording failed.',
+      };
       await this.writeManifest(session).catch(() => undefined);
       throw writeError(error, 'flush');
     }
@@ -343,72 +475,172 @@ export class SessionService {
     });
   }
 
+  // --- finalization ------------------------------------------------------------------------
+
   /**
-   * Publishes the finished stream: copies `stream.webm` to `<outputDir>/Framelet YYYY-MM-DD at
-   * HH.mm.ss.webm` (a number is added if the name exists) through a temp file and a rename, so the
-   * final name never holds a half-written file. The session directory is kept (phase 06 decides
-   * about cleanup). Un-remuxed MediaRecorder WebM has no duration or seek cues until phase 06.
+   * Publishes the finished stream: ffmpeg remux (`-c copy`, adds Duration and Cues) into a
+   * partial file in `outputDir`, probe, atomic rename to a free `Framelet YYYY-MM-DD at
+   * HH.mm.ss.webm`, then the session (including `stream.webm`) is deleted. On a failed remux the
+   * stream is kept (manifest `failed`) and, when it shows a video stream, copied raw as a last
+   * resort (`unindexed`). Idempotent. An aborted run leaves the manifest `finalizing` so the next
+   * start can clean the partial file and run it again.
    */
-  async publish(
-    sessionId: string,
-    outputDir: string,
-    date: Date = new Date(),
-  ): Promise<{ outputPath: string; bytes: number }> {
+  async finalize(sessionId: string, request: FinalizeRequest): Promise<FinalizeResult> {
     const session = this.require(sessionId);
     return this.serial(session, async () => {
       const { manifest } = session;
-      if (manifest.state === 'completed' && manifest.outputPath) {
-        return { outputPath: manifest.outputPath, bytes: manifest.bytesWritten };
-      }
-      if (manifest.state !== 'stopped' && manifest.state !== 'failed') {
+      if (session.finalized) return session.finalized;
+      if (!['stopped', 'failed', 'finalizing'].includes(manifest.state)) {
         throw new IpcError('SESSION_INACTIVE', 'The recording has not been stopped.');
       }
       if (manifest.bytesWritten === 0) {
+        await this.discardEmpty(session);
         throw new IpcError(
           'NOT_FOUND',
           'The recording was too short to save: nothing was captured.',
         );
       }
-      const source = path.join(session.dir, STREAM_FILE);
-      const baseName = defaultRecordingFileName(date);
-      let target = '';
-      try {
-        await this.fsApi.mkdir(outputDir, { recursive: true });
-        for (let attempt = 0; attempt < 1000; attempt += 1) {
-          const candidate = path.join(outputDir, withCollisionSuffix(baseName, attempt));
-          const exists = await this.fsApi.stat(candidate).then(
-            () => true,
-            () => false,
-          );
-          if (!exists) {
-            target = candidate;
-            break;
-          }
-        }
-        if (!target) throw new Error('No free output name.');
-        const temp = path.join(
-          outputDir,
-          `.${path.basename(target)}.${randomBytes(4).toString('hex')}.tmp`,
-        );
-        try {
-          await this.fsApi.copyFile(source, temp, fs.constants.COPYFILE_EXCL);
-          await this.fsApi.rename(temp, target);
-        } catch (error) {
-          await this.fsApi.rm(temp, { force: true }).catch(() => undefined);
-          throw error;
-        }
-      } catch (error) {
-        throw writeError(error, 'publish');
-      }
-      manifest.state = 'completed';
-      manifest.outputPath = target;
+
+      const date = request.date ?? new Date();
+      const fileName = defaultRecordingFileName(date);
+      const partialPath = path.join(request.outputDir, partialFileName(sessionId));
+      manifest.state = 'finalizing';
+      manifest.finalize = {
+        outputDir: request.outputDir,
+        fileName,
+        partialPath,
+        startedAt: this.now(),
+      };
       await this.writeManifest(session).catch(() => undefined);
-      return { outputPath: target, bytes: manifest.bytesWritten };
+
+      const remux: RemuxRequest = {
+        fs: this.fsApi,
+        tools: request.tools,
+        streamPath: path.join(session.dir, STREAM_FILE),
+        streamBytes: manifest.bytesWritten,
+        outputDir: request.outputDir,
+        fileName,
+        partialPath,
+        ...(request.signal && { signal: request.signal }),
+        ...(request.onProgress && { onProgress: request.onProgress }),
+      };
+      const outcome = await remuxToOutput(remux);
+
+      if (outcome.ok) {
+        const durationMs = Math.round((outcome.probe.durationSec ?? 0) * 1000);
+        await completeSessionOnDisk(
+          this.fsApi,
+          this.rootDir,
+          session.dir,
+          manifest,
+          {
+            outputPath: outcome.outputPath,
+            bytes: outcome.bytes,
+            durationMs,
+            recovered: false,
+            unindexed: false,
+            now: this.now(),
+          },
+          (value) => this.writeManifestOf(session.dir, value),
+        );
+        session.finalized = {
+          outputPath: outcome.outputPath,
+          bytes: outcome.bytes,
+          durationMs,
+          unindexed: false,
+        };
+        return session.finalized;
+      }
+
+      if (outcome.code === 'ABORTED') {
+        // manifest stays 'finalizing': the next start cleans the partial file and retries
+        throw new IpcError('FINALIZE_FAILED', 'Finishing the recording was interrupted.');
+      }
+
+      log.error(`Session ${sessionId.slice(0, 8)}: remux failed (${outcome.code})`);
+      manifest.state = 'failed';
+      manifest.error = { code: outcome.code, message: outcome.message };
+      await writeFinalizeLog(this.fsApi, session.dir, outcome.stderrTail);
+      if (outcome.code === 'FFMPEG_MISSING' || outcome.code === 'LOW_DISK') {
+        await this.writeManifest(session).catch(() => undefined);
+        throw new IpcError(
+          outcome.code === 'LOW_DISK' ? 'LOW_DISK' : 'FFMPEG_MISSING',
+          `${outcome.message} The recorded data was kept and can be recovered on the next start.`,
+        );
+      }
+
+      const raw = await copyRawAsOutput(remux);
+      if (raw.ok) {
+        manifest.outputPath = raw.outputPath;
+        manifest.unindexed = true;
+        await this.writeManifest(session).catch(() => undefined);
+        session.finalized = {
+          outputPath: raw.outputPath,
+          bytes: raw.bytes,
+          durationMs: null,
+          unindexed: true,
+        };
+        return session.finalized;
+      }
+      await this.writeManifest(session).catch(() => undefined);
+      throw new IpcError(
+        'FINALIZE_FAILED',
+        'The recording could not be finished. The recorded data was kept; you can try to recover it the next time Framelet starts.',
+      );
     });
   }
 
+  /** A session with no data: nothing to keep. Only this session's own directory goes. */
+  private async discardEmpty(session: ActiveSession): Promise<void> {
+    this.sessions.delete(session.manifest.sessionId);
+    await this.fsApi.rm(session.dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  // --- disk pressure -----------------------------------------------------------------------
+
+  private startDiskWatch(): void {
+    if (this.diskTimer || this.diskCheckEveryMs <= 0) return;
+    this.diskTimer = setInterval(() => void this.checkDisk(), this.diskCheckEveryMs);
+    this.diskTimer.unref();
+  }
+
+  private stopDiskWatchIfIdle(): void {
+    const recording = [...this.sessions.values()].some((session) =>
+      ACCEPTING.includes(session.manifest.state),
+    );
+    if (!recording && this.diskTimer) {
+      clearInterval(this.diskTimer);
+      this.diskTimer = undefined;
+    }
+  }
+
+  /**
+   * Compares the free space with the 500 MB minimum for every session still recording and
+   * reports each affected session once through `onDiskLow`. Returns the free bytes (null: unknown).
+   */
+  async checkDisk(): Promise<number | null> {
+    const free = await freeBytes(this.fsApi, this.rootDir);
+    this.stopDiskWatchIfIdle();
+    if (free === null || free >= MIN_FREE_WHILE_RECORDING) return free;
+    for (const session of this.sessions.values()) {
+      const { manifest } = session;
+      if (manifest.state !== 'recording' || manifest.error?.code === 'DISK_LOW') continue;
+      manifest.error = {
+        code: 'DISK_LOW',
+        message: 'Your disk is almost full, so the recording was stopped to keep what was saved.',
+      };
+      log.warn(`Session ${manifest.sessionId.slice(0, 8)}: free space below 500 MB`);
+      this.onDiskLow?.(manifest.sessionId, free);
+    }
+    return free;
+  }
+
+  // --- teardown ----------------------------------------------------------------------------
+
   /** Closes every file that is still open (the app is quitting; sessions stay on disk). */
   async closeAll(): Promise<void> {
+    if (this.diskTimer) clearInterval(this.diskTimer);
+    this.diskTimer = undefined;
     await Promise.all(
       [...this.sessions.values()].map(async (session) => {
         const file = session.file;
@@ -437,9 +669,14 @@ export class SessionService {
     session.manifest.updatedAt = this.now();
     session.lastManifestAt = session.manifest.updatedAt;
     session.chunksSinceManifest = 0;
-    const target = path.join(session.dir, MANIFEST_FILE);
+    await this.writeManifestOf(session.dir, session.manifest);
+  }
+
+  /** temp file + fsync + rename: a reader sees the old or the new manifest, never half of one. */
+  private async writeManifestOf(dir: string, manifest: SessionManifest): Promise<void> {
+    const target = path.join(dir, MANIFEST_FILE);
     const temp = `${target}.tmp`;
-    await this.fsApi.writeFile(temp, `${JSON.stringify(session.manifest, null, 2)}\n`);
+    await this.fsApi.writeFile(temp, `${JSON.stringify(manifest, null, 2)}\n`);
     await this.fsApi.rename(temp, target);
   }
 }

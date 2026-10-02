@@ -20,7 +20,8 @@ import { PageHeader } from '../components/PageHeader';
 /**
  * MediaRecorder WebM has no duration header, so <video> reports Infinity until it has seen the
  * end. Seeking far past the end makes it find the real duration; it then goes back to the start.
- * (Phase 06's FFmpeg remux writes a proper duration and seek index.)
+ * Finished files are remuxed with a proper duration and seek index, so this only matters for an
+ * unindexed raw copy (a failed remux).
  */
 function revealDuration(video: HTMLVideoElement): void {
   if (Number.isFinite(video.duration)) return;
@@ -84,6 +85,9 @@ export function RecordingResultView({
   const videoRef = useRef<HTMLVideoElement>(null);
   const headingRef = useRef<HTMLDivElement>(null);
   const notice = earlyStopNotice(snapshot);
+  const unindexedNotice = result.unindexed
+    ? 'Saved without a seeking index: the video plays, but jumping to a time may not work. The original data was kept; Framelet will offer to repair it the next time it starts.'
+    : null;
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -120,6 +124,17 @@ export function RecordingResultView({
         >
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           {notice}
+        </div>
+      ) : null}
+
+      {unindexedNotice ? (
+        <div
+          role="status"
+          data-testid="result-unindexed"
+          className="mb-4 flex items-start gap-2.5 rounded-xl bg-warning-soft px-4 py-3 text-sm text-warning"
+        >
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          {unindexedNotice}
         </div>
       ) : null}
 

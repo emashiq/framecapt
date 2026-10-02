@@ -140,3 +140,28 @@ Decision: the editor is a small internal implementation on one `<canvas>`, not a
 
 - **Decision.** The result view plays the finished file from `framelet-media://<id>`, a privileged scheme that serves only files main produced (id -> path map), answers Range requests itself (206/416) and is allowed in `media-src` of both CSPs. No file path or `file:` URL reaches the renderer for playback, and `blob:` URLs of the whole recording are never created.
 - **Alternative rejected.** `net.fetch(file://...)` was not relied on for byte ranges.
+
+## ADR-021: Finalize by FFmpeg remux; the session directory does not outlive its output (phase 06)
+
+- **Context.** MediaRecorder WebM is one continuous stream with no Duration and no Cues; phase 05 published a byte copy of it and kept the session directory (a full duplicate).
+- **Decision.** Finalization is `ffmpeg -c copy -map 0 -f webm` into `.framelet-<sessionId>.partial.webm` in the output folder (same volume, so the rename is atomic), a probe (video stream and duration > 0), an atomic rename to a free name, and only then: manifest `completed`, a small `completed/<id>.json` record (output path, duration, size, pauses; for history linking in phase 07), and deletion of the whole session directory including `stream.webm`. If the record cannot be written only the duplicate `stream.webm` is removed.
+- **Failure policy.** A failed remux keeps `stream.webm` and a `finalize.log` (ffmpeg stderr tail). If the raw stream shows a video stream it is copied out as a last resort and the result says so ("Saved without a seeking index"; `unindexed`), and `stream.webm` is KEPT in that case (the manifest is `failed`, the next start offers Recover again), because a raw copy is not a successful finalization. Out of space on the output volume refuses the remux (`LOW_DISK`) instead of half-writing.
+- **Alternatives rejected.** Re-encoding (slow, lossy, pointless for VP9/Opus already in WebM); keeping `stream.webm` after success "just in case" (a 100 percent duplicate; a failed probe is the safety net); remuxing with `-fflags +genpts`/re-timing (changes timestamps; copy as-is unless a measured defect appears).
+
+## ADR-022: A pinned, hash-verified FFmpeg fetched by a dependency-free script (phase 06, pulled forward from 07)
+
+- **Decision.** gyan.dev/GyanD 9.0.2 "essentials" Windows x64 (GPL-3.0-or-later: `--enable-gpl --enable-version3`, no `--enable-nonfree`, verified from `-buildconf` and `-L` by the fetch script itself). `scripts/fetch-ffmpeg.mjs` downloads the zip, checks the SHA-256 (mismatch deletes the download and aborts), extracts only `ffmpeg.exe`, `ffprobe.exe`, `LICENSE`, `README.txt` with a 60 line zip reader on `node:zlib` (no Python on this host, no PowerShell dependency, no new package), writes `PROVENANCE.json`, and is idempotent. It runs from the npm hooks `prestart`, `prepackage`, `prepackage:e2e`, `premake`. The binary is never taken from `PATH` and no renderer value reaches a command line.
+- **Packaging.** `extraResource: ['vendor/ffmpeg']` lands at `resources/ffmpeg/win32-x64/` (extraResource keeps the folder's own name). About 211 MB uncompressed for two static executables; a trimmed custom build is a later optimization. Redistribution under the GPL needs the third-party notice and a source offer (phase 11, owner action).
+- **Alternatives rejected.** `yauzl` (a dependency for 60 lines of code); `Expand-Archive` (extracts all 400+ files and the 3 executables, slower); WinGet/PATH ffmpeg (not reproducible, not shippable).
+
+## ADR-023: Recovery is best effort and says so (phase 06)
+
+- **Decision.** On start, `RecoveryService` re-runs interrupted finalizations once (deleting only the partial file the manifest names whose file name carries the session id), removes leftovers of finished and discarded sessions, and lists unfinished sessions with data. The user decides: Recover (remux of what is on disk; success is announced only after a probe shows a video stream and a real duration, and the copy says "Recovered what could be saved", never "lossless") or Discard (confirmation; only a uuid directory inside `userData/recordings` whose manifest names the same id). An unreadable manifest is preserved as `manifest.corrupt.json` and replaced by a minimal one so the session stays recoverable but is reported as `unknown`.
+- **Unrepairable.** A stream that cannot be remuxed stays on disk with its log; the card says it could not be repaired, shows where the raw data is and offers Reveal and Discard.
+- **Why not recover automatically.** A recovered file lands in the user's folder; the user may prefer to discard junk. Only the interrupted finalization (a recording that had ended normally) is finished without asking.
+- **Measured limits.** See docs/recording-persistence.md section 8.
+
+## ADR-024: Disk thresholds and write failure behavior (phase 06)
+
+- **Decision.** Start refuses below 1 GB free (`LOW_DISK`); while recording the free space of the `userData` volume is read every 30 s with `fs.statfs` and below 500 MB the recording is stopped through the existing write-failed path (`DISK_LOW`) and what was written is finalized (the result says it stopped early). A remux needs the stream's size plus 100 MB free on the output volume. `ENOSPC`/`EDQUOT` (`DISK_FULL`), `EIO`, `EACCES`, `EPERM` (`WRITE_FAILED`) on a chunk write close the session as `failed` and keep `stream.webm`. Thresholds are constants (`session-fs.ts`), not settings; they are a starting point to revise with phase 09 measurements.
+- **Limit.** 30 s is a polling interval: at 30 Mbps (3.75 MB/s) the disk can lose about 110 MB between checks, which the 500 MB margin absorbs. The check cannot see quotas other than `statfs` reports.

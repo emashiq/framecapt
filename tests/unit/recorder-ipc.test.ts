@@ -88,6 +88,22 @@ describe('session channels', () => {
     expect(AppendChunkRequestSchema.safeParse({ sessionId: 's', seq: 0, bytes }).success).toBe(
       true,
     );
+    expect(
+      AppendChunkRequestSchema.safeParse({
+        sessionId: 's',
+        seq: 0,
+        bytes,
+        queued: { chunks: 3, bytes: 4096 },
+      }).success,
+    ).toBe(true);
+    expect(
+      AppendChunkRequestSchema.safeParse({
+        sessionId: 's',
+        seq: 0,
+        bytes,
+        queued: { chunks: -1, bytes: 0 },
+      }).success,
+    ).toBe(false);
     expect(AppendChunkRequestSchema.safeParse({ sessionId: '', seq: 0, bytes }).success).toBe(
       false,
     );

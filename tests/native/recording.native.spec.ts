@@ -91,6 +91,36 @@ function decodedSeconds(file: string, only: 'video' | 'audio' | 'both' = 'both')
   return Number(last[1]) * 3600 + Number(last[2]) * 60 + Number(last[3]);
 }
 
+/** The EBML Cues element id (1C 53 BB 6B): a seek index exists. */
+function hasCues(file: string): boolean {
+  return fs.readFileSync(file).indexOf(Buffer.from([0x1c, 0x53, 0xbb, 0x6b])) !== -1;
+}
+
+/** Seeks to `at` seconds and decodes 1 s: exit code, error output and the seconds decoded. */
+function seekDecode(file: string, at: number): { status: number; errors: string; seconds: number } {
+  const { stderr, status } = run('ffmpeg', [
+    '-hide_banner',
+    '-v',
+    'info',
+    '-ss',
+    String(at),
+    '-i',
+    file,
+    '-t',
+    '1',
+    '-f',
+    'null',
+    '-',
+  ]);
+  const errors = stderr
+    .split('\n')
+    .filter((line) => /\b(error|invalid|corrupt)/i.test(line))
+    .join('\n');
+  const last = [...stderr.matchAll(/time=(\d+):(\d+):(\d+\.\d+)/g)].at(-1);
+  const seconds = last ? Number(last[1]) * 3600 + Number(last[2]) * 60 + Number(last[3]) : 0;
+  return { status, errors, seconds };
+}
+
 function packetCount(file: string): number {
   const out = execFileSync(
     'ffprobe',
@@ -411,6 +441,8 @@ function summarize(outcome: Outcome) {
     wallSeconds: outcome.wallMs / 1000,
     startToRecordingMs: outcome.startLatencyMs,
     stopToCompletedMs: outcome.stopLatencyMs,
+    containerDurationSeconds: Number(outcome.probe.format.duration),
+    seekIndex: hasCues(outcome.file),
     videoSeconds: outcome.videoSeconds,
     audioSeconds: outcome.audioSeconds,
     videoPackets: outcome.packets,
@@ -444,6 +476,18 @@ function assertCommon(
   expect(Math.abs(outcome.videoSeconds - outcome.appDurationMs / 1000)).toBeLessThan(0.6);
   // The hidden recorder window is not throttled: close to 30 fps, never the ~1 fps of a hidden window.
   expect(outcome.fps).toBeGreaterThan(24);
+  // Phase 06: ffmpeg remuxed the file, so the container has a real duration (not N/A), a seek
+  // index, and seeking to 3 s decodes cleanly (the live MediaRecorder file had neither).
+  const containerSeconds = Number(outcome.probe.format.duration);
+  expect(Number.isFinite(containerSeconds), 'format.duration is not N/A').toBe(true);
+  expect(Math.abs(containerSeconds - outcome.appDurationMs / 1000)).toBeLessThan(0.05);
+  expect(Math.abs(containerSeconds - outcome.videoSeconds)).toBeLessThan(0.3);
+  expect(hasCues(outcome.file), 'the file has a seek index (Cues)').toBe(true);
+  const seek = seekDecode(outcome.file, 3);
+  expect(seek.status).toBe(0);
+  expect(seek.errors).toBe('');
+  expect(seek.seconds).toBeGreaterThan(0.9);
+  expect(fs.existsSync(path.join(userDataDir, 'recordings', outcome.sessionId))).toBe(false);
 }
 
 // --- setup ---------------------------------------------------------------------------------
@@ -652,11 +696,13 @@ test('(b) system audio + test tone: 6 s active with a 2 s pause in the middle', 
   expect(after ?? -99, 'audio continues after resume').toBeGreaterThan(-55);
   const driftSeconds = Math.abs(outcome.videoSeconds - (outcome.audioSeconds ?? 0));
   expect(driftSeconds).toBeLessThan(0.7);
+  // The session directory is gone after finalization; its small completion record keeps the pauses.
   const sessionId = outcome.sessionId;
+  expect(fs.existsSync(path.join(userDataDir, 'recordings', sessionId))).toBe(false);
   const manifest = JSON.parse(
-    fs.readFileSync(path.join(userDataDir, 'recordings', sessionId, 'manifest.json'), 'utf8'),
-  ) as { pausedIntervals: { from: number; to: number | null }[]; state: string };
-  expect(manifest.state).toBe('completed');
+    fs.readFileSync(path.join(userDataDir, 'recordings', 'completed', `${sessionId}.json`), 'utf8'),
+  ) as { pausedIntervals: { from: number; to: number | null }[]; outputPath: string };
+  expect(manifest.outputPath).toBe(outcome.file);
   expect(manifest.pausedIntervals).toHaveLength(1);
   const pausedMs =
     (manifest.pausedIntervals[0]?.to ?? 0) - (manifest.pausedIntervals[0]?.from ?? 0);

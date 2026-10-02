@@ -11,6 +11,7 @@ import {
   Video,
 } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
+import { RecoveryBanner } from '../components/RecoveryBanner';
 import { RecordOptions } from '../components/RecordOptions';
 import { SourcePicker } from '../components/SourcePicker';
 import { Button } from '../components/ui/Button';
@@ -161,6 +162,8 @@ export function CaptureView() {
         title="What would you like to capture?"
         description="Pick a mode and a source. Everything stays on your device, no account needed."
       />
+
+      <RecoveryBanner busy={anythingBusy} />
 
       {recorder.status === 'error' && recorder.error ? (
         <div

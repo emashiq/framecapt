@@ -41,6 +41,11 @@ import {
   ResolveChoiceRequestSchema,
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
+import {
+  RecoverResponseSchema,
+  RecoveryListResponseSchema,
+  RecoverySessionIdSchema,
+} from './recovery-ipc';
 import { ROLES, type Role } from './types';
 
 const ALL_ROLES: readonly Role[] = ROLES;
@@ -244,6 +249,19 @@ export const ipcContract = {
     response: FinishSessionResponseSchema,
     roles: ['recorder'],
   },
+  // --- recovery of unfinished recordings (phase 06) ---
+  'recovery:list': {
+    request: z.undefined(),
+    response: RecoveryListResponseSchema,
+    roles: ['main'],
+  },
+  'recovery:recover': {
+    request: RecoverySessionIdSchema,
+    response: RecoverResponseSchema,
+    roles: ['main'],
+  },
+  'recovery:discard': { request: RecoverySessionIdSchema, response: z.void(), roles: ['main'] },
+  'recovery:reveal': { request: RecoverySessionIdSchema, response: z.void(), roles: ['main'] },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;
@@ -265,6 +283,8 @@ export const ipcEvents = {
   'recorder:state': RecorderSnapshotSchema,
   /** Mic and system levels (0..1) for the toolbar meters; only while recording. */
   'recorder:levels': LevelsEventSchema,
+  /** The list of unfinished recordings may have changed (the startup scan finished). */
+  'recovery:changed': z.object({}),
   /** Main -> the hidden recorder window: what the engine should do. */
   'recorder:engineCommand': EngineCommandSchema,
 } as const satisfies Record<string, z.ZodType>;

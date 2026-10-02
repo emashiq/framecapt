@@ -19,11 +19,15 @@ export type IpcErrorCode =
   | 'INTERNAL'
   // Recording sessions (session:appendChunk / session:finish).
   | 'SEQ_GAP'
-  | 'SEQ_CONFLICT'
+  | 'DUPLICATE_MISMATCH'
   | 'CHUNK_TOO_LARGE'
   | 'SESSION_INACTIVE'
   | 'WRITE_FAILED'
-  | 'DISK_FULL';
+  | 'DISK_FULL'
+  | 'LOW_DISK'
+  | 'DISK_LOW'
+  | 'FFMPEG_MISSING'
+  | 'FINALIZE_FAILED';
 
 export interface IpcFailure {
   ok: false;

@@ -58,11 +58,11 @@ export function formatDuration(ms: number): string {
 }
 
 /** "Framelet 2026-10-02 at 14.05.09.webm" in local time (colons are not allowed in file names). */
-export function defaultRecordingFileName(date: Date, extension = 'webm'): string {
+export function defaultRecordingFileName(date: Date, extension = 'webm', suffix = ''): string {
   const two = (value: number): string => String(value).padStart(2, '0');
   const day = `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
   const time = `${two(date.getHours())}.${two(date.getMinutes())}.${two(date.getSeconds())}`;
-  return `Framelet ${day} at ${time}.${extension}`;
+  return `Framelet ${day} at ${time}${suffix}.${extension}`;
 }
 
 /** Inserts " (2)", " (3)" ... before the extension for the n-th collision (n starts at 1). */

@@ -279,3 +279,33 @@ describe('ChunkUploader: failures', () => {
     expect(failures[0]?.code).toBe('SEQ_GAP');
   });
 });
+
+describe('ChunkUploader: backpressure statistics', () => {
+  it('reports its queue with every append and remembers the high-water mark', async () => {
+    const held = heldAppend();
+    const queued: { chunks: number; bytes: number }[] = [];
+    const append: AppendFn = (request) => {
+      queued.push(request.queued);
+      return held.append(request);
+    };
+    const uploader = new ChunkUploader({ sessionId: 's', append, onFatal: () => undefined });
+    uploader.push(blob(10));
+    uploader.push(blob(20));
+    uploader.push(blob(30));
+    expect(uploader.highWater).toEqual({ chunks: 3, bytes: 60 });
+    await wait(10);
+    held.release(0);
+    await wait(10);
+    held.release(1);
+    await wait(10);
+    held.release(2);
+    await uploader.flush();
+    expect(queued).toEqual([
+      { chunks: 3, bytes: 60 },
+      { chunks: 2, bytes: 50 },
+      { chunks: 1, bytes: 30 },
+    ]);
+    // draining does not lower the mark
+    expect(uploader.highWater).toEqual({ chunks: 3, bytes: 60 });
+  });
+});

@@ -14,6 +14,8 @@ export type AppendFn = (request: {
   sessionId: string;
   seq: number;
   bytes: ArrayBuffer;
+  /** Queue size when the chunk was sent: main keeps the high-water mark for benchmarks. */
+  queued: { chunks: number; bytes: number };
 }) => Promise<AppendResult>;
 
 export interface ChunkUploaderOptions {
@@ -46,6 +48,8 @@ export class ChunkUploader {
   private acked = -1;
   private pendingBytes = 0;
   private totalBytes = 0;
+  private peakChunks = 0;
+  private peakBytes = 0;
   private draining = false;
   private failure: UploadFailure | null = null;
   /** Nothing is sent any more (a failed write); queued chunks are abandoned. */
@@ -79,6 +83,11 @@ export class ChunkUploader {
     return this.totalBytes;
   }
 
+  /** Largest queue seen (chunks and bytes), for the persistence benchmarks. */
+  get highWater(): { chunks: number; bytes: number } {
+    return { chunks: this.peakChunks, bytes: this.peakBytes };
+  }
+
   get failed(): UploadFailure | null {
     return this.failure;
   }
@@ -97,6 +106,8 @@ export class ChunkUploader {
     this.nextSeq += 1;
     this.pendingBytes += blob.size;
     this.totalBytes += blob.size;
+    this.peakChunks = Math.max(this.peakChunks, this.queue.length);
+    this.peakBytes = Math.max(this.peakBytes, this.pendingBytes);
     void this.drain();
   }
 
@@ -125,6 +136,7 @@ export class ChunkUploader {
           sessionId: this.options.sessionId,
           seq: item.seq,
           bytes,
+          queued: { chunks: this.queue.length, bytes: this.pendingBytes },
         });
         if (!result.ok) {
           this.fail({ code: result.error.code, message: result.error.message }, true);

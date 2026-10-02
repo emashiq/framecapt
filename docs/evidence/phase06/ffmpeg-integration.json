@@ -1,0 +1,41 @@
+{
+  "finalize": {
+    "chunks": 10,
+    "liveBytes": 182491,
+    "outputBytes": 182573,
+    "durationSec": 5.008,
+    "cues": true,
+    "decodeClean": true,
+    "seekClean": true
+  },
+  "truncate60": {
+    "durationSec": 3.166,
+    "expectedSec": 3
+  },
+  "truncationSweep": [
+    {
+      "fraction": 0.1,
+      "recovered": true,
+      "durationSec": 0.081,
+      "decodeClean": true
+    },
+    {
+      "fraction": 0.3,
+      "recovered": true,
+      "durationSec": 1.341,
+      "decodeClean": true
+    },
+    {
+      "fraction": 0.9,
+      "recovered": true,
+      "durationSec": 4.421,
+      "decodeClean": true
+    }
+  ],
+  "truncateInHeader": {
+    "outcome": "unrecoverable"
+  },
+  "abortKillsProcess": {
+    "processEndedAfterAbort": true
+  }
+}

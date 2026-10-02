@@ -76,6 +76,8 @@ export const RecordingResultSchema = z.object({
   mime: z.string(),
   createdAt: z.number(),
   hasAudio: z.boolean(),
+  /** The remux failed and the file is a raw copy: it plays but has no duration or seek index. */
+  unindexed: z.boolean(),
 });
 export type RecordingResult = z.infer<typeof RecordingResultSchema>;
 
@@ -200,6 +202,13 @@ const SessionIdSchema = z.string().min(1).max(64);
 export const AppendChunkRequestSchema = z.object({
   sessionId: SessionIdSchema,
   seq: z.number().int().min(0).max(1_000_000_000),
+  /** The renderer's own queue when this chunk was sent (backpressure statistics only). */
+  queued: z
+    .object({
+      chunks: z.number().int().min(0).max(1_000_000),
+      bytes: z.number().min(0),
+    })
+    .optional(),
   bytes: z
     .instanceof(ArrayBuffer)
     .refine((buffer) => buffer.byteLength > 0, 'empty')

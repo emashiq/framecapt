@@ -43,8 +43,10 @@ import { OverlaySet } from '../overlay';
 import type { SelectionHost } from '../selection-host';
 import { getMainWindow, getWorkerWindow, peekWorkerWindow, webContentsWithRoles } from '../windows';
 import { whenWorkerReady } from '../worker';
+import type { MediaTools } from '../media/ffmpeg';
 import type { MediaRegistry } from '../recording/media-protocol';
 import type { SessionService } from '../recording/session-service';
+import { settleWithin } from './quit-cap';
 import {
   createCountdownWindow,
   createToolbarWindow,
@@ -109,6 +111,10 @@ export interface RecorderDeps {
   isScreenshotBusy: () => boolean;
   /** Folder of the finished recordings (`Videos/Framelet`). */
   outputDir: () => string;
+  /** The bundled ffmpeg/ffprobe (remux on finalize). */
+  tools: MediaTools;
+  /** Overrides the 15 s quit cap (E2E builds only). */
+  quitCapMs?: number;
 }
 
 function toGeom(display: DisplayInfo): DisplayGeom {
@@ -141,6 +147,8 @@ export class RecorderController implements SelectionHost {
   private countdownWindow: CountdownWindow | undefined;
   private toolbar: ToolbarWindow | undefined;
   private stopPromise: Promise<void> | undefined;
+  /** Cancels the running remux (quit past the cap). */
+  private finalizeAbort: AbortController | undefined;
   private removeDisplayListeners: (() => void) | undefined;
   private watchedWorker: BrowserWindow | undefined;
   private levelsOn = false;
@@ -246,6 +254,7 @@ export class RecorderController implements SelectionHost {
         throw new IpcError('NOT_FOUND', 'That window is no longer available.');
       }
     }
+    await this.ensureCanRecord();
     // A second start while this one awaited the listing is refused above on re-entry.
     if (!isFinished(this.machine.status))
       throw new IpcError('BUSY', 'A recording is already in progress.');
@@ -276,6 +285,19 @@ export class RecorderController implements SelectionHost {
     const token = this.token;
     void this.runStart(token, request).catch((error: unknown) => this.failStart(token, error));
     return { sessionId };
+  }
+
+  /** Refuses to start when the disk is nearly full or ffmpeg (needed to finish the file) is missing. */
+  private async ensureCanRecord(): Promise<void> {
+    try {
+      this.deps.tools.paths();
+    } catch {
+      throw new IpcError(
+        'FFMPEG_MISSING',
+        'Framelet cannot finish recordings because its video tools are missing. Reinstall Framelet.',
+      );
+    }
+    await this.deps.sessions.ensureSpaceToStart();
   }
 
   pause(): void {
@@ -437,12 +459,17 @@ export class RecorderController implements SelectionHost {
     await this.deps.sessions.create(
       {
         mime: ctx.mime,
-        source: { kind: ctx.target, name: ctx.sourceName },
+        source: {
+          kind: ctx.target,
+          name: ctx.sourceName,
+          ...(ctx.display && { displayId: ctx.display.id }),
+        },
         options: ctx.options,
         width: ctx.width ?? 0,
         height: ctx.height ?? 0,
       },
       ctx.sessionId,
+      peekWorkerWindow()?.webContents.id,
     );
     ctx.sessionCreated = true;
     this.guard(token);
@@ -741,12 +768,13 @@ export class RecorderController implements SelectionHost {
 
   // --- stopping ----------------------------------------------------------------------------
 
-  /** Engine flush -> session finish -> publish. Runs once per recording. */
+  /** Engine flush -> session finish -> remux and publish. Runs once per recording. */
   private async finalize(): Promise<void> {
     const ctx = this.requireCtx();
     const { sessions } = this.deps;
     const sessionId = ctx.sessionId;
     try {
+      await sessions.markStopping(sessionId);
       let complete = false;
       try {
         const reply = await this.engineRequest(
@@ -783,14 +811,23 @@ export class RecorderController implements SelectionHost {
       }
       this.dispatch({ type: 'STOPPED' });
 
-      const published = await sessions.publish(sessionId, this.deps.outputDir());
-      const durationMs = Math.round(activeDurationAt(this.machine, performance.now()));
+      const abort = new AbortController();
+      this.finalizeAbort = abort;
+      const published = await sessions.finalize(sessionId, {
+        outputDir: this.deps.outputDir(),
+        tools: this.deps.tools,
+        signal: abort.signal,
+      });
+      // The file's own duration (probed after the remux); the active time only for a raw copy.
+      const durationMs =
+        published.durationMs ?? Math.round(activeDurationAt(this.machine, performance.now()));
       ctx.result = {
         id: this.deps.media.register(published.outputPath),
         fileName: path.basename(published.outputPath),
         path: published.outputPath,
         durationMs,
         bytes: published.bytes,
+        unindexed: published.unindexed,
         width: ctx.width ?? 0,
         height: ctx.height ?? 0,
         mime: ctx.mime,
@@ -798,7 +835,10 @@ export class RecorderController implements SelectionHost {
         hasAudio: ctx.audio.mic || ctx.audio.system,
       };
       this.dispatch({ type: 'FINALIZED' });
-      log.info(`Recording saved: ${Math.round(durationMs)} ms, ${published.bytes} bytes`);
+      log.info(
+        `Recording saved: ${Math.round(durationMs)} ms, ${published.bytes} bytes` +
+          (published.unindexed ? ' (no seeking index)' : ''),
+      );
     } catch (error) {
       const code = error instanceof IpcError ? error.code : 'FINALIZE_FAILED';
       const message =
@@ -809,10 +849,25 @@ export class RecorderController implements SelectionHost {
       if (this.machine.status === 'stopping') this.dispatch({ type: 'STOPPED' });
       this.dispatch({ type: 'FAILED', code, message });
     } finally {
+      this.finalizeAbort = undefined;
       this.send({ cmd: 'abort' });
       this.closeToolbar();
       this.restoreMain();
     }
+  }
+
+  /** Free space fell below the minimum while recording: stop and keep everything written so far. */
+  onDiskLow(sessionId: string): void {
+    if (this.ctx?.sessionId !== sessionId) return;
+    if (this.machine.status !== 'recording' && this.machine.status !== 'paused') return;
+    log.warn('Disk space is low; stopping the recording');
+    this.dispatch({
+      type: 'WRITE_FAILED',
+      at: performance.now(),
+      code: 'DISK_LOW',
+      message: 'Your disk is almost full, so the recording was stopped to keep what was saved.',
+    });
+    this.stopPromise ??= this.finalize();
   }
 
   // --- the engine --------------------------------------------------------------------------
@@ -1011,11 +1066,17 @@ export class RecorderController implements SelectionHost {
     this.quitting = true;
     this.broadcast();
     log.info('Quit requested during a recording; finishing it first');
-    void Promise.race([this.stop('app-quit'), sleep(QUIT_FINALIZE_CAP_MS)]).then(() => {
-      if (this.isRecording) log.warn('Finalizing took too long; the session is kept for recovery');
-      this.quitAllowed = true;
-      quit();
-    });
+    void settleWithin(this.stop('app-quit'), this.deps.quitCapMs ?? QUIT_FINALIZE_CAP_MS).then(
+      async (outcome) => {
+        if (outcome === 'timeout') {
+          log.warn('Finalizing took too long; the session is kept for recovery');
+          this.finalizeAbort?.abort(); // kills ffmpeg; the manifest stays for the next start
+          await sleep(300);
+        }
+        this.quitAllowed = true;
+        quit();
+      },
+    );
   }
 
   /** True while quitting must not close windows by itself. */

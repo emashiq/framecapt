@@ -51,10 +51,17 @@ export function registerRecorderHandlers(
   handle('recorder:engineEvent', { roles: ['recorder'] }, (event) => {
     controller.onEngineEvent(event);
   });
-  handle('session:appendChunk', { roles: ['recorder'] }, (request) =>
-    sessions.append(request.sessionId, request.seq, new Uint8Array(request.bytes)),
+  // The recorder window that created a session is the only one that may write to it.
+  handle('session:appendChunk', { roles: ['recorder'] }, (request, ctx) =>
+    sessions.append(
+      request.sessionId,
+      request.seq,
+      new Uint8Array(request.bytes),
+      ctx.webContentsId,
+      request.queued,
+    ),
   );
-  handle('session:finish', { roles: ['recorder'] }, (request) =>
-    sessions.finish(request.sessionId, request.lastSeq),
+  handle('session:finish', { roles: ['recorder'] }, (request, ctx) =>
+    sessions.finish(request.sessionId, request.lastSeq, ctx.webContentsId),
   );
 }

@@ -12,6 +12,9 @@ const config: ForgeConfig = {
     // PROVISIONAL app id — owner must confirm before publication
     appBundleId: 'com.framelet.app',
     asar: true,
+    // The pinned FFmpeg build (npm run fetch:ffmpeg, run by the prepackage/premake/prestart hooks).
+    // extraResource copies the folder by its name: <resources>/ffmpeg/win32-x64/{ffmpeg,ffprobe}.exe.
+    extraResource: ['vendor/ffmpeg'],
   },
   rebuildConfig: {},
   makers: [

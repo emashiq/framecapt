@@ -1,0 +1,107 @@
+{
+  "normalRecording": {
+    "containerDurationSeconds": 6.039,
+    "appReportedDurationMs": 6039,
+    "bytes": 1548029,
+    "format": "matroska,webm",
+    "streams": [
+      {
+        "type": "video",
+        "codec": "vp9"
+      },
+      {
+        "type": "audio",
+        "codec": "opus"
+      }
+    ],
+    "seekIndex": true,
+    "seekTo3sDecodesClean": true,
+    "fullDecodeClean": true,
+    "sessionDirectoryRemoved": true,
+    "meanVolumeDb": -29
+  },
+  "forcedKillRecovery": {
+    "note": "The whole Electron process tree was killed (taskkill /F /T) during a real 10 s screen + system audio recording; the same userData was launched again, the banner appeared, Recover was clicked, the output was probed and decoded with ffmpeg. The manifest is rewritten every 5 s or 10 chunks, so it lags the file; recovery uses the real file size. lostSecondsVersusKillTime = time recorded before the kill minus recovered duration (negative: the recovered file is slightly longer than the timer, which starts a little after the first frame).",
+    "runs": [
+      {
+        "plannedKillAfterMs": 2300,
+        "killedAfterRecordingMs": 2304,
+        "streamBytesJustBeforeKill": 582473,
+        "streamBytesAfterKill": 582473,
+        "manifestBytesWritten": 0,
+        "manifestChunksWritten": 0,
+        "manifestState": "recording",
+        "recoveredDurationSeconds": 1.969,
+        "lostSecondsVersusKillTime": 0.33,
+        "recoveredBytes": 582894,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "vp9",
+            "width": 1920,
+            "height": 804
+          },
+          {
+            "type": "audio",
+            "codec": "opus"
+          }
+        ],
+        "meanVolumeDb": -35.9
+      },
+      {
+        "plannedKillAfterMs": 3700,
+        "killedAfterRecordingMs": 3702,
+        "streamBytesJustBeforeKill": 712884,
+        "streamBytesAfterKill": 712884,
+        "manifestBytesWritten": 0,
+        "manifestChunksWritten": 0,
+        "manifestState": "recording",
+        "recoveredDurationSeconds": 2.991,
+        "lostSecondsVersusKillTime": 0.71,
+        "recoveredBytes": 713289,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "vp9",
+            "width": 1920,
+            "height": 804
+          },
+          {
+            "type": "audio",
+            "codec": "opus"
+          }
+        ],
+        "meanVolumeDb": -35.1
+      },
+      {
+        "plannedKillAfterMs": 5000,
+        "killedAfterRecordingMs": 5006,
+        "streamBytesJustBeforeKill": 1241147,
+        "streamBytesAfterKill": 1396823,
+        "manifestBytesWritten": 1396823,
+        "manifestChunksWritten": 5,
+        "manifestState": "recording",
+        "recoveredDurationSeconds": 5.041,
+        "lostSecondsVersusKillTime": -0.04,
+        "recoveredBytes": 1397211,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "vp9",
+            "width": 1920,
+            "height": 804
+          },
+          {
+            "type": "audio",
+            "codec": "opus"
+          }
+        ],
+        "meanVolumeDb": -37.1
+      }
+    ],
+    "worstLossSeconds": 0.71,
+    "bestLossSeconds": -0.04,
+    "uiBannerShown": true,
+    "sessionDirectoryRemovedAfterRecovery": true
+  }
+}

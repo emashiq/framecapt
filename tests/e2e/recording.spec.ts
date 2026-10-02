@@ -19,6 +19,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { hasCues, probeFile } from './media-fixtures';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase05');
@@ -59,8 +60,11 @@ let userDataDir: string;
 
 const recordingsDir = (): string => path.join(userDataDir, 'recordings');
 const videosDir = (): string => path.join(userDataDir, 'videos', 'Framelet');
+/** Live session directories (uuid names); `completed/` holds the small records of finished ones. */
 const sessionDirs = (): string[] =>
-  fs.existsSync(recordingsDir()) ? fs.readdirSync(recordingsDir()) : [];
+  fs.existsSync(recordingsDir())
+    ? fs.readdirSync(recordingsDir()).filter((name) => name !== 'completed')
+    : [];
 const outputFiles = (): string[] =>
   fs.existsSync(videosDir()) ? fs.readdirSync(videosDir()).filter((f) => f.endsWith('.webm')) : [];
 
@@ -289,19 +293,27 @@ test.describe('one display', () => {
     const file = path.join(videosDir(), outputFiles()[0] ?? '');
     expect(fs.statSync(file).size).toBe(done.result?.bytes);
     expect(file).toBe(done.result?.path);
-    const [sessionId] = sessionDirs();
-    const manifest = JSON.parse(
-      fs.readFileSync(path.join(recordingsDir(), sessionId ?? '', 'manifest.json'), 'utf8'),
+    // The session directory (and its stream.webm) is gone after a successful finalize: no
+    // duplicate copy. A small completion record stays for history linking.
+    expect(sessionDirs()).toHaveLength(0);
+    const record = JSON.parse(
+      fs.readFileSync(path.join(recordingsDir(), 'completed', `${done.sessionId}.json`), 'utf8'),
     ) as Record<string, unknown>;
-    expect(manifest).toMatchObject({
-      state: 'completed',
+    expect(record).toMatchObject({
       outputPath: file,
-      version: 1,
       width: 1920,
       height: 1080,
+      recovered: false,
+      unindexed: false,
     });
-    expect((manifest.pausedIntervals as unknown[]).length).toBe(1);
-    expect(manifest.bytesWritten).toBe(done.result?.bytes);
+    expect(record.bytes).toBe(done.result?.bytes);
+    // ffmpeg remuxed it: the container now has a duration and a seek index (the probe is the
+    // verification tool, the same vendored binary the app used).
+    const probed = probeFile(file);
+    expect(Number(probed.format?.duration)).toBeGreaterThan(2);
+    expect(hasCues(file)).toBe(true);
+    expect(done.result?.durationMs).toBe(Math.round(Number(probed.format?.duration) * 1000));
+    expect(fs.readdirSync(videosDir()).filter((name) => name.includes('.partial'))).toEqual([]);
 
     // The player loads it through framelet-media: and can seek (Range requests work).
     const video = page.getByTestId('result-video');
@@ -824,27 +836,30 @@ test.describe('two displays', () => {
 // --- quitting during a recording ----------------------------------------------------------------
 
 test.describe('quit during a recording', () => {
-  test('quitting finishes the recording first: the file is published and the manifest completed', async () => {
+  test('quitting finishes the recording first: remuxed, published, session removed, no partial', async () => {
     ({ app, page, dir: userDataDir } = await launch({ FRAMELET_E2E_MOCK_DISPLAYS: '1' }));
     try {
       await setCountdown(false);
       await startScreen();
       const toolbar = await toolbarPage();
       await toolbar.waitForTimeout(1500);
+      const quitAt = Date.now();
       const closed = app.waitForEvent('close', { timeout: 60_000 });
       await app.evaluate(({ app: electronApp }) => electronApp.quit());
       await closed;
+      const quitMs = Date.now() - quitAt;
       expect(outputFiles()).toHaveLength(1);
-      const [sessionId] = sessionDirs();
-      const manifest = JSON.parse(
-        fs.readFileSync(path.join(recordingsDir(), sessionId ?? '', 'manifest.json'), 'utf8'),
-      ) as { state: string; bytesWritten: number };
-      expect(manifest.state).toBe('completed');
-      expect(fs.statSync(path.join(videosDir(), outputFiles()[0] ?? '')).size).toBe(
-        manifest.bytesWritten,
-      );
+      const file = path.join(videosDir(), outputFiles()[0] ?? '');
+      expect(Number(probeFile(file).format?.duration)).toBeGreaterThan(1);
+      expect(hasCues(file)).toBe(true);
+      // finalization finished within the 15 s cap: no session left, a completion record instead
+      expect(sessionDirs()).toHaveLength(0);
+      expect(fs.readdirSync(path.join(recordingsDir(), 'completed'))).toHaveLength(1);
+      expect(fs.readdirSync(videosDir()).filter((name) => name.includes('.partial'))).toEqual([]);
+      expect(quitMs).toBeLessThan(15_000);
       const log = fs.readFileSync(path.join(userDataDir, 'logs', 'main.log'), 'utf8');
       expect(log).toContain('Quit requested during a recording');
+      expect(log).not.toContain('Finalizing took too long');
     } finally {
       if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
     }

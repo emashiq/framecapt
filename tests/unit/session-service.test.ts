@@ -14,6 +14,8 @@ import {
   type SessionFs,
   type SessionManifest,
 } from '../../src/main/recording/session-service';
+import { nodeSessionFs } from '../../src/main/recording/session-fs';
+import { fakeTools, PLAYABLE } from './fake-tools';
 
 const CONFIG: SessionConfig = {
   mime: 'video/webm;codecs=vp9,opus',
@@ -49,16 +51,7 @@ afterEach(async () => {
 
 /** The real filesystem behind the SessionFs interface; tests override single operations. */
 function realFs(overrides: Partial<SessionFs> = {}): SessionFs {
-  return {
-    mkdir: (dir, options) => fs.promises.mkdir(dir, options),
-    open: (file, flags) => fs.promises.open(file, flags) as unknown as Promise<SessionFileHandle>,
-    writeFile: (file, data) => fs.promises.writeFile(file, data),
-    rename: (from, to) => fs.promises.rename(from, to),
-    rm: (target, options) => fs.promises.rm(target, options),
-    copyFile: (from, to, mode) => fs.promises.copyFile(from, to, mode),
-    stat: (file) => fs.promises.stat(file),
-    ...overrides,
-  };
+  return { ...nodeSessionFs, ...overrides };
 }
 
 function errno(code: string): NodeJS.ErrnoException {
@@ -159,8 +152,8 @@ describe('SessionService: appending chunks', () => {
     await service.create(CONFIG, ID);
     await service.append(ID, 0, chunk(100, 1));
     await service.append(ID, 1, chunk(50, 2));
-    await expectCode(service.append(ID, 1, chunk(51, 2)), 'SEQ_CONFLICT');
-    await expectCode(service.append(ID, 0, chunk(100, 1)), 'SEQ_CONFLICT');
+    await expectCode(service.append(ID, 1, chunk(51, 2)), 'DUPLICATE_MISMATCH');
+    await expectCode(service.append(ID, 0, chunk(100, 1)), 'DUPLICATE_MISMATCH');
     expect(fs.statSync(path.join(root, ID, 'stream.webm')).size).toBe(150);
   });
 
@@ -330,7 +323,7 @@ describe('SessionService: write errors', () => {
     await expectCode(service.append(ID, 2, chunk(100, 3)), 'SESSION_INACTIVE');
     expect(readManifest()).toMatchObject({
       state: 'failed',
-      failureCode: 'DISK_FULL',
+      error: { code: 'DISK_FULL' },
       truncated: true,
       lastSeq: 1,
     });
@@ -354,14 +347,18 @@ describe('SessionService: write errors', () => {
     expect(writeErrorCode(undefined)).toBe('WRITE_FAILED');
   });
 
-  it('a failed session can still be stopped and published (the recorded part is kept)', async () => {
+  it('a failed session can still be finalized (the recorded part is kept and published)', async () => {
     const service = new TrackedService(root, { fs: failingFs('ENOSPC', 2) });
     await service.create(CONFIG, ID);
     await service.append(ID, 0, chunk(64, 7));
     await expectCode(service.append(ID, 1, chunk(64, 8)), 'DISK_FULL');
-    const published = await service.publish(ID, out, new Date(2026, 9, 2, 14, 5, 9));
-    expect(published.bytes).toBe(64);
-    expect(fs.readFileSync(published.outputPath).length).toBe(64);
+    const done = await service.finalize(ID, {
+      outputDir: out,
+      tools: fakeTools(),
+      date: new Date(2026, 9, 2, 14, 5, 9),
+    });
+    expect(done.bytes).toBe(64);
+    expect(fs.readFileSync(done.outputPath).length).toBe(64);
   });
 });
 
@@ -449,30 +446,222 @@ describe('SessionService: pauses', () => {
   });
 });
 
-describe('SessionService: publishing', () => {
+describe('SessionService: ownership and validation', () => {
+  it('only the recorder window that created the session may write to it or finish it', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID, 7);
+    await expectCode(service.append(ID, 0, chunk(10, 1), 8), 'FORBIDDEN');
+    await expectCode(service.finish(ID, -1, 8), 'FORBIDDEN');
+    expect((await service.append(ID, 0, chunk(10, 1), 7)).duplicate).toBe(false);
+    expect(await service.finish(ID, 0, 7)).toEqual({ chunks: 1, bytes: 10 });
+    expect(fs.statSync(path.join(root, ID, 'stream.webm')).size).toBe(10);
+  });
+
+  it('a retry of the last chunk with identical bytes is acknowledged once, never written twice', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID, 1);
+    await service.append(ID, 0, chunk(10, 1), 1);
+    await service.append(ID, 1, chunk(10, 2), 1);
+    expect(await service.append(ID, 1, chunk(10, 2), 1)).toEqual({ duplicate: true, lastSeq: 1 });
+    expect(fs.statSync(path.join(root, ID, 'stream.webm')).size).toBe(20);
+  });
+
+  it('same seq with the same length but different content is DUPLICATE_MISMATCH', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID, 1);
+    await service.append(ID, 0, chunk(10, 1), 1);
+    await expectCode(service.append(ID, 0, chunk(10, 2), 1), 'DUPLICATE_MISMATCH');
+    expect(fs.readFileSync(path.join(root, ID, 'stream.webm'))[0]).toBe(1);
+  });
+
+  it('refuses data that is not binary', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID, 1);
+    await expectCode(service.append(ID, 0, 'text' as unknown as Uint8Array, 1), 'INVALID_PAYLOAD');
+  });
+
+  it('writes stay in order when invokes overlap and the disk is slow (random delays)', async () => {
+    const service = new TrackedService(root, {
+      fs: realFs({
+        open: async (file, flags) => {
+          const real = (await fs.promises.open(file, flags)) as unknown as SessionFileHandle;
+          return {
+            write: async (buffer, offset, length) => {
+              await new Promise((resolve) => setTimeout(resolve, Math.random() * 8));
+              return real.write(buffer, offset, length);
+            },
+            sync: () => real.sync(),
+            close: () => real.close(),
+          };
+        },
+      }),
+    });
+    await service.create(CONFIG, ID, 1);
+    const results = await Promise.all(
+      Array.from({ length: 25 }, (_, seq) => service.append(ID, seq, chunk(30, seq), 1)),
+    );
+    expect(results.map((r) => r.lastSeq)).toEqual(Array.from({ length: 25 }, (_, i) => i));
+    const written = fs.readFileSync(path.join(root, ID, 'stream.webm'));
+    expect(written.length).toBe(750);
+    for (let seq = 0; seq < 25; seq += 1) expect(written[seq * 30]).toBe(seq);
+  });
+});
+
+describe('SessionService: backpressure statistics', () => {
+  it('keeps the renderer queue high-water mark and the slowest write in the manifest', async () => {
+    const service = new TrackedService(root, {
+      fs: realFs({
+        open: async (file, flags) => {
+          const real = (await fs.promises.open(file, flags)) as unknown as SessionFileHandle;
+          return {
+            write: async (buffer, offset, length) => {
+              await new Promise((resolve) => setTimeout(resolve, 15));
+              return real.write(buffer, offset, length);
+            },
+            sync: () => real.sync(),
+            close: () => real.close(),
+          };
+        },
+      }),
+    });
+    await service.create(CONFIG, ID, 1);
+    await service.append(ID, 0, chunk(10, 1), 1, { chunks: 1, bytes: 10 });
+    await service.append(ID, 1, chunk(10, 1), 1, { chunks: 5, bytes: 5000 });
+    await service.append(ID, 2, chunk(10, 1), 1, { chunks: 2, bytes: 20 });
+    const stats = service.manifestOf(ID)?.stats;
+    expect(stats?.queueHighWaterChunks).toBe(5);
+    expect(stats?.queueHighWaterBytes).toBe(5000);
+    expect(stats?.maxWriteMs).toBeGreaterThanOrEqual(10);
+  });
+
+  it('counts how many operations waited in main for one session', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID, 1);
+    await Promise.all([0, 1, 2, 3].map((seq) => service.append(ID, seq, chunk(10, 1), 1)));
+    expect(service.manifestOf(ID)?.stats.mainQueueHighWater).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('SessionService: disk pressure', () => {
+  const GB = 1024 * 1024 * 1024;
+  const MB = 1024 * 1024;
+  const free = (bytes: number) =>
+    realFs({ statfs: () => Promise.resolve({ bavail: bytes, bsize: 1 }) });
+
+  it('refuses to start with less than 1 GB free (LOW_DISK) and creates nothing', async () => {
+    const service = new TrackedService(root, { fs: free(GB - 1) });
+    await expectCode(service.create(CONFIG, ID, 1), 'LOW_DISK');
+    await expectCode(service.ensureSpaceToStart(), 'LOW_DISK');
+    expect(fs.existsSync(path.join(root, ID))).toBe(false);
+  });
+
+  it('starts with exactly 1 GB free, and when free space cannot be determined', async () => {
+    await new TrackedService(root, { fs: free(GB) }).create(CONFIG, ID, 1);
+    const unknown = realFs({ statfs: () => Promise.reject(new Error('unsupported')) });
+    await new TrackedService(root, { fs: unknown }).create(CONFIG, ID2, 1);
+    expect(fs.existsSync(path.join(root, ID2))).toBe(true);
+  });
+
+  it('while recording, below 500 MB reports the session once and records DISK_LOW', async () => {
+    let space = 10 * GB;
+    const low: [string, number][] = [];
+    const service = new TrackedService(root, {
+      diskCheckEveryMs: 0,
+      onDiskLow: (id, bytes) => low.push([id, bytes]),
+      fs: realFs({ statfs: () => Promise.resolve({ bavail: space, bsize: 1 }) }),
+    });
+    await service.create(CONFIG, ID, 1);
+    expect(await service.checkDisk()).toBe(10 * GB);
+    expect(low).toEqual([]);
+    space = 500 * MB; // exactly the minimum is still fine
+    await service.checkDisk();
+    expect(low).toEqual([]);
+    space = 500 * MB - 1;
+    await service.checkDisk();
+    await service.checkDisk();
+    expect(low).toEqual([[ID, 500 * MB - 1]]);
+    expect(service.manifestOf(ID)?.error?.code).toBe('DISK_LOW');
+  });
+
+  it('does not report sessions that are no longer recording', async () => {
+    let space = 10 * GB;
+    const low: string[] = [];
+    const service = new TrackedService(root, {
+      diskCheckEveryMs: 0,
+      onDiskLow: (id) => low.push(id),
+      fs: realFs({ statfs: () => Promise.resolve({ bavail: space, bsize: 1 }) }),
+    });
+    await service.create(CONFIG, ID, 1);
+    await service.append(ID, 0, chunk(10, 1), 1);
+    await service.finish(ID, 0, 1);
+    space = MB;
+    expect(await service.checkDisk()).toBe(MB);
+    expect(low).toEqual([]);
+  });
+});
+
+describe('SessionService: stopping', () => {
+  it('stopping still accepts the last chunks; the manifest says so', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID, 1);
+    await service.append(ID, 0, chunk(10, 1), 1);
+    await service.markStopping(ID);
+    expect(readManifest().state).toBe('stopping');
+    await service.markStopping(ID); // again: no change
+    expect((await service.append(ID, 1, chunk(10, 2), 1)).duplicate).toBe(false);
+    await service.finish(ID, 1, 1);
+    expect(readManifest()).toMatchObject({ state: 'stopped', lastSeq: 1 });
+    await service.markStopping(ID); // too late: stays stopped
+    expect(readManifest().state).toBe('stopped');
+  });
+});
+
+describe('SessionService: finalization', () => {
   async function recorded(
     service: SessionService,
     id = ID,
     parts = [chunk(300, 1), chunk(200, 2)],
   ) {
-    await service.create(CONFIG, id);
-    for (const [seq, part] of parts.entries()) await service.append(id, seq, part);
-    await service.finish(id, parts.length - 1);
+    await service.create(CONFIG, id, 1);
+    for (const [seq, part] of parts.entries()) await service.append(id, seq, part, 1);
+    await service.finish(id, parts.length - 1, 1);
     return parts;
   }
+  const DATE = new Date(2026, 9, 2, 14, 5, 9);
 
-  it('copies the stream to "Framelet YYYY-MM-DD at HH.mm.ss.webm" and records the output', async () => {
+  it('remuxes into a partial file in the output folder, publishes it and removes the session', async () => {
     const service = new TrackedService(root);
     const parts = await recorded(service);
-    const published = await service.publish(ID, out, new Date(2026, 9, 2, 14, 5, 9));
-    expect(path.basename(published.outputPath)).toBe('Framelet 2026-10-02 at 14.05.09.webm');
-    expect(path.dirname(published.outputPath)).toBe(out);
-    expect(published.bytes).toBe(500);
-    expect(Buffer.compare(fs.readFileSync(published.outputPath), Buffer.concat(parts))).toBe(0);
-    expect(readManifest()).toMatchObject({ state: 'completed', outputPath: published.outputPath });
-    // The session directory is kept (phase 06 decides about cleanup) and no temp file is left.
-    expect(fs.existsSync(path.join(root, ID, 'stream.webm'))).toBe(true);
-    expect(fs.readdirSync(out)).toEqual(['Framelet 2026-10-02 at 14.05.09.webm']);
+    const tools = fakeTools({
+      beforeRun: () => {
+        // while ffmpeg runs the manifest already says finalizing, with the partial path
+        expect(readManifest()).toMatchObject({ state: 'finalizing' });
+        expect(readManifest().finalize?.partialPath).toBe(
+          path.join(out, `.framelet-${ID}.partial.webm`),
+        );
+      },
+    });
+    const done = await service.finalize(ID, { outputDir: out, tools, date: DATE });
+
+    expect(path.basename(done.outputPath)).toBe('Framelet 2026-10-02 at 14.05.09.webm');
+    expect(path.dirname(done.outputPath)).toBe(out);
+    expect(done).toMatchObject({ bytes: 500, durationMs: 5000, unindexed: false });
+    expect(Buffer.compare(fs.readFileSync(done.outputPath), Buffer.concat(parts))).toBe(0);
+
+    const args = tools.runs[0] ?? [];
+    expect(args.slice(args.indexOf('-c'), args.indexOf('-c') + 2)).toEqual(['-c', 'copy']);
+    expect(args[args.indexOf('-i') + 1]).toBe(path.join(root, ID, 'stream.webm'));
+    expect(args.at(-1)).toBe(path.join(out, `.framelet-${ID}.partial.webm`));
+
+    // No duplicate stream: the session directory is gone, only the small record remains.
+    expect(fs.existsSync(path.join(root, ID))).toBe(false);
+    const record = JSON.parse(fs.readFileSync(path.join(root, 'completed', `${ID}.json`), 'utf8'));
+    expect(record).toMatchObject({ sessionId: ID, outputPath: done.outputPath, durationMs: 5000 });
+    expect(record.stats).toMatchObject({
+      mainQueueHighWater: expect.any(Number),
+      maxWriteMs: expect.any(Number),
+    });
+    expect(fs.readdirSync(out)).toEqual(['Framelet 2026-10-02 at 14.05.09.webm']); // no partial left
   });
 
   it('never overwrites an existing file: a number is added', async () => {
@@ -480,8 +669,8 @@ describe('SessionService: publishing', () => {
     await recorded(service);
     fs.writeFileSync(path.join(out, 'Framelet 2026-10-02 at 14.05.09.webm'), 'precious');
     fs.writeFileSync(path.join(out, 'Framelet 2026-10-02 at 14.05.09 (2).webm'), 'also precious');
-    const published = await service.publish(ID, out, new Date(2026, 9, 2, 14, 5, 9));
-    expect(path.basename(published.outputPath)).toBe('Framelet 2026-10-02 at 14.05.09 (3).webm');
+    const done = await service.finalize(ID, { outputDir: out, tools: fakeTools(), date: DATE });
+    expect(path.basename(done.outputPath)).toBe('Framelet 2026-10-02 at 14.05.09 (3).webm');
     expect(fs.readFileSync(path.join(out, 'Framelet 2026-10-02 at 14.05.09.webm'), 'utf8')).toBe(
       'precious',
     );
@@ -491,37 +680,187 @@ describe('SessionService: publishing', () => {
     const service = new TrackedService(root);
     await recorded(service);
     const nested = path.join(out, 'Videos', 'Framelet');
-    const first = await service.publish(ID, nested, new Date(2026, 0, 1, 1, 1, 1));
-    const second = await service.publish(ID, nested, new Date(2030, 0, 1, 1, 1, 1));
+    const tools = fakeTools();
+    const first = await service.finalize(ID, { outputDir: nested, tools, date: DATE });
+    const second = await service.finalize(ID, {
+      outputDir: nested,
+      tools,
+      date: new Date(2030, 0, 1),
+    });
     expect(second).toEqual(first);
+    expect(tools.runs).toHaveLength(1);
     expect(fs.readdirSync(nested)).toHaveLength(1);
   });
 
-  it('refuses to publish a recording that is still running, or one with no data', async () => {
+  it('refuses to finalize a recording that is still running', async () => {
     const service = new TrackedService(root);
-    await service.create(CONFIG, ID);
-    await service.append(ID, 0, chunk(10, 1));
-    await expectCode(service.publish(ID, out), 'SESSION_INACTIVE');
-    const empty = new TrackedService(fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e-')));
-    await empty.create(CONFIG, ID2);
-    await empty.finish(ID2, -1);
-    await expectCode(empty.publish(ID2, out), 'NOT_FOUND');
-    fs.rmSync(empty.rootDir, { recursive: true, force: true });
+    await service.create(CONFIG, ID, 1);
+    await service.append(ID, 0, chunk(10, 1), 1);
+    await expectCode(
+      service.finalize(ID, { outputDir: out, tools: fakeTools() }),
+      'SESSION_INACTIVE',
+    );
   });
 
-  it('leaves no final file and no temp file when the copy fails', async () => {
+  it('a session with no data is "too short" and its (empty) directory is removed', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID, 1);
+    await service.finish(ID, -1, 1);
+    const tools = fakeTools();
+    await expectCode(service.finalize(ID, { outputDir: out, tools }), 'NOT_FOUND');
+    expect(tools.runs).toHaveLength(0);
+    expect(fs.existsSync(path.join(root, ID))).toBe(false);
+  });
+
+  it('race: a stop while a chunk write is in flight still includes every acknowledged chunk', async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let writes = 0;
     const service = new TrackedService(root, {
       fs: realFs({
-        copyFile: async (from, to) => {
-          await fs.promises.writeFile(to, 'partial'); // a partial temp file exists when it fails
-          throw errno('ENOSPC');
+        open: async (file, flags) => {
+          const real = (await fs.promises.open(file, flags)) as unknown as SessionFileHandle;
+          return {
+            write: async (buffer, offset, length) => {
+              writes += 1;
+              if (writes === 3) await gate; // the third chunk write is held in flight
+              return real.write(buffer, offset, length);
+            },
+            sync: () => real.sync(),
+            close: () => real.close(),
+          };
         },
       }),
     });
+    await service.create(CONFIG, ID, 1);
+    const parts = [chunk(40, 1), chunk(40, 2), chunk(40, 3), chunk(40, 4)];
+    const appends = parts.map((part, seq) => service.append(ID, seq, part, 1));
+    // stop + finalize are requested while chunk 2 is still being written and 3 is queued
+    const stopping = service.markStopping(ID);
+    const finishing = service.finish(ID, 3, 1);
+    const finalizing = service.finalize(ID, { outputDir: out, tools: fakeTools(), date: DATE });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release?.();
+    await Promise.all(appends);
+    await stopping;
+    await finishing;
+    const done = await finalizing;
+    expect(Buffer.compare(fs.readFileSync(done.outputPath), Buffer.concat(parts))).toBe(0);
+  });
+
+  it('a failed remux keeps stream.webm, records REMUX_FAILED and writes finalize.log', async () => {
+    const service = new TrackedService(root);
     await recorded(service);
-    await expectCode(service.publish(ID, out, new Date(2026, 9, 2, 14, 5, 9)), 'DISK_FULL');
+    const tools = fakeTools({
+      code: 1,
+      stderr: 'moov atom not found',
+      probe: () => ({ ...PLAYABLE, hasVideo: false, video: null }),
+    });
+    await expectCode(
+      service.finalize(ID, { outputDir: out, tools, date: DATE }),
+      'FINALIZE_FAILED',
+    );
+    expect(readManifest()).toMatchObject({ state: 'failed', error: { code: 'REMUX_FAILED' } });
+    expect(fs.statSync(path.join(root, ID, 'stream.webm')).size).toBe(500);
+    expect(fs.readFileSync(path.join(root, ID, 'finalize.log'), 'utf8')).toContain('moov atom');
     expect(fs.readdirSync(out)).toEqual([]);
-    expect(readManifest().state).toBe('stopped'); // still publishable later
+  });
+
+  it('a failed remux falls back to a raw copy when the raw stream shows video (unindexed), stream kept', async () => {
+    const service = new TrackedService(root);
+    const parts = await recorded(service);
+    const tools = fakeTools({ code: 1, probe: () => ({ ...PLAYABLE, durationSec: null }) });
+    const done = await service.finalize(ID, { outputDir: out, tools, date: DATE });
+    expect(done).toMatchObject({ unindexed: true, durationMs: null, bytes: 500 });
+    expect(Buffer.compare(fs.readFileSync(done.outputPath), Buffer.concat(parts))).toBe(0);
+    expect(readManifest()).toMatchObject({
+      state: 'failed',
+      unindexed: true,
+      outputPath: done.outputPath,
+    });
+    expect(fs.existsSync(path.join(root, ID, 'stream.webm'))).toBe(true);
+    expect(fs.readdirSync(out)).toEqual(['Framelet 2026-10-02 at 14.05.09.webm']);
+  });
+
+  it('a remux that "succeeds" but yields no duration is a failure, not a published file', async () => {
+    const service = new TrackedService(root);
+    await recorded(service);
+    const tools = fakeTools({
+      probe: (file) =>
+        file.endsWith('.partial.webm')
+          ? { ...PLAYABLE, durationSec: null }
+          : { ...PLAYABLE, hasVideo: false, video: null },
+    });
+    await expectCode(
+      service.finalize(ID, { outputDir: out, tools, date: DATE }),
+      'FINALIZE_FAILED',
+    );
+    expect(fs.readdirSync(out)).toEqual([]);
+    expect(fs.existsSync(path.join(root, ID, 'stream.webm'))).toBe(true);
+  });
+
+  it('an aborted finalization (quit past the cap) leaves the manifest finalizing and the stream intact', async () => {
+    const service = new TrackedService(root);
+    await recorded(service);
+    const controller = new AbortController();
+    const tools = fakeTools({
+      beforeRun: async (_args, options) => {
+        fs.writeFileSync(path.join(out, `.framelet-${ID}.partial.webm`), 'half');
+        await new Promise<void>((resolve) => {
+          options.signal?.addEventListener('abort', () => resolve());
+          setTimeout(() => controller.abort(), 10);
+        });
+      },
+    });
+    await expectCode(
+      service.finalize(ID, { outputDir: out, tools, signal: controller.signal, date: DATE }),
+      'FINALIZE_FAILED',
+    );
+    expect(readManifest().state).toBe('finalizing');
+    expect(fs.existsSync(path.join(root, ID, 'stream.webm'))).toBe(true);
+    expect(fs.readdirSync(out)).toEqual([]); // the partial file of this attempt was removed
+  });
+
+  it('not enough free space on the output volume: LOW_DISK, nothing deleted', async () => {
+    const service = new TrackedService(root, {
+      fs: realFs({
+        statfs: (dir) =>
+          Promise.resolve({ bavail: dir.startsWith(out) ? 1000 : 10 * 1024 ** 3, bsize: 1 }),
+      }),
+    });
+    await recorded(service);
+    await expectCode(
+      service.finalize(ID, { outputDir: out, tools: fakeTools(), date: DATE }),
+      'LOW_DISK',
+    );
+    expect(fs.existsSync(path.join(root, ID, 'stream.webm'))).toBe(true);
+    expect(readManifest()).toMatchObject({ state: 'failed', error: { code: 'LOW_DISK' } });
+  });
+
+  it('missing ffmpeg: FFMPEG_MISSING and the data is kept', async () => {
+    const service = new TrackedService(root);
+    await recorded(service);
+    await expectCode(
+      service.finalize(ID, { outputDir: out, tools: fakeTools({ missing: true }), date: DATE }),
+      'FFMPEG_MISSING',
+    );
+    expect(fs.existsSync(path.join(root, ID, 'stream.webm'))).toBe(true);
+  });
+
+  it('when the completion record cannot be written only the duplicate stream is removed', async () => {
+    const service = new TrackedService(root, {
+      fs: realFs({
+        mkdir: (dir, options) =>
+          dir.endsWith('completed')
+            ? Promise.reject(errno('EACCES'))
+            : fs.promises.mkdir(dir, options),
+      }),
+    });
+    await recorded(service);
+    const done = await service.finalize(ID, { outputDir: out, tools: fakeTools(), date: DATE });
+    expect(fs.existsSync(done.outputPath)).toBe(true);
+    expect(fs.existsSync(path.join(root, ID, 'stream.webm'))).toBe(false);
+    expect(readManifest()).toMatchObject({ state: 'completed', outputPath: done.outputPath });
   });
 });
 

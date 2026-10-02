@@ -41,6 +41,10 @@ describe('ipc contract', () => {
       'recorder:start',
       'recorder:stop',
       'recorder:toggleMute',
+      'recovery:discard',
+      'recovery:list',
+      'recovery:recover',
+      'recovery:reveal',
       'session:appendChunk',
       'session:finish',
       'shell:showItemInFolder',
@@ -60,6 +64,7 @@ describe('ipc contract', () => {
       'recorder:engineCommand',
       'recorder:levels',
       'recorder:state',
+      'recovery:changed',
       'shot:ready',
       'worker:grabFrames',
     ]);
@@ -70,6 +75,8 @@ describe('ipc contract', () => {
       const roles = [...ipcContract[channel].roles];
       if (channel.startsWith('worker:')) expect(roles).toEqual(['recorder']);
       if (channel.startsWith('overlay:')) expect(roles).toEqual(['overlay']);
+      // Recovery is driven by the main window only (ids, never paths).
+      if (channel.startsWith('recovery:')) expect(roles).toEqual(['main']);
       // The recorder window's chunk and engine channels belong to it alone.
       if (channel.startsWith('session:') || channel === 'recorder:engineEvent') {
         expect(roles).toEqual(['recorder']);
