@@ -16,7 +16,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 02 Capture feasibility | VERIFIED | native 11/11 on host; exact-res screenshots both monitors; loopback audio captured |
 | 03 Selection & screenshots | VERIFIED | native 18/18; region inset exact on both displays; e2e 28/28 |
 | 04 Screenshot editor | VERIFIED | editor + pixel-exact capture; redaction pixels verified PNG/JPEG/clipboard |
-| 05 Recording & audio | NOT_STARTED | |
+| 05 Recording & audio | VERIFIED | native 29/29; ~30 fps all modes; toolbar excluded from capture |
 | 06 Storage & recovery | NOT_STARTED | |
 | 07 Export & history | NOT_STARTED | |
 | 08 Desktop polish | NOT_STARTED | |
@@ -58,6 +58,12 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Redaction: solid #000 drawn last, +1 px; JPEG redactions padded to 16 px block grid (+2 px) because JPEG ringing leaked up to 24/255 near edges (ADR-016). Chromium-path checks: PNG 0 non-black, clipboard 0, JPEG max channel 0 under redaction.
 - Results: lint/typecheck 0; unit 188/188 (lead re-ran); e2e 45/45; native 18/18. Idle 0 rAF; drag p95 16.8 ms at 2560x1440.
 - Risks: one first-run e2e region-drag flake (launch race) — revisit in phase 08/09; mixed-DPI untested physically; session-end hook untested.
+
+### Phase 05 — Recording & audio (VERIFIED 2026-10-02)
+- Files: src/shared/{recorder-machine,recorder-ipc}.ts, src/main/recorder/controller.ts, src/main/recording/{session-service,media-protocol}.ts, src/renderer/recorder/{engine,chunk-uploader}.ts, toolbar/countdown/choice/result views, tests (unit table+random state machine, e2e recording.spec.ts, native recording.native.spec.ts).
+- Native results (VP9/Opus WebM): no-audio 1920x804 29.7 fps; system+tone with 2 s pause → file 6.10 s = active time (pause excluded), A/V length diff 0.02 s; mic only; mic+system mixed into one Opus track; region 1280x720 on second display; source preset 3440x1440; window fixture 642x432. Hidden recorder window ~30 fps (backgroundThrottling false). Toolbar exclusion via setContentProtection: 0 red pixels in recording vs 460 in unprotected control.
+- Results: lint/typecheck 0; unit 318/318 (lead re-ran); e2e 70/70; native 29/29.
+- Open (→ phase 06): no duration/cues until remux; session dir duplicates output; no recovery/disk checks; quit-cap & forced-kill untested. Real mic signal was silent in room (stream present) — manual speaking test pending. Mic unplug / missing loopback not physically exercised.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

@@ -14,6 +14,8 @@ const markers = [
   'FRAMELET_E2E_MOCK_CAPTURE',
   'drawSyntheticFrame',
   'synthetic-frame',
+  'createSyntheticDisplayStream',
+  'synthetic-stream',
 ];
 const expectMock = process.argv.includes('--expect-mock');
 

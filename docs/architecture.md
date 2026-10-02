@@ -27,12 +27,13 @@ The renderer uses `contextIsolation: true`, `nodeIntegration: false`, `sandbox: 
 
 One renderer entry (`main_window`) serves every window. The role is chosen by location hash and resolved in `src/renderer/main.tsx` (`role.ts`):
 
-| Hash         | Role                                                                            | Status                                                                        |
-| ------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `#/`         | `main`                                                                          | Implemented                                                                   |
-| `#/overlay`  | `overlay` (one frameless window per display: region selector or display picker) | Implemented (phase 03)                                                        |
-| `#/toolbar`  | `toolbar` (floating recording toolbar)                                          | Planned                                                                       |
-| `#/recorder` | `recorder` (hidden capture worker; will own the single recorder in phase 05)    | Implemented as the screenshot frame-grab worker (phase 03); recording Planned |
+| Hash          | Role                                                                            | Status                                                 |
+| ------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `#/`          | `main`                                                                          | Implemented                                            |
+| `#/overlay`   | `overlay` (one frameless window per display: region selector or display picker) | Implemented (phase 03)                                 |
+| `#/toolbar`   | `toolbar` (floating recording toolbar)                                          | Implemented (phase 05)                                 |
+| `#/recorder`  | `recorder` (hidden capture worker; screenshot frame grabs and the ONE recorder) | Implemented (phase 03 frame grabs, phase 05 recording) |
+| `#/countdown` | `countdown` (click-through 3-2-1 window on the recorded display)                | Implemented (phase 05)                                 |
 
 Unknown hashes render the main app. In main, `windows.ts` keeps `Map<webContents.id, Role>`; entries are removed on `destroyed`. Every IPC call is authorized against this registry.
 
@@ -152,13 +153,68 @@ The editor replaces the phase-03 result view and runs in the main window's rende
 
 **Accessibility.** The top bar is a `role="toolbar"` with a roving tabindex (arrow keys, Home/End), every control has an accessible name, tool and save/copy changes are announced in an `aria-live="polite"` region, focus rings are visible, and the options strip uses `radiogroup`/`radio` for colors, stroke and text size.
 
-## Planned capture pipeline (Planned, phases 05+)
+## Recording (phase 05: Implemented; native checks verified on the host, see capture-feasibility.md)
+
+### Ownership
+
+```
+ main window / toolbar / (later tray, shortcuts)
+        | recorder:start | pause | resume | stop | cancel | toggleMute | resolveChoice | reset
+        v
+ MAIN: RecorderController (src/main/recorder/controller.ts)  <- the ONE authoritative state
+   pure machine (src/shared/recorder-machine.ts) -> recorder:state snapshot broadcast
+        |  recorder:engineCommand (prepare | start | pause | resume | stop | abort | mute | levels)
+        v                                           ^ recorder:engineEvent (prepared | needsChoice | started | stopped | sourceLost | trackEnded | levels | error)
+ hidden 'recorder' window: RecorderEngine (src/renderer/recorder/engine.ts) - the only MediaRecorder
+        | session:appendChunk {sessionId, seq, bytes}  (ack before the next)   | session:finish {sessionId, lastSeq}
+        v
+ MAIN: SessionService (src/main/recording/session-service.ts) -> userData/recordings/<id>/{manifest.json, stream.webm}
+```
+
+- **State is owned by main** and only broadcast: every window renders `recorder:state` snapshots (`status`, `activeMs` + `runningSince` for a live timer, `audio`, `muted`, `lost`, `choice`, `countdown`, `result`). Commands from any UI go through main, so a stop from the toolbar, the main window, closing the toolbar, a lost source and quitting the app are the same idempotent operation.
+- **One recorder.** `RecorderEngine` asserts there is no other active MediaRecorder (`activeRecorderCount()`), commands run strictly in order, and every terminal path calls `releaseAll()`: tracks, audio context, level timer, crop timer and recorder are all released. `window.__frameletResources()` (read-only counters in the recorder window) lets the tests assert zero live tracks / audio contexts / loops / recorders after every recording.
+- The recorder window is the phase-03 worker with `backgroundThrottling: false`. Measured: a hidden, never-shown window records at about 30 fps with this setting (see capture-feasibility.md).
+
+### State machine
+
+States: `idle -> selecting -> preflight -> countdown -> starting -> recording <-> paused -> stopping -> processing -> completed | error`. selecting, preflight, countdown and starting go back to `idle` on CANCEL or STOP. Events: START_REQUESTED, SOURCE_SELECTED, PREFLIGHT_OK, PREFLIGHT_NEEDS_CHOICE, COUNTDOWN_DONE, STARTED, PAUSE, RESUME, STOP, CANCEL, SOURCE_LOST, WRITE_FAILED, FINALIZED, FAILED, RESET, plus three extras: STOPPED (the engine flushed: stopping -> processing), MUTE_SET and AUDIO_LOST (a source's mute flag and "device gone" flag are part of the state). An event that is not valid in a state returns the same state with `rejected: true` and never throws; STOP in stopping, processing and completed is an accepted no-op. `activeDurationMs` is accumulated from monotonic timestamps of the running segments only, so paused time is never counted (wall clock is kept separately as `startedAt`). tests/unit/recorder-machine.test.ts checks every event in every state against a written-out table, plus the required scenarios (rapid start/stop, stop during countdown, cancel during starting, duplicate stop, pause/resume in the wrong state, source lost while paused, write failure while recording, reset after completed/error) and 200 random event sequences.
+
+### Start-up flow
+
+1. START: main minimizes the main window (a minimized window is not capturable; it stays in the taskbar so the user can find it).
+2. selecting: a window comes from the picker; a screen is the only display, the `displayId` in the request, or the pick-display overlay; a region uses the overlay in `record-region` mode: **live**, not frozen (transparent window, 45% dim around the selection, the desktop keeps running underneath), button "Record" (Enter). The overlay is closed before anything is recorded, so it can never be in the output. The overlay IPC is routed to the recorder or the screenshot flow by `SelectionHost`. The region is mapped to display pixels with `overlayRectToFramePixels` and rounded down to even x, y, width, height.
+3. preflight (`prepare` in the engine): enumerate microphones, acquire the display stream (with loopback if asked), acquire the microphone (`echoCancellation` and `noiseSuppression` on), build the canvas pipeline and the audio mix. Anything the user asked for that is not there is a **choice**, never silence: system audio without a loopback track ("System audio isn't available": record without it / cancel), a microphone id that is not in `enumerateDevices` (use the default microphone / record without a microphone / cancel), a denied microphone (record without / cancel), a microphone that cannot be opened. The main window is brought back for the question and minimized again after the answer.
+4. countdown (optional 3-2-1): a transparent, click-through, content-protected, non-focusable window on the recorded display. Esc cancels through a global shortcut that is registered only while the countdown runs. Reduced motion is respected by the global `prefers-reduced-motion` rule. The window is closed (plus a 120 ms settle) before the recorder starts.
+5. starting: the session directory is created, the engine starts the MediaRecorder (timeslice 1000 ms), the toolbar is shown.
+
+### Video and audio pipeline
+
+display stream -> canvas (`createCanvasTransform`: crop to the region and/or fit the 1080p preset, drawn from a self-correcting timer, so the frame rate is constant even on a static screen) -> `canvas.captureStream` video track. Quality presets: "1080p" fits inside 1920 x 1080 keeping the aspect ratio with even sides, never upscaling (3440 x 1440 -> 1920 x 804); "Source" keeps the native size. Frame rate 30 (default) or 60. Video bitrate 8 Mbps at 1080p30, scaled with pixels and frame rate (2.5-30 Mbps), Opus 128 kbps. Microphone and system audio each go through their own GainNode (mute = gain 0, not `track.enabled`), an AnalyserNode (levels) and into one MediaStreamAudioDestinationNode: one mixed track, nothing is ever connected to the speakers. Levels are sampled at 10 Hz only while recording and only while main says a toolbar is visible. A microphone or system track that ends, or a `devicechange` that removes the microphone, is reported once (`trackEnded`): the recording continues with the other sources, the toolbar shows a badge ("Microphone disconnected"), the main window shows a toast.
+
+### Chunk protocol and session files
+
+- Renderer: `ChunkUploader` numbers chunks from 0 when they are pushed, reads each Blob only when it is its turn, sends `session:appendChunk` and waits for the acknowledgement before sending the next (strictly serial, ordered). The queue is bounded at 16 chunks or 64 MB: a chunk that does not fit is not accepted, the uploader fails with `QUEUE_OVERFLOW`, the recorder stops, and the chunks accepted so far are still written. Nothing is dropped silently and nothing is buffered without bound. A failed write halts the uploader.
+- Main (`SessionService`): validates the session (exists, still recording), size (1 byte to 16 MB, the IPC schema enforces the same cap), and sequence (exactly last + 1; the previous chunk again with the same length is acknowledged without a second write; a gap is `SEQ_GAP`; anything else `SEQ_CONFLICT`). It writes with a real `FileHandle.write` loop (partial writes handled) and acknowledges after the write. ENOSPC/EDQUOT map to `DISK_FULL`, everything else to `WRITE_FAILED`; the session is then closed, marked `failed` and `truncated` and kept. `manifest.json` (version, session id, state, MIME, source, options, size, chunks, bytes, last seq, paused intervals, timestamps) is rewritten atomically (temp file + rename) at most every 5 s or 10 chunks and at every state change; a failing manifest update never loses a chunk.
+- Stop: the engine calls `recorder.stop()`, waits for the final `dataavailable` AND the acknowledgement of every chunk, then `session:finish {sessionId, lastSeq}`; main verifies `lastSeq`, fsyncs, closes and sets `state: "stopped"`. Publishing (`SessionService.publish`) copies `stream.webm` to `Videos/Framelet/Framelet YYYY-MM-DD at HH.mm.ss.webm` through a temp file and a rename (a number is added instead of overwriting), and the manifest becomes `completed` with `outputPath`. The session directory is kept (phase 06 decides about cleanup and adds recovery and FFmpeg remux).
+- **Known limitation until phase 06:** the published file is the raw MediaRecorder WebM. It has no duration header and no seek cues. It plays and the result view finds its duration by seeking, and ffmpeg/ffprobe read it, but other players may show no duration or seek slowly. Phase 06 remuxes with FFmpeg.
+- Failures while recording (queue overflow, disk full, recorder error) stop the recording, keep what was acknowledged and publish it with a notice ("The recording stopped early"). A source loss does the same without an error. A recording shorter than one video frame (a few milliseconds) has no data and ends in the error "too short to save".
+
+### Windows and playback
+
+- **Toolbar** (`toolbar` role, `#/toolbar`): a 48 DIP high frameless always-on-top pill, `skipTaskbar`, `setContentProtection(true)`, draggable by the grip only (`-webkit-app-region`), timer (active time, `h:mm:ss` after an hour), pause/resume, stop, per-source mute and meter, warning badge; paused shows an amber dot and "Paused"; stopping/processing show "Saving..." (or "Finishing recording..." while the app quits). Placement (`src/shared/toolbar-placement.ts`, unit tested): whole screen or window = bottom-center of the display's work area (above the taskbar), 24 DIP up; region = just below the region, else above, else on another display, and only as a last resort (single display, region fills it) inside it. Width follows the recorded audio sources and grows when a source is lost.
+- **Main window during recording**: minimized (and a close request only minimizes it) and restored when the recording is over. The result view shows a player (`<video>` on `framelet-media://<id>`), duration / size / dimensions / audio badges, Show in folder, Copy path, New recording.
+- **`framelet-media:`** (`src/main/recording/media-protocol.ts`): a privileged (standard, secure, stream, fetch) scheme registered before ready. It serves ONLY files main produced (an unguessable id -> path map) with Range support implemented from the file (`Content-Range`, 206, 416; parser unit tested), and `framelet-media:` is allowed in `media-src` only, in both CSPs.
+- **Quit**: `before-quit` while recording or paused stops and finalizes first (toolbar: "Finishing recording..."), with a hard cap of 15 s, after which the session directory is simply left on disk for recovery (phase 06). Before recording started it is a cancel.
+
+Channels added in phase 05: `recorder:start | pause | resume | stop | cancel | toggleMute | getState | resolveChoice | reset | showInFolder | copyPath` (main window; the toolbar may pause, resume, stop, cancel, mute and read state), `recorder:engineEvent`, `session:appendChunk`, `session:finish` (recorder window only). Events: `recorder:state`, `recorder:levels`, `recorder:engineCommand`. New role `countdown`. New IPC error codes: SEQ_GAP, SEQ_CONFLICT, CHUNK_TOO_LARGE, SESSION_INACTIVE, WRITE_FAILED, DISK_FULL.
+
+## Planned capture pipeline (phase 06 onward)
 
 - **Source discovery**: implemented in phase 02 (see above).
 - **Authorization**: implemented in phase 02 (see above).
 - **Screenshots**: implemented in phase 03 (see above).
-- **Recording**: a hidden `recorder` window owns a single recorder (MediaRecorder; WebM chosen after runtime `isTypeSupported` checks). Audio (microphone and system audio) is mixed in an explicit Web Audio graph into one track.
-- **Persistence**: disk-backed WebM sessions. The renderer sends sequenced, size-capped chunks over IPC with acknowledgements and a bounded queue; main appends to a session file and keeps a manifest. Session ids and sequence numbers are validated at the IPC boundary. Finalization runs an FFmpeg remux so the output is a clean playable file (chunks are never concatenated blindly). Recovery after a crash is best effort.
-- **Floating toolbar**: an always-on-top `toolbar` window using `setContentProtection(true)` so it is excluded from capture where Windows supports it (stated as a platform behavior, not a universal guarantee).
+- **Recording**: implemented in phase 05 (see "Recording" above).
+- **Persistence**: the sequenced, acknowledged chunk protocol and a minimal correct disk sink are implemented (phase 05). Phase 06 adds disk-pressure checks, recovery of incomplete sessions on restart and the FFmpeg remux (chunks are never concatenated blindly).
+- **Floating toolbar**: implemented in phase 05; exclusion from capture with `setContentProtection` was measured on the host (capture-feasibility.md).
 - **FFmpeg**: a controlled local child process (`shell: false`, argument array) for remux and MP4 conversion. Never a long-running server.
 - **CaptureProvider**: a small interface so a native backend can be added later without speculative plugin infrastructure.

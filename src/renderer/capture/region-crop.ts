@@ -1,4 +1,6 @@
+import type { Size } from '../../shared/geometry';
 import { checkPixelRect, type Rect } from '../../shared/rect';
+import { fitWithin } from '../../shared/recording';
 import { CaptureError } from './errors';
 import { registerLoop, registerTrack } from './resource-registry';
 
@@ -44,12 +46,37 @@ function assertInside(rect: Rect, width: number, height: number): void {
  * Driver 'timer' draws on a self-correcting timer only. Neither depends on requestAnimationFrame,
  * which hidden windows throttle.
  */
-export async function createCanvasCrop(
+export function createCanvasCrop(
   displayStream: MediaStream,
   rect: Rect,
   fps: number,
   driver: CanvasDriver = 'rvfc',
 ): Promise<CroppedStream> {
+  return createCanvasTransform(displayStream, { rect }, fps, driver);
+}
+
+export interface CanvasTransformOptions {
+  /** Crop in pixels of the display frame. Undefined: the whole frame (its size can change). */
+  rect?: Rect | undefined;
+  /**
+   * Fit the output inside this size (aspect kept, even sides, never upscaled); `null` keeps the
+   * source size with even sides. Undefined: the output is exactly the crop rectangle (diagnostics).
+   */
+  limit?: Size | null | undefined;
+}
+
+/**
+ * The canvas pipeline behind both region crops and recordings: draws the display stream (or a
+ * region of it) into a canvas, scaled to fit `limit`, and exposes the canvas as a video stream. The
+ * output size is fixed when the first frame arrives.
+ */
+export async function createCanvasTransform(
+  displayStream: MediaStream,
+  options: CanvasTransformOptions,
+  fps: number,
+  driver: CanvasDriver = 'rvfc',
+): Promise<CroppedStream> {
+  const { rect } = options;
   const track = sourceTrack(displayStream);
   const video = document.createElement('video');
   video.muted = true;
@@ -89,28 +116,35 @@ export async function createCanvasCrop(
         resolve();
       });
     });
-    assertInside(rect, video.videoWidth, video.videoHeight);
+    if (rect) assertInside(rect, video.videoWidth, video.videoHeight);
+    const sourceSize: Size = rect ?? { width: video.videoWidth, height: video.videoHeight };
+    const outSize: Size =
+      options.limit === undefined
+        ? { width: sourceSize.width, height: sourceSize.height }
+        : fitWithin(sourceSize, options.limit);
 
     const canvas = document.createElement('canvas');
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    canvas.width = outSize.width;
+    canvas.height = outSize.height;
     const context = canvas.getContext('2d', { alpha: false });
     if (!context) throw new CaptureError('unknown', 'Could not create a 2D canvas context.');
 
     const interval = 1000 / fps;
     let framesOut = 0;
     let lastDraw = -Infinity;
+    context.imageSmoothingQuality = 'medium';
     const draw = (): void => {
+      const from = rect ?? { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight };
       context.drawImage(
         video,
-        rect.x,
-        rect.y,
-        rect.width,
-        rect.height,
+        from.x,
+        from.y,
+        from.width,
+        from.height,
         0,
         0,
-        rect.width,
-        rect.height,
+        outSize.width,
+        outSize.height,
       );
       framesOut += 1;
       lastDraw = performance.now();
@@ -156,7 +190,7 @@ export async function createCanvasCrop(
     return {
       stream: output,
       method: 'canvas',
-      stats: () => ({ framesOut, outWidth: rect.width, outHeight: rect.height }),
+      stats: () => ({ framesOut, outWidth: outSize.width, outHeight: outSize.height }),
       dispose,
     };
   } catch (error) {

@@ -4,9 +4,9 @@ import { DisplayPicker } from './DisplayPicker';
 import { RegionSelector } from './RegionSelector';
 
 /**
- * Root of an overlay window (role 'overlay', one per display). Asks main what to draw: the frozen
- * frame with the region selector, or the display picker. The page is transparent so the
- * pick-display overlay shows the live desktop through it.
+ * Root of an overlay window (role 'overlay', one per display). Asks main what to draw: the region
+ * selector (on the frozen frame, or live for a recording) or the display picker. The page is
+ * transparent so the live modes show the desktop through it.
  */
 export function OverlayView() {
   const [init, setInit] = useState<OverlayInit | null>(null);
@@ -29,5 +29,9 @@ export function OverlayView() {
   }, []);
 
   if (failed || !init) return null;
-  return init.mode === 'region' ? <RegionSelector init={init} /> : <DisplayPicker init={init} />;
+  return init.mode === 'pick-display' ? (
+    <DisplayPicker init={init} />
+  ) : (
+    <RegionSelector init={init} />
+  );
 }

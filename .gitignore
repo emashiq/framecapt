@@ -15,4 +15,5 @@ docs/evidence/**/*.png
 # UI screenshots are taken from the mock (E2E) build and show no real desktop content.
 !docs/evidence/phase03/ui-*.png
 !docs/evidence/phase04/ui-*.png
+!docs/evidence/phase05/ui-*.png
 !docs/evidence/phase04/export-*-sample.png

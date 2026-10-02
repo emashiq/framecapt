@@ -7,11 +7,23 @@ import type {
 } from './ipc-contract';
 
 /** Roles a Framelet window can have. One renderer bundle serves every role (see main.tsx). */
-export const ROLES = ['main', 'overlay', 'toolbar', 'recorder'] as const;
+export const ROLES = ['main', 'overlay', 'toolbar', 'recorder', 'countdown'] as const;
 export type Role = (typeof ROLES)[number];
 
 export type IpcErrorCode =
-  'FORBIDDEN' | 'INVALID_PAYLOAD' | 'UNKNOWN_CHANNEL' | 'NOT_FOUND' | 'BUSY' | 'INTERNAL';
+  | 'FORBIDDEN'
+  | 'INVALID_PAYLOAD'
+  | 'UNKNOWN_CHANNEL'
+  | 'NOT_FOUND'
+  | 'BUSY'
+  | 'INTERNAL'
+  // Recording sessions (session:appendChunk / session:finish).
+  | 'SEQ_GAP'
+  | 'SEQ_CONFLICT'
+  | 'CHUNK_TOO_LARGE'
+  | 'SESSION_INACTIVE'
+  | 'WRITE_FAILED'
+  | 'DISK_FULL';
 
 export interface IpcFailure {
   ok: false;

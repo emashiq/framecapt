@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { CaptureError } from '../capture/errors';
 import { grabFullResolutionFrame } from '../capture/frame';
+import { getResourceSnapshot } from '../capture/resource-registry';
 import { acquireDisplayStream, releaseStream } from '../capture/stream';
+import { RecorderEngine } from '../recorder/engine';
 import type { GrabFramesEvent } from '../../shared/shot-ipc';
 
 interface GrabbedFrame {
@@ -64,18 +66,34 @@ async function handleGrab(request: GrabFramesEvent): Promise<void> {
 }
 
 /**
- * The hidden capture worker (role 'recorder'). It has no UI: main sends `worker:grabFrames`, this
- * answers with frames or an error. Requests are handled one at a time. Phase 05 adds recording to
- * this same window.
+ * The hidden capture worker (role 'recorder'). It has no UI. Main sends `worker:grabFrames` (this
+ * answers with frames or an error, one request at a time) and `recorder:engineCommand` (the one
+ * and only recorder, see recorder/engine.ts).
  */
 export function RecorderWorker() {
   useEffect(() => {
     let queue: Promise<void> = Promise.resolve();
-    const off = window.framelet.on('worker:grabFrames', (request) => {
+    const offFrames = window.framelet.on('worker:grabFrames', (request) => {
       queue = queue.then(() => handleGrab(request)).catch(() => undefined);
     });
+    const engine = new RecorderEngine({
+      send: (event) => void window.framelet.invoke('recorder:engineEvent', event),
+      invoke: window.framelet.invoke,
+    });
+    const offCommands = window.framelet.on('recorder:engineCommand', (command) => {
+      void engine.handle(command);
+    });
+    // Read-only debug counters (live tracks, audio contexts, timers, recorders) for the tests.
+    Object.defineProperty(window, '__frameletResources', {
+      value: getResourceSnapshot,
+      configurable: true,
+    });
     void window.framelet.invoke('worker:ready');
-    return off;
+    return () => {
+      offFrames();
+      offCommands();
+      engine.releaseAll();
+    };
   }, []);
   return null;
 }

@@ -174,20 +174,13 @@ async function expectMainVisible(): Promise<void> {
 
 // --- tests -----------------------------------------------------------------------------------
 
-test('Screenshot buttons are enabled and Record buttons stay unavailable with a tooltip', async () => {
-  const shots = page.getByTestId('mode-screenshot');
-  for (const name of ['Screen', 'Window', 'Region']) {
-    await expect(shots.getByRole('button', { name })).not.toHaveAttribute('aria-disabled', 'true');
-    await expect(shots.getByRole('button', { name })).toBeEnabled();
+test('Screenshot and Record buttons are all enabled', async () => {
+  for (const mode of ['mode-screenshot', 'mode-record']) {
+    const card = page.getByTestId(mode);
+    for (const name of ['Screen', 'Window', 'Region']) {
+      await expect(card.getByRole('button', { name })).toBeEnabled();
+    }
   }
-  const record = page.getByTestId('mode-record');
-  for (const name of ['Screen', 'Window', 'Region']) {
-    await expect(record.getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true');
-  }
-  await record.getByRole('button', { name: 'Screen' }).hover();
-  await expect(page.getByRole('tooltip').first()).toContainText(
-    'Recording arrives in the next build',
-  );
 });
 
 test('region flow: overlays on both displays, drag, Enter, result size, save PNG', async () => {

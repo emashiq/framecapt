@@ -29,6 +29,20 @@ describe('ipc contract', () => {
       'overlay:pickDisplay',
       'overlay:ready',
       'overlay:selectionStarted',
+      'recorder:cancel',
+      'recorder:copyPath',
+      'recorder:engineEvent',
+      'recorder:getState',
+      'recorder:pause',
+      'recorder:reset',
+      'recorder:resolveChoice',
+      'recorder:resume',
+      'recorder:showInFolder',
+      'recorder:start',
+      'recorder:stop',
+      'recorder:toggleMute',
+      'session:appendChunk',
+      'session:finish',
       'shell:showItemInFolder',
       'shot:copy',
       'shot:discard',
@@ -43,6 +57,9 @@ describe('ipc contract', () => {
       'app:themeChanged',
       'capture:flowEnded',
       'overlay:clearSelection',
+      'recorder:engineCommand',
+      'recorder:levels',
+      'recorder:state',
       'shot:ready',
       'worker:grabFrames',
     ]);
@@ -53,6 +70,10 @@ describe('ipc contract', () => {
       const roles = [...ipcContract[channel].roles];
       if (channel.startsWith('worker:')) expect(roles).toEqual(['recorder']);
       if (channel.startsWith('overlay:')) expect(roles).toEqual(['overlay']);
+      // The recorder window's chunk and engine channels belong to it alone.
+      if (channel.startsWith('session:') || channel === 'recorder:engineEvent') {
+        expect(roles).toEqual(['recorder']);
+      }
       if (
         channel.startsWith('shot:') ||
         channel.startsWith('editor:') ||

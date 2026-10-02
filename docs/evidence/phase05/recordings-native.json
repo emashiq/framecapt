@@ -1,0 +1,332 @@
+{
+  "environment": {
+    "app": {
+      "version": "0.1.0",
+      "electron": "44.5.1",
+      "chrome": "152.0.7977.130",
+      "node": "24.21.0",
+      "platform": "win32",
+      "arch": "x64",
+      "isPackaged": false
+    },
+    "os": "Windows_NT 10.0.26300",
+    "cpu": "AMD Ryzen 7 7700 8-Core Processor              ",
+    "logicalCores": 16,
+    "ramGiB": 63.1,
+    "displays": [
+      {
+        "bounds": {
+          "x": 3440,
+          "y": 0,
+          "width": 2560,
+          "height": 1440
+        },
+        "scaleFactor": 1,
+        "physicalSize": {
+          "width": 2560,
+          "height": 1440
+        },
+        "isPrimary": false
+      },
+      {
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 3440,
+          "height": 1440
+        },
+        "scaleFactor": 1,
+        "physicalSize": {
+          "width": 3440,
+          "height": 1440
+        },
+        "isPrimary": true
+      }
+    ],
+    "audioInputDevices": 4,
+    "ffmpeg": "ffmpeg version 8.1.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers\r"
+  },
+  "toolbarExclusion": {
+    "toolbarBoundsDip": {
+      "x": 1594,
+      "y": 1320,
+      "width": 252,
+      "height": 48
+    },
+    "toolbarOnRecordedDisplay": true,
+    "checkedRegionInFrame": {
+      "x": 886,
+      "y": 733,
+      "width": 147,
+      "height": 33
+    },
+    "redPixelsInToolbarPage": 1877,
+    "redPixelsExpectedIfVisibleAfterScaling": 585,
+    "redPixelsFoundInRecordedFrame": 0,
+    "verdict": "toolbar NOT in the recording (setContentProtection excluded it)"
+  },
+  "a-no-audio": {
+    "container": "matroska,webm",
+    "bytes": 1060913,
+    "video": {
+      "codec": "vp9",
+      "width": 1920,
+      "height": 804
+    },
+    "audio": null,
+    "appActiveSeconds": 6.053,
+    "wallSeconds": 7.665,
+    "startToRecordingMs": 1492,
+    "stopToCompletedMs": 157,
+    "videoSeconds": 6.06,
+    "audioSeconds": null,
+    "videoPackets": 180,
+    "measuredFps": 29.7,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    },
+    "expectedSize": {
+      "width": 1920,
+      "height": 804
+    }
+  },
+  "toolbarExclusionControl": {
+    "note": "setContentProtection(false) on the toolbar, same detector and region logic",
+    "redPixelsFoundInRecordedFrame": 460,
+    "verdict": "detector works: an unprotected toolbar IS visible in the recording"
+  },
+  "b-system-audio": {
+    "container": "matroska,webm",
+    "bytes": 1126808,
+    "video": {
+      "codec": "vp9",
+      "width": 1920,
+      "height": 804
+    },
+    "audio": {
+      "codec": "opus",
+      "sampleRate": "48000",
+      "channels": 2
+    },
+    "appActiveSeconds": 6.099,
+    "wallSeconds": 9.71,
+    "startToRecordingMs": 1427,
+    "stopToCompletedMs": 157,
+    "videoSeconds": 6.1,
+    "audioSeconds": 6.08,
+    "videoPackets": 184,
+    "measuredFps": 30.16,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    },
+    "expectedSize": {
+      "width": 1920,
+      "height": 804
+    },
+    "volumeDb": {
+      "whole": -38.2,
+      "beforePause": -38,
+      "afterResume": -40
+    },
+    "audioVideoDriftSeconds": 0.02,
+    "pause": {
+      "afterSeconds": 3,
+      "forSeconds": 2,
+      "manifestPausedMs": 2064
+    }
+  },
+  "c-mic": {
+    "container": "matroska,webm",
+    "bytes": 1156927,
+    "video": {
+      "codec": "vp9",
+      "width": 1920,
+      "height": 804
+    },
+    "audio": {
+      "codec": "opus",
+      "sampleRate": "48000",
+      "channels": 2
+    },
+    "appActiveSeconds": 6.034,
+    "wallSeconds": 7.578,
+    "startToRecordingMs": 1434,
+    "stopToCompletedMs": 142,
+    "videoSeconds": 6.03,
+    "audioSeconds": 6.03,
+    "videoPackets": 182,
+    "measuredFps": 30.18,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    },
+    "expectedSize": {
+      "width": 1920,
+      "height": 804
+    },
+    "volumeDb": {
+      "mean": -78.5,
+      "max": null
+    },
+    "toolbarMeterPeak": 0.01,
+    "note": "level depends on the room and Windows noise suppression; only the presence of the audio stream is asserted"
+  },
+  "d-mic-and-system": {
+    "container": "matroska,webm",
+    "bytes": 1146984,
+    "video": {
+      "codec": "vp9",
+      "width": 1920,
+      "height": 804
+    },
+    "audio": {
+      "codec": "opus",
+      "sampleRate": "48000",
+      "channels": 2
+    },
+    "appActiveSeconds": 6.045,
+    "wallSeconds": 7.585,
+    "startToRecordingMs": 1419,
+    "stopToCompletedMs": 156,
+    "videoSeconds": 6.03,
+    "audioSeconds": 6.03,
+    "videoPackets": 182,
+    "measuredFps": 30.18,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    },
+    "expectedSize": {
+      "width": 1920,
+      "height": 804
+    },
+    "volumeDb": -30
+  },
+  "regionToolbarPlacement": {
+    "toolbarBoundsDip": {
+      "x": 4054,
+      "y": 832,
+      "width": 252,
+      "height": 48
+    },
+    "regionGlobalDip": {
+      "x": 3540,
+      "y": 100,
+      "width": 1280,
+      "height": 720
+    },
+    "overlapsRegion": false,
+    "onRegionDisplay": true
+  },
+  "region-second-display": {
+    "container": "matroska,webm",
+    "bytes": 553658,
+    "video": {
+      "codec": "vp9",
+      "width": 1280,
+      "height": 720
+    },
+    "audio": null,
+    "appActiveSeconds": 4.036,
+    "wallSeconds": 9.459,
+    "startToRecordingMs": 5316,
+    "stopToCompletedMs": 140,
+    "videoSeconds": 4.07,
+    "audioSeconds": null,
+    "videoPackets": 122,
+    "measuredFps": 29.98,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    }
+  },
+  "source-preset": {
+    "container": "matroska,webm",
+    "bytes": 2180835,
+    "video": {
+      "codec": "vp9",
+      "width": 3440,
+      "height": 1440
+    },
+    "audio": null,
+    "appActiveSeconds": 4.046,
+    "wallSeconds": 5.603,
+    "startToRecordingMs": 1438,
+    "stopToCompletedMs": 156,
+    "videoSeconds": 4.03,
+    "audioSeconds": null,
+    "videoPackets": 123,
+    "measuredFps": 30.52,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    },
+    "note": "fps asserted loosely at full resolution"
+  },
+  "window-fixture": {
+    "container": "matroska,webm",
+    "bytes": 33623,
+    "video": {
+      "codec": "vp9",
+      "width": 642,
+      "height": 432
+    },
+    "audio": null,
+    "appActiveSeconds": 3.032,
+    "wallSeconds": 9.965,
+    "startToRecordingMs": 6821,
+    "stopToCompletedMs": 142,
+    "videoSeconds": 3.03,
+    "audioSeconds": null,
+    "videoPackets": 92,
+    "measuredFps": 30.36,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    },
+    "magentaFractionInContent": 1
+  },
+  "shortRecordings": [
+    {
+      "requestedMs": 300,
+      "status": "completed",
+      "bytes": 334485,
+      "error": null
+    },
+    {
+      "requestedMs": 700,
+      "status": "completed",
+      "bytes": 410229,
+      "error": null
+    },
+    {
+      "requestedMs": 1200,
+      "status": "completed",
+      "bytes": 437577,
+      "error": null
+    }
+  ]
+}

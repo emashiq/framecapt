@@ -6,6 +6,7 @@
 const tracks = new Set<MediaStreamTrack>();
 const contexts = new Set<AudioContext>();
 const loops = new Map<number, string>();
+const recorders = new Set<MediaRecorder>();
 let nextLoopId = 1;
 
 export function registerStream(stream: MediaStream): MediaStream {
@@ -32,11 +33,26 @@ export function registerLoop(name: string): () => void {
   };
 }
 
+/** Tracks a MediaRecorder that is not yet inactive. There must never be more than one. */
+export function registerRecorder(recorder: MediaRecorder): () => void {
+  recorders.add(recorder);
+  return () => {
+    recorders.delete(recorder);
+  };
+}
+
+export function activeRecorderCount(): number {
+  for (const recorder of recorders) if (recorder.state === 'inactive') recorders.delete(recorder);
+  return recorders.size;
+}
+
 export interface ResourceSnapshot {
   liveTracks: number;
   openAudioContexts: number;
   activeLoops: number;
   loopNames: string[];
+  /** MediaRecorders that are recording or paused. */
+  activeRecorders: number;
 }
 
 export function getResourceSnapshot(): ResourceSnapshot {
@@ -47,6 +63,7 @@ export function getResourceSnapshot(): ResourceSnapshot {
     openAudioContexts: contexts.size,
     activeLoops: loops.size,
     loopNames: [...loops.values()],
+    activeRecorders: activeRecorderCount(),
   };
 }
 

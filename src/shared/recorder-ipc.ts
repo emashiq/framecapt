@@ -1,0 +1,221 @@
+import { z } from 'zod';
+import { RectSchema } from './capture-schemas';
+import { FPS_VALUES, QUALITY_VALUES } from './recording';
+import { RECORDER_STATUSES } from './recorder-machine';
+import { SourceIdSchema } from './shot-ipc';
+
+// --- options and requests (main window -> main) ----------------------------------------------
+
+export const RecordTargetSchema = z.enum(['screen', 'window', 'region']);
+export type RecordTarget = z.infer<typeof RecordTargetSchema>;
+
+export const RecordOptionsSchema = z.object({
+  mic: z.object({
+    enabled: z.boolean(),
+    /** Undefined = the default microphone. */
+    deviceId: z.string().max(256).optional(),
+  }),
+  systemAudio: z.boolean(),
+  quality: z.enum(QUALITY_VALUES),
+  fps: z.union([z.literal(FPS_VALUES[0]), z.literal(FPS_VALUES[1])]),
+  /** A 3-2-1 countdown before recording starts. */
+  countdown: z.boolean(),
+});
+export type RecordOptions = z.infer<typeof RecordOptionsSchema>;
+
+export const DEFAULT_RECORD_OPTIONS: RecordOptions = {
+  mic: { enabled: false },
+  systemAudio: false,
+  quality: '1080p',
+  fps: 30,
+  countdown: true,
+};
+
+export const RecorderStartRequestSchema = z
+  .object({
+    target: RecordTargetSchema,
+    /** Window recordings: the window to record. */
+    sourceId: SourceIdSchema.optional(),
+    /** Screen recordings: skip the "pick a screen" step. */
+    displayId: z.string().min(1).max(64).optional(),
+    options: RecordOptionsSchema,
+  })
+  .refine((request) => request.target !== 'window' || request.sourceId !== undefined, {
+    message: 'A window recording needs a sourceId.',
+    path: ['sourceId'],
+  });
+export type RecorderStartRequest = z.infer<typeof RecorderStartRequestSchema>;
+
+export const AudioSourceSchema = z.enum(['mic', 'system']);
+export const ToggleMuteRequestSchema = z.object({ source: AudioSourceSchema });
+
+export const PreflightChoiceKindSchema = z.enum([
+  'system-audio-unavailable',
+  'mic-missing',
+  'mic-denied',
+  'mic-unavailable',
+]);
+export const ChoiceAnswerSchema = z.enum(['continue-without', 'use-default', 'cancel']);
+export const ResolveChoiceRequestSchema = z.object({ answer: ChoiceAnswerSchema });
+
+export const RecordingIdRequestSchema = z.object({ resultId: z.string().min(1).max(64) });
+
+// --- state broadcast (main -> every app window) ----------------------------------------------
+
+const AudioFlagsSchema = z.object({ mic: z.boolean(), system: z.boolean() });
+
+export const RecordingResultSchema = z.object({
+  /** Main-owned id: the media URL is `framelet-media://<id>`. */
+  id: z.string(),
+  fileName: z.string(),
+  path: z.string(),
+  durationMs: z.number(),
+  bytes: z.number(),
+  width: z.number(),
+  height: z.number(),
+  mime: z.string(),
+  createdAt: z.number(),
+  hasAudio: z.boolean(),
+});
+export type RecordingResult = z.infer<typeof RecordingResultSchema>;
+
+export const RecorderSnapshotSchema = z.object({
+  status: z.enum(RECORDER_STATUSES),
+  sessionId: z.string().nullable(),
+  target: RecordTargetSchema.nullable(),
+  startedAt: z.number().nullable(),
+  /** Active recording time up to the moment of the snapshot (paused time excluded), ms. */
+  activeMs: z.number(),
+  /** Epoch ms at which the running segment began: timer = activeMs + (Date.now() - runningSince). */
+  runningSince: z.number().nullable(),
+  error: z.object({ code: z.string(), message: z.string() }).nullable(),
+  stopReason: z
+    .enum(['user', 'source-lost', 'write-failed', 'engine-closed', 'app-quit'])
+    .nullable(),
+  audio: AudioFlagsSchema,
+  muted: AudioFlagsSchema,
+  lost: AudioFlagsSchema,
+  choice: PreflightChoiceKindSchema.nullable(),
+  /** The "Use default microphone" answer is only offered when a default microphone exists. */
+  choiceCanUseDefault: z.boolean(),
+  /** The app is quitting and finishing the recording first. */
+  quitting: z.boolean(),
+  /** The number on the countdown right now (3, 2, 1), else null. */
+  countdown: z.number().nullable(),
+  /** Output size of the video once it is known (from preflight). */
+  width: z.number().nullable(),
+  height: z.number().nullable(),
+  result: RecordingResultSchema.nullable(),
+});
+export type RecorderSnapshot = z.infer<typeof RecorderSnapshotSchema>;
+
+export const LevelsEventSchema = z.object({ mic: z.number(), system: z.number() });
+
+// --- main <-> the hidden recorder window -----------------------------------------------------
+
+const RequestIdSchema = z.string().min(1).max(64);
+
+export const EnginePrepareSchema = z.object({
+  cmd: z.literal('prepare'),
+  requestId: RequestIdSchema,
+  sourceId: SourceIdSchema,
+  kind: z.enum(['screen', 'window']),
+  /** Region in PIXELS of the display, already clamped and even-aligned by main. */
+  region: RectSchema.nullable(),
+  /** Physical size of the display (screen and region); used for sizing and validation. */
+  displaySize: z.object({ width: z.number(), height: z.number() }).nullable(),
+  options: RecordOptionsSchema,
+  /** E2E builds only: draw a synthetic picture of this size instead of capturing. */
+  synthetic: z.object({ width: z.number(), height: z.number() }).optional(),
+});
+
+export const EngineCommandSchema = z.discriminatedUnion('cmd', [
+  EnginePrepareSchema,
+  z.object({ cmd: z.literal('start'), requestId: RequestIdSchema, sessionId: z.string() }),
+  z.object({ cmd: z.literal('pause') }),
+  z.object({ cmd: z.literal('resume') }),
+  z.object({ cmd: z.literal('stop'), requestId: RequestIdSchema }),
+  /** Release everything (streams, audio, timers) without finishing a session. */
+  z.object({ cmd: z.literal('abort') }),
+  z.object({ cmd: z.literal('mute'), source: AudioSourceSchema, muted: z.boolean() }),
+  z.object({ cmd: z.literal('levels'), enabled: z.boolean() }),
+]);
+export type EngineCommand = z.infer<typeof EngineCommandSchema>;
+export type EnginePrepareCommand = z.infer<typeof EnginePrepareSchema>;
+
+export const EngineEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('prepared'),
+    requestId: z.string(),
+    mime: z.string().max(200),
+    width: z.number().int(),
+    height: z.number().int(),
+    audio: AudioFlagsSchema,
+  }),
+  z.object({
+    type: z.literal('needsChoice'),
+    requestId: z.string(),
+    choice: PreflightChoiceKindSchema,
+    canUseDefaultMic: z.boolean(),
+  }),
+  z.object({
+    type: z.literal('prepareFailed'),
+    requestId: z.string(),
+    code: z.string().max(60),
+    message: z.string().max(500),
+  }),
+  z.object({ type: z.literal('started'), requestId: z.string() }),
+  z.object({ type: z.literal('paused') }),
+  z.object({ type: z.literal('resumed') }),
+  z.object({
+    type: z.literal('stopped'),
+    requestId: z.string(),
+    lastSeq: z.number().int().min(-1),
+    chunks: z.number().int().min(0),
+    bytes: z.number().min(0),
+  }),
+  z.object({ type: z.literal('sourceLost') }),
+  z.object({ type: z.literal('trackEnded'), source: AudioSourceSchema }),
+  z.object({ type: z.literal('levels'), mic: z.number(), system: z.number() }),
+  z.object({
+    type: z.literal('error'),
+    code: z.string().max(60),
+    message: z.string().max(500),
+    requestId: z.string().optional(),
+  }),
+]);
+export type EngineEvent = z.infer<typeof EngineEventSchema>;
+
+// --- recording sessions (recorder window -> main) --------------------------------------------
+
+/** Largest chunk main accepts. A one second chunk is about 1-3 MB at the highest quality. */
+export const MAX_CHUNK_BYTES = 16 * 1024 * 1024;
+/** The uploader's bounds: more pending than this stops the recording (never dropped, never unbounded). */
+export const MAX_PENDING_CHUNKS = 16;
+export const MAX_PENDING_BYTES = 64 * 1024 * 1024;
+export const CHUNK_TIMESLICE_MS = 1000;
+
+const SessionIdSchema = z.string().min(1).max(64);
+
+export const AppendChunkRequestSchema = z.object({
+  sessionId: SessionIdSchema,
+  seq: z.number().int().min(0).max(1_000_000_000),
+  bytes: z
+    .instanceof(ArrayBuffer)
+    .refine((buffer) => buffer.byteLength > 0, 'empty')
+    .refine((buffer) => buffer.byteLength <= MAX_CHUNK_BYTES, 'too large'),
+});
+export const AppendChunkResponseSchema = z.object({
+  /** True when this exact chunk had already been written (an idempotent retry). */
+  duplicate: z.boolean(),
+  lastSeq: z.number().int(),
+});
+
+export const FinishSessionRequestSchema = z.object({
+  sessionId: SessionIdSchema,
+  lastSeq: z.number().int().min(-1),
+});
+export const FinishSessionResponseSchema = z.object({
+  chunks: z.number().int(),
+  bytes: z.number(),
+});

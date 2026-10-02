@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { app, BrowserWindow, Menu, nativeTheme, session } from 'electron';
 import { createCaptureProvider } from './capture';
+import { registerMediaScheme } from './recording/media-protocol';
 import { registerHandlers } from './handlers';
 import { initLogger, log } from './logger';
 import { installCsp, installNavigationLockdown, installPermissionHandlers } from './security';
@@ -16,12 +17,16 @@ if (!handleSquirrelEvent()) {
 }
 
 function start(): void {
+  // Privileged schemes must be registered before the app is ready.
+  registerMediaScheme();
+
   // Tests point userData at a temp dir. Never honored by packaged builds.
   const overrideDir = process.env.FRAMELET_USER_DATA_DIR;
   if (!app.isPackaged && overrideDir) {
     app.setPath('userData', path.resolve(overrideDir));
     // Keep the default save location inside the test directory as well.
     app.setPath('pictures', path.join(path.resolve(overrideDir), 'pictures'));
+    app.setPath('videos', path.join(path.resolve(overrideDir), 'videos'));
   }
 
   if (!app.requestSingleInstanceLock()) {

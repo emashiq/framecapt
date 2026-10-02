@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import { app, clipboard, ClipboardItem, dialog, nativeImage, shell } from 'electron';
 import { defaultShotFileName, validateImageBytes, type ImageFormat } from '../shared/shots';
 import type { CaptureFlow } from './capture-flow';
+import type { RecorderController } from './recorder/controller';
+import type { SelectionHost } from './selection-host';
 import { handle } from './ipc';
 import { IpcError } from './ipc-core';
 import { log } from './logger';
@@ -35,7 +37,13 @@ function withExtension(file: string, format: ImageFormat): string {
  * the shots directory, exports go where the user picks in a main-process save dialog, and
  * "show in folder" only accepts paths this run exported.
  */
-export function registerShotHandlers(flow: CaptureFlow, store: ShotSessionStore): void {
+export function registerShotHandlers(
+  flow: CaptureFlow,
+  store: ShotSessionStore,
+  recorder: RecorderController,
+): void {
+  /** The overlays belong to the recorder (record-region, pick a screen) or to the screenshot flow. */
+  const host = (): SelectionHost => (recorder.selecting ? recorder : flow);
   /** Paths written by `shot:export` in this run; the only ones `shell:showItemInFolder` accepts. */
   const exportedPaths = new Set<string>();
   /** The session the editor has open. Its original is deleted when the app window closes. */
@@ -124,23 +132,23 @@ export function registerShotHandlers(flow: CaptureFlow, store: ShotSessionStore)
   });
 
   handle('overlay:getInit', { roles: ['overlay'] }, async (_request, ctx) => {
-    const init = await flow.overlayInit(ctx.webContentsId);
+    const init = await host().overlayInit(ctx.webContentsId);
     if (!init) throw new IpcError('NOT_FOUND', 'No selection is in progress.');
     return init;
   });
   handle('overlay:ready', { roles: ['overlay'] }, (_request, ctx) => {
-    flow.overlayReady(ctx.webContentsId);
+    host().overlayReady(ctx.webContentsId);
   });
   handle('overlay:selectionStarted', { roles: ['overlay'] }, (_request, ctx) => {
-    flow.selectionStarted(ctx.webContentsId);
+    host().selectionStarted(ctx.webContentsId);
   });
   handle('overlay:confirm', { roles: ['overlay'] }, (request, ctx) =>
-    flow.confirmRegion(ctx.webContentsId, request.displayId, request.rect),
+    host().confirmRegion(ctx.webContentsId, request.displayId, request.rect),
   );
   handle('overlay:cancel', { roles: ['overlay'] }, () => {
-    flow.cancel();
+    host().cancel();
   });
   handle('overlay:pickDisplay', { roles: ['overlay'] }, (request, ctx) =>
-    flow.pickDisplay(ctx.webContentsId, request.displayId),
+    host().pickDisplay(ctx.webContentsId, request.displayId),
   );
 }

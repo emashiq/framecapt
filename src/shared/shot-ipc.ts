@@ -9,7 +9,7 @@ import {
 } from './shots';
 
 /** `screen:<n>:0` or `window:<hwnd>:<n>`, the only ids main will pass on. */
-const SourceIdSchema = z
+export const SourceIdSchema = z
   .string()
   .min(1)
   .max(200)
@@ -67,7 +67,8 @@ export const ShowItemInFolderRequestSchema = z.object({ path: z.string().min(1).
 
 // --- overlay -> main -----------------------------------------------------------------------
 
-export const OverlayModeSchema = z.enum(['region', 'pick-display']);
+/** region: frozen screenshot selection. pick-display: choose a screen. record-region: live selection for a recording. */
+export const OverlayModeSchema = z.enum(['region', 'pick-display', 'record-region']);
 export type OverlayMode = z.infer<typeof OverlayModeSchema>;
 
 export const OverlayInitSchema = z.object({

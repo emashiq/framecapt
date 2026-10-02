@@ -70,12 +70,12 @@ test('opens a Framelet window loaded from file:// with the sidebar nav', async (
   expect(size[1]).toBeGreaterThanOrEqual(560);
 });
 
-test('screenshot buttons are enabled and record buttons are unavailable in this build', async () => {
+test('screenshot and record buttons are enabled', async () => {
   const shots = page.getByTestId('mode-screenshot');
   const record = page.getByTestId('mode-record');
   for (const name of ['Screen', 'Window', 'Region']) {
     await expect(shots.getByRole('button', { name })).toBeEnabled();
-    await expect(record.getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true');
+    await expect(record.getByRole('button', { name })).toBeEnabled();
   }
 });
 

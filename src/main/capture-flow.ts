@@ -26,6 +26,8 @@ export interface CaptureFlowDeps {
   store: ShotSessionStore;
   /** E2E mock builds only: the worker draws generated frames instead of capturing. */
   synthetic: boolean;
+  /** True while something else (a recording) must keep a screenshot from starting. */
+  isBlocked?: () => boolean;
 }
 
 class FlowFailure extends Error {
@@ -59,6 +61,7 @@ export class CaptureFlow {
    * NOT_FOUND when the requested window disappeared. Outcomes arrive as events.
    */
   async start(request: StartScreenshotRequest): Promise<void> {
+    if (this.deps.isBlocked?.()) throw new IpcError('BUSY', 'A recording is in progress.');
     const claim = this.state.tryStart();
     if (!claim.ok) throw new IpcError('BUSY', 'A capture is already in progress.');
     const flowId = claim.flowId;

@@ -38,12 +38,15 @@ const HANDLE_STYLE: Record<HandleId, { left: string; top: string; cursor: string
 };
 
 /**
- * Freeze-frame region selection for one display: the frozen screenshot fills the window, a 45% dim
- * covers everything but the selection, and the selection is edited with drag, handles, arrow keys
- * and Enter/Esc. Selections cannot leave this display (the pointer is clamped to the window).
+ * Region selection for one display. Screenshot mode is freeze-frame: the frozen screenshot fills
+ * the window. Recording mode ('record-region') is live: the window is transparent, so the desktop
+ * underneath keeps running and shows through. Either way a 45% dim covers everything but the
+ * selection, and the selection is edited with drag, handles, arrow keys and Enter/Esc. Selections
+ * cannot leave this display (the pointer is clamped to the window).
  */
 export function RegionSelector({ init }: { init: OverlayInit }) {
   const { display, frameSize } = init;
+  const live = init.mode === 'record-region';
   const size = display.bounds;
   const [selection, setSelection] = useState<Rect | null>(null);
   const [interaction, setInteraction] = useState<Interaction>({ kind: 'none' });
@@ -137,14 +140,16 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
         ?.putImageData(new ImageData(bgraToRgba(init.image), width, height), 0, 0);
     }
     setImageReady(true);
-  }, [init.image, init.frameSize]);
+  }, [init.image, init.frameSize, live]);
 
+  // Live mode has nothing to paint (the desktop underneath is the picture): ready at once.
+  const painted = live || imageReady;
   useEffect(() => {
-    if (!imageReady) return;
+    if (!painted) return;
     requestAnimationFrame(() =>
       requestAnimationFrame(() => void window.framelet.invoke('overlay:ready')),
     );
-  }, [imageReady]);
+  }, [painted]);
 
   const localPoint = (event: PointerEvent): { point: Point; clamped: Point; atEdge: boolean } => {
     const box = rootRef.current?.getBoundingClientRect();
@@ -219,9 +224,10 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
       ref={rootRef}
       data-testid="overlay-region"
       data-display-id={init.displayId}
+      data-live={live}
       data-selection={selection ? JSON.stringify(selection) : ''}
       data-size-label={label ?? ''}
-      className="fixed inset-0 overflow-hidden bg-black select-none"
+      className={cn('fixed inset-0 overflow-hidden select-none', !live && 'bg-black')}
       style={{ cursor: 'crosshair' }}
       tabIndex={-1}
       onPointerDown={onPointerDown}
@@ -235,12 +241,14 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
         else cancel();
       }}
     >
-      <canvas
-        ref={frameRef}
-        aria-hidden="true"
-        data-testid="frozen-frame"
-        className="pointer-events-none absolute inset-0 size-full"
-      />
+      {live ? null : (
+        <canvas
+          ref={frameRef}
+          aria-hidden="true"
+          data-testid="frozen-frame"
+          className="pointer-events-none absolute inset-0 size-full"
+        />
+      )}
 
       {selection ? (
         <div
@@ -252,6 +260,9 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
             width: selection.width,
             height: selection.height,
             boxShadow: `0 0 0 1px rgb(255 255 255 / 0.95), 0 0 0 100vmax ${DIM}`,
+            // A fully transparent window region may not receive pointer events; keep the hole
+            // (live mode) at 1% black so moving and double clicking work inside it.
+            ...(live && { background: 'rgb(0 0 0 / 0.01)' }),
             cursor: selected ? 'move' : 'crosshair',
           }}
         >
@@ -306,7 +317,7 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
             onClick={() => void confirm()}
             data-testid="overlay-capture"
           >
-            Capture
+            {live ? 'Record' : 'Capture'}
             <Kbd keys={['Enter']} />
           </Button>
           <Button variant="secondary" size="sm" onClick={cancel} data-testid="overlay-cancel">
@@ -325,7 +336,8 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
         aria-live="polite"
       >
         <OverlayChip className="px-4 py-2 text-[13px]">
-          {notice ?? 'Drag to select an area · Enter to capture · Esc to cancel'}
+          {notice ??
+            `Drag to select an area · Enter to ${live ? 'record' : 'capture'} · Esc to cancel`}
         </OverlayChip>
       </div>
     </div>

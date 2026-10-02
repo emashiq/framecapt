@@ -48,14 +48,21 @@ export async function acquireDisplayStream(options: AcquireDisplayOptions): Prom
   return stream;
 }
 
-/** Acquires a microphone stream (no echo processing: this is a recorder, not a call). */
-export async function acquireMicrophoneStream(deviceId?: string): Promise<MediaStream> {
+/**
+ * Acquires a microphone stream. Diagnostics use the raw signal; the recorder passes
+ * `processing: true` (echo cancellation and noise suppression on, like a call).
+ */
+export async function acquireMicrophoneStream(
+  deviceId?: string,
+  options: { processing?: boolean } = {},
+): Promise<MediaStream> {
+  const processing = options.processing === true;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-        echoCancellation: false,
-        noiseSuppression: false,
+        echoCancellation: processing,
+        noiseSuppression: processing,
         autoGainControl: false,
       },
     });

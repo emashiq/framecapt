@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, BrowserWindow, nativeTheme, type WebContents } from 'electron';
+import { app, BrowserWindow, nativeTheme, webContents, type WebContents } from 'electron';
 import type { AppOriginConfig } from './app-origin';
 import type { Role } from '../shared/types';
 import { CloseGuard } from './close-guard';
@@ -14,6 +14,7 @@ const ROLE_HASH: Record<Role, string> = {
   overlay: '/overlay',
   toolbar: '/toolbar',
   recorder: '/recorder',
+  countdown: '/countdown',
 };
 
 const roles = new Map<number, Role>();
@@ -37,6 +38,27 @@ export function registerWebContents(contents: WebContents, role: Role): void {
 
 export function getRole(webContentsId: number): Role | undefined {
   return roles.get(webContentsId);
+}
+
+/** The live webContents registered under any of `wanted` (e.g. every window that shows state). */
+export function webContentsWithRoles(wanted: readonly Role[]): WebContents[] {
+  const found: WebContents[] = [];
+  for (const [id, role] of roles) {
+    if (!wanted.includes(role)) continue;
+    const contents = webContents.fromId(id);
+    if (contents && !contents.isDestroyed()) found.push(contents);
+  }
+  return found;
+}
+
+let closeInterceptor: (() => boolean) | undefined;
+
+/**
+ * While `interceptor()` is true (a recording is running) closing the main window only minimizes
+ * it: the window owns nothing, but closing it would close the recorder window with it.
+ */
+export function setMainCloseInterceptor(interceptor: () => boolean): void {
+  closeInterceptor = interceptor;
 }
 
 export function getMainWindow(): BrowserWindow | undefined {
@@ -92,6 +114,11 @@ export function createMainWindow(): BrowserWindow {
   mainWindow = win;
   win.once('ready-to-show', () => win.show());
   win.on('close', (event) => {
+    if (closeInterceptor?.()) {
+      event.preventDefault();
+      win.minimize();
+      return;
+    }
     if (win.webContents.isDestroyed() || closeGuard.onCloseRequested() === 'close') return;
     event.preventDefault();
     if (win.isMinimized()) win.restore();
@@ -137,6 +164,11 @@ export function getWorkerWindow(): BrowserWindow {
   });
   void loadRenderer(win, 'recorder');
   return win;
+}
+
+/** The recorder window if it exists; never creates it. */
+export function peekWorkerWindow(): BrowserWindow | undefined {
+  return workerWindow && !workerWindow.isDestroyed() ? workerWindow : undefined;
 }
 
 export function closeWorkerWindow(): void {

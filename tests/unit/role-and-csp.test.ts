@@ -7,6 +7,7 @@ describe('roleFromHash', () => {
     expect(roleFromHash('#/overlay')).toBe('overlay');
     expect(roleFromHash('#/toolbar')).toBe('toolbar');
     expect(roleFromHash('#/recorder')).toBe('recorder');
+    expect(roleFromHash('#/countdown')).toBe('countdown');
     expect(roleFromHash('#/overlay?display=2')).toBe('overlay');
   });
 
@@ -25,6 +26,12 @@ describe('CSP', () => {
     expect(PROD_CSP).toContain("script-src 'self';");
     expect(PROD_CSP).not.toMatch(/script-src[^;]*unsafe/);
     expect(PROD_CSP).toContain("frame-ancestors 'none'");
+  });
+
+  it('allows the main-owned recording protocol for media only', () => {
+    expect(PROD_CSP).toContain("media-src 'self' blob: mediastream: framelet-media:");
+    expect(PROD_CSP).not.toMatch(/(script|connect|img)-src[^;]*framelet-media/);
+    expect(devCsp('http://localhost:5173')).toContain('framelet-media:');
   });
 
   it('meta variant omits frame-ancestors only', () => {

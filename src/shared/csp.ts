@@ -7,7 +7,7 @@ export const PROD_CSP = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  "media-src 'self' blob: mediastream:",
+  "media-src 'self' blob: mediastream: framelet-media:",
   "font-src 'self'",
   "connect-src 'self'",
   "base-uri 'none'",

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Square, Video } from 'lucide-react';
 import type { DisplayInfo, SourceInfo } from '../../../shared/capture-schemas';
 import { Button } from '../../components/ui/Button';
 import { CaptureError } from '../../capture/errors';
+import { useMicrophones } from '../../recorder/use-microphones';
 import {
   RECORDING_LIMITS,
   runRecordingTest,
@@ -17,23 +18,6 @@ interface Props {
   busy: string | null;
   setBusy: (value: string | null) => void;
   onFinished: () => void;
-}
-
-/** Microphones, refreshed when devices change. Labels may be empty until permission is granted. */
-function useMicrophones(): MediaDeviceInfo[] {
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  useEffect(() => {
-    const refresh = (): void => {
-      navigator.mediaDevices
-        .enumerateDevices()
-        .then((all) => setDevices(all.filter((device) => device.kind === 'audioinput')))
-        .catch(() => setDevices([]));
-    };
-    refresh();
-    navigator.mediaDevices.addEventListener('devicechange', refresh);
-    return () => navigator.mediaDevices.removeEventListener('devicechange', refresh);
-  }, []);
-  return devices;
 }
 
 export function RecordingTest({ displays, sources, busy, setBusy, onFinished }: Props) {

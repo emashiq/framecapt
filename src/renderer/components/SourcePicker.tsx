@@ -68,6 +68,8 @@ function WindowCard({
 
 export interface SourcePickerProps {
   open: boolean;
+  /** What the picked window is for: the wording follows. */
+  purpose?: 'capture' | 'record';
   onClose: () => void;
   onPick: (source: SourceInfo) => void;
 }
@@ -76,7 +78,8 @@ export interface SourcePickerProps {
  * Window picker dialog: a responsive grid of window cards with a search box. Arrow keys move
  * between cards, Enter picks, Esc closes (native dialog behaviour).
  */
-export function SourcePicker({ open, onClose, onPick }: SourcePickerProps) {
+export function SourcePicker({ open, purpose = 'capture', onClose, onPick }: SourcePickerProps) {
+  const verb = purpose === 'record' ? 'record' : 'capture';
   const [listing, setListing] = useState<Listing>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const gridRef = useRef<HTMLDivElement>(null);
@@ -169,7 +172,7 @@ export function SourcePicker({ open, onClose, onPick }: SourcePickerProps) {
     <Modal
       open={open}
       onClose={close}
-      label="Choose a window to capture"
+      label={`Choose a window to ${verb}`}
       className="h-[min(640px,88vh)] w-[min(980px,94vw)] flex-col open:flex"
       data-testid="source-picker"
     >
@@ -177,7 +180,7 @@ export function SourcePicker({ open, onClose, onPick }: SourcePickerProps) {
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold text-fg">Choose a window</h2>
           <p className="text-[13px] text-fg-muted">
-            Framelet hides itself, then captures that window.
+            Framelet hides itself, then {purpose === 'record' ? 'records' : 'captures'} that window.
           </p>
         </div>
         <label className="relative w-60">
@@ -265,7 +268,7 @@ export function SourcePicker({ open, onClose, onPick }: SourcePickerProps) {
       </div>
 
       <footer className="flex items-center justify-between border-t border-line px-5 py-3 text-[13px] text-fg-muted">
-        <span>Arrow keys to move · Enter to capture · Esc to close</span>
+        <span>Arrow keys to move · Enter to {verb} · Esc to close</span>
         <Button variant="ghost" size="sm" onClick={close}>
           Cancel
         </Button>

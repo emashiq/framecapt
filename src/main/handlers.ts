@@ -1,5 +1,9 @@
 import path from 'node:path';
 import { app, session } from 'electron';
+import { installMediaProtocol, MediaRegistry } from './recording/media-protocol';
+import { SessionService } from './recording/session-service';
+import { RecorderController } from './recorder/controller';
+import { registerRecorderHandlers } from './recorder/handlers';
 import { CaptureFlow } from './capture-flow';
 import { isMockCaptureEnabled } from './capture';
 import { registerShotHandlers } from './shot-handlers';
@@ -8,7 +12,7 @@ import { registerWorkerHandlers } from './worker';
 import { installCaptureAuthorization } from './capture/authorization';
 import { registerDiagnosticsHandlers } from './capture/diagnostics';
 import type { CaptureProvider } from './capture/types';
-import { getOriginConfig } from './windows';
+import { getOriginConfig, setMainCloseInterceptor } from './windows';
 import { handle } from './ipc';
 import { log } from './logger';
 
@@ -46,9 +50,31 @@ export function registerHandlers(provider: CaptureProvider): void {
   registerDiagnosticsHandlers();
 
   const store = new ShotSessionStore(path.join(app.getPath('userData'), 'shots'));
-  const flow = new CaptureFlow({ provider, store, synthetic: isMockCaptureEnabled() });
+  const synthetic = isMockCaptureEnabled();
+  const sessions = new SessionService(path.join(app.getPath('userData'), 'recordings'));
+  const media = new MediaRegistry();
+  installMediaProtocol(media);
+  const recorder: RecorderController = new RecorderController({
+    provider,
+    sessions,
+    media,
+    synthetic,
+    isScreenshotBusy: () => flow.state.active,
+    outputDir: () => path.join(app.getPath('videos'), 'Framelet'),
+  });
+  const flow = new CaptureFlow({
+    provider,
+    store,
+    synthetic,
+    isBlocked: () => recorder.busy,
+  });
   registerWorkerHandlers();
-  registerShotHandlers(flow, store);
+  registerShotHandlers(flow, store, recorder);
+  registerRecorderHandlers(recorder, sessions, media);
+  // Closing the main window during a recording only minimizes it; quitting finishes the recording.
+  setMainCloseInterceptor(() => recorder.isRecording && !recorder.isQuitting);
+  app.on('before-quit', (event) => recorder.handleBeforeQuit(event, () => app.quit()));
+  app.on('will-quit', () => void sessions.closeAll());
   // Originals of abandoned sessions are removed after a week (a `keep` marker exempts one).
   void store.sweep(SWEEP_MAX_AGE_MS).then((result) => {
     log.info(

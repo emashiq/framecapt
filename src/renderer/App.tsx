@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { Toaster, toast } from 'sonner';
 import { AppShell, type ViewId } from './components/AppShell';
+import { RecorderChoiceDialog } from './components/RecorderChoiceDialog';
 import { AlertConfirm } from './components/ui/AlertConfirm';
 import { TooltipProvider } from './components/ui/Tooltip';
+import { useRecorderState, useRecorderToasts } from './recorder/use-recorder';
 import { CaptureView } from './views/CaptureView';
+import { RecordingResultView } from './views/RecordingResultView';
 import { EditorView, type EditorShot } from './views/editor/EditorView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
@@ -29,6 +32,8 @@ export function App() {
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState<PendingLeave | null>(null);
   const shotRef = useRef<EditorShot | null>(null);
+  const recorder = useRecorderState();
+  useRecorderToasts(recorder);
 
   useEffect(() => {
     shotRef.current = shot;
@@ -106,6 +111,7 @@ export function App() {
   );
 
   const showEditor = view === 'capture' && shot !== null;
+  const showRecording = view === 'capture' && !showEditor && recorder.status === 'completed';
   const View = VIEWS[view];
 
   return (
@@ -119,6 +125,12 @@ export function App() {
             onDirtyChange={setDirty}
             onRequestLeave={() => requestLeave()}
           />
+        ) : showRecording && recorder.result ? (
+          <RecordingResultView
+            snapshot={recorder}
+            result={recorder.result}
+            onNewRecording={() => void window.framelet.invoke('recorder:reset')}
+          />
         ) : (
           <View />
         )}
@@ -131,6 +143,10 @@ export function App() {
         confirmLabel="Discard"
         onConfirm={() => void confirmDiscard()}
         onCancel={keepEditing}
+      />
+      <RecorderChoiceDialog
+        snapshot={recorder}
+        onAnswer={(answer) => void window.framelet.invoke('recorder:resolveChoice', { answer })}
       />
       <Toaster
         position="bottom-right"

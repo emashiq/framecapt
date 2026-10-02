@@ -31,6 +31,9 @@
   --danger-solid-hover: light-dark(#b91c1c, #ef4444);
   --danger-soft: light-dark(#fef2f2, rgb(248 113 113 / 0.14));
 
+  --warning: light-dark(#b45309, #fbbf24);
+  --warning-soft: light-dark(#fffbeb, rgb(251 191 36 / 0.14));
+
   --shadow-card: light-dark(0 1px 2px rgb(15 23 42 / 0.05), 0 1px 2px rgb(0 0 0 / 0.4));
   --shadow-raised: light-dark(
     0 8px 24px -8px rgb(15 23 42 / 0.14),
@@ -67,6 +70,8 @@
   --color-danger-solid: var(--danger-solid);
   --color-danger-solid-hover: var(--danger-solid-hover);
   --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
 
   --shadow-card: var(--shadow-card);
   --shadow-raised: var(--shadow-raised);
@@ -165,4 +170,24 @@ html.overlay-root body,
 html.overlay-root #root {
   background: transparent;
   overflow: hidden;
+}
+
+/* Recording toolbar: only the grip drags the window. */
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+@keyframes countdown-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.countdown-pop {
+  animation: countdown-pop 320ms ease-out both;
 }

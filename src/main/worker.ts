@@ -36,7 +36,7 @@ let ready: Promise<void> | undefined;
 let markReady: (() => void) | undefined;
 
 /** Waits until the worker renderer has subscribed to its events (it announces itself). */
-function whenWorkerReady(): Promise<void> {
+export function whenWorkerReady(): Promise<void> {
   const win = getWorkerWindow();
   if (!ready) {
     ready = new Promise<void>((resolve) => {

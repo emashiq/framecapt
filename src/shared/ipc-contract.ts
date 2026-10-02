@@ -27,6 +27,20 @@ import {
   WorkerFrameErrorSchema,
   WorkerFrameResultSchema,
 } from './shot-ipc';
+import {
+  AppendChunkRequestSchema,
+  AppendChunkResponseSchema,
+  EngineCommandSchema,
+  EngineEventSchema,
+  FinishSessionRequestSchema,
+  FinishSessionResponseSchema,
+  LevelsEventSchema,
+  RecorderSnapshotSchema,
+  RecorderStartRequestSchema,
+  RecordingIdRequestSchema,
+  ResolveChoiceRequestSchema,
+  ToggleMuteRequestSchema,
+} from './recorder-ipc';
 import { ROLES, type Role } from './types';
 
 const ALL_ROLES: readonly Role[] = ROLES;
@@ -187,6 +201,49 @@ export const ipcContract = {
     response: z.void(),
     roles: ['main'],
   },
+  // --- recording (phase 05). Main owns the state; every UI sends commands through main. ---
+  'recorder:start': {
+    request: RecorderStartRequestSchema,
+    response: z.object({ started: z.literal(true), sessionId: z.string() }),
+    roles: ['main'],
+  },
+  'recorder:pause': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'recorder:resume': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'recorder:stop': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'recorder:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'recorder:toggleMute': {
+    request: ToggleMuteRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:getState': {
+    request: z.undefined(),
+    response: RecorderSnapshotSchema,
+    roles: ['main', 'toolbar', 'recorder', 'countdown'],
+  },
+  'recorder:resolveChoice': {
+    request: ResolveChoiceRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  'recorder:reset': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  'recorder:showInFolder': {
+    request: RecordingIdRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  'recorder:copyPath': { request: RecordingIdRequestSchema, response: z.void(), roles: ['main'] },
+  'recorder:engineEvent': { request: EngineEventSchema, response: z.void(), roles: ['recorder'] },
+  'session:appendChunk': {
+    request: AppendChunkRequestSchema,
+    response: AppendChunkResponseSchema,
+    roles: ['recorder'],
+  },
+  'session:finish': {
+    request: FinishSessionRequestSchema,
+    response: FinishSessionResponseSchema,
+    roles: ['recorder'],
+  },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;
@@ -204,6 +261,12 @@ export const ipcEvents = {
   'app:confirmClose': z.object({}),
   'overlay:clearSelection': z.object({}),
   'worker:grabFrames': GrabFramesEventSchema,
+  /** The authoritative recorder state, to the main, toolbar and recorder windows. */
+  'recorder:state': RecorderSnapshotSchema,
+  /** Mic and system levels (0..1) for the toolbar meters; only while recording. */
+  'recorder:levels': LevelsEventSchema,
+  /** Main -> the hidden recorder window: what the engine should do. */
+  'recorder:engineCommand': EngineCommandSchema,
 } as const satisfies Record<string, z.ZodType>;
 
 export type IpcEvent = keyof typeof ipcEvents;
