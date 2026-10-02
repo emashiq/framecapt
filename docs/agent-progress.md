@@ -23,7 +23,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 09 Security/reliability/perf | VERIFIED | 13 findings fixed; 30-min 1080p30 bench PASS (29.72 fps, drift +10 ms); lead audit agreed |
 | 10 Packaging/CI/updates | VERIFIED | Squirrel installer (UNSIGNED) installed/captured/uninstalled on host; app:// scheme, fuse off; CI files |
 | 11 Open source & sales prep | VERIFIED | canonical GPLv3, notices (53 deps, no incompatibility), user/build docs, commercial plan, provider research (none selected) |
-| 12 Final validation | NOT_STARTED | |
+| 12 Final validation | VERIFIED | working local beta on host; NOT public-release ready (unsigned + owner tasks) — docs/RELEASE-READINESS.md |
 
 ## Phase log
 <!-- Each phase: files changed, decisions, commands + results, evidence, risks, next step. -->
@@ -110,6 +110,13 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Commercial: $15 current major + 12 months updates, optional $29 supporter, no gating/keys, GPL rights preserved. Providers (official pages 2026-10-02): Stripe no BD; Lemon Squeezy & Gumroad list BD bank payouts; Paddle/FastSpring unverified → none selected.
 - Checks: prettier --check . and lint pass (lead reviewed README for overstatements: none).
 - Open (→ phase 12): package must ship Framelet LICENSE + THIRD_PARTY_NOTICES; OFL font & Squirrel stub notices flagged for owner review; README home screenshot shows a test-modified shortcut.
+
+### Phase 12 — Final validation & handoff (VERIFIED 2026-10-03)
+- Fixes: package now ships Framelet LICENSE + THIRD_PARTY_NOTICES.md (forge extraResource; smoke:installed checks it); e2e worker-crash flake investigated (Playwright worker dies during electron.launch handshake, ~1/6 full runs, no app cause) → scripts/run-e2e.mjs retries only that exact signature + global teardown kills orphaned test Electron trees.
+- Final run: lint/typecheck/prettier 0; unit 762/762; e2e 152/152 (1 worker crash auto-retried and passed); native 46/46; make OK (UNSIGNED); smoke:packaged OK; smoke:installed all PASS (install 5.96 s, real screenshot 3440x1440, real recording + MP4, 0 network, uninstall preserves user files). Clean clone: npm ci + lint + typecheck + 744 pass/18 skipped (FFmpeg integration skips until fetch).
+- Artifacts (UNSIGNED): Framelet-Setup-0.1.0.exe d7b52327…bce9 (229,001,728 B); full.nupkg 4311d067…2c3f; zip 55d2b878…cf4b.
+- Deliverable: docs/RELEASE-READINESS.md (acceptance checklist PASS/BLOCKED per item, owner actions prioritized).
+- Next actionable step: owner decisions in docs/OWNER-TASKS.md (identity, signing, contacts), then a manual real-mic + Windows 10 tester pass.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.
