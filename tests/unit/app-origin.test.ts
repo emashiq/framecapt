@@ -1,7 +1,12 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { isAppUrl, isPermissionAllowed, type AppOriginConfig } from '../../src/main/app-origin';
+import {
+  isAppUrl,
+  isNetworkRequestAllowed,
+  isPermissionAllowed,
+  type AppOriginConfig,
+} from '../../src/main/app-origin';
 
 const rendererDir = path.resolve('some', 'app', '.vite', 'renderer', 'main_window');
 const prod: AppOriginConfig = { rendererDir };
@@ -83,5 +88,30 @@ describe('isPermissionAllowed', () => {
     }
     expect(isPermissionAllowed('media', 'http://evil.example/', prod)).toBe(false);
     expect(isPermissionAllowed('media', undefined, prod)).toBe(false);
+  });
+});
+
+describe('isNetworkRequestAllowed', () => {
+  it('production builds make no network request at all', () => {
+    for (const url of [
+      'https://example.com/',
+      'http://localhost:5173/',
+      'ws://localhost:5173/',
+      'wss://example.com/socket',
+      'ftp://example.com/x',
+      'not a url',
+    ]) {
+      expect(isNetworkRequestAllowed(url, prod), url).toBe(false);
+    }
+  });
+
+  it('a development build may talk to its own dev server (and its websocket) and to nothing else', () => {
+    expect(isNetworkRequestAllowed('http://localhost:5173/src/main.tsx', dev)).toBe(true);
+    expect(isNetworkRequestAllowed('ws://localhost:5173/', dev)).toBe(true);
+    expect(isNetworkRequestAllowed('https://localhost:5173/', dev)).toBe(false);
+    expect(isNetworkRequestAllowed('http://localhost:5174/', dev)).toBe(false);
+    expect(isNetworkRequestAllowed('http://localhost.evil.example:5173/', dev)).toBe(false);
+    expect(isNetworkRequestAllowed('http://evil.example/', dev)).toBe(false);
+    expect(isNetworkRequestAllowed('ftp://localhost:5173/', dev)).toBe(false);
   });
 });

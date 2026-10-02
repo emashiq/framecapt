@@ -93,15 +93,16 @@ export const DEFAULT_SETTINGS: Settings = {
  * not part of it (they are chosen in a main-process dialog), nor are the one-time notices'
  * counterparts that main owns (`trayHintShown`).
  */
-export const SettingsPatchSchema = z.object({
-  general: GeneralSettingsSchema.partial().optional(),
-  screenshots: ScreenshotSettingsSchema.omit({ outputDir: true }).partial().optional(),
+export const SettingsPatchSchema = z.strictObject({
+  general: GeneralSettingsSchema.partial().strict().optional(),
+  screenshots: ScreenshotSettingsSchema.omit({ outputDir: true }).partial().strict().optional(),
   recording: RecordingSettingsSchema.omit({ outputDir: true })
     .extend({ micDeviceId: z.string().min(1).max(256).nullable() })
     .partial()
+    .strict()
     .optional(),
-  shortcuts: ShortcutSettingsSchema.partial().optional(),
-  notices: NoticeSettingsSchema.omit({ trayHintShown: true }).partial().optional(),
+  shortcuts: ShortcutSettingsSchema.partial().strict().optional(),
+  notices: NoticeSettingsSchema.omit({ trayHintShown: true }).partial().strict().optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 

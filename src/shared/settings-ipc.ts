@@ -9,9 +9,11 @@ import { SHORTCUT_ACTIONS, type ShortcutStates } from './shortcuts';
 
 export { SettingsStateSchema };
 
-export const SettingsUpdateRequestSchema = z.object({ patch: SettingsPatchSchema });
-export const SettingsResetRequestSchema = z.object({ section: ResetSectionSchema.optional() });
-export const OutputTargetRequestSchema = z.object({ target: OutputTargetSchema });
+export const SettingsUpdateRequestSchema = z.strictObject({ patch: SettingsPatchSchema });
+export const SettingsResetRequestSchema = z.strictObject({
+  section: ResetSectionSchema.optional(),
+});
+export const OutputTargetRequestSchema = z.strictObject({ target: OutputTargetSchema });
 
 export const ChooseOutputDirResponseSchema = z.object({
   /** False when the user closed the dialog without choosing. */
@@ -30,19 +32,19 @@ export const ShortcutStatesSchema = z.object(
 
 const ShortcutActionSchema = z.enum(SHORTCUT_ACTIONS);
 
-export const ShortcutValidateRequestSchema = z.object({
+export const ShortcutValidateRequestSchema = z.strictObject({
   action: ShortcutActionSchema,
   accelerator: z.string().max(64).nullable(),
 });
 export const ShortcutValidateResponseSchema = z.union([
-  z.object({ ok: z.literal(true), accelerator: z.string().nullable() }),
-  z.object({ ok: z.literal(false), reason: z.string() }),
+  z.strictObject({ ok: z.literal(true), accelerator: z.string().nullable() }),
+  z.strictObject({ ok: z.literal(false), reason: z.string() }),
 ]);
 
-export const ShortcutPauseRequestSchema = z.object({ paused: z.boolean() });
+export const ShortcutPauseRequestSchema = z.strictObject({ paused: z.boolean() });
 
 /** Answer to `app:confirmQuit`: stop the recording and quit, or keep recording. */
-export const ResolveQuitRequestSchema = z.object({ stop: z.boolean() });
+export const ResolveQuitRequestSchema = z.strictObject({ stop: z.boolean() });
 
 /** A tray or shortcut action that needs the main window (a window picker, or an unsaved editor). */
 export const StartRequestEventSchema = z.object({

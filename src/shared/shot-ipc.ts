@@ -25,7 +25,7 @@ const bytes = (max: number) =>
 // --- main window -> main -------------------------------------------------------------------
 
 export const StartScreenshotRequestSchema = z
-  .object({
+  .strictObject({
     target: ShotKindSchema,
     sourceId: SourceIdSchema.optional(),
   })
@@ -35,15 +35,15 @@ export const StartScreenshotRequestSchema = z
   });
 export type StartScreenshotRequest = z.infer<typeof StartScreenshotRequestSchema>;
 
-export const ShotGetRequestSchema = z.object({ sessionId: z.string().min(1).max(64) });
-export const ShotGetResponseSchema = z.object({
+export const ShotGetRequestSchema = z.strictObject({ sessionId: z.string().min(1).max(64) });
+export const ShotGetResponseSchema = z.strictObject({
   session: ShotSessionMetaSchema,
   png: z.instanceof(ArrayBuffer),
 });
 
 export const ImageFormatSchema = z.enum(['png', 'jpeg']);
 
-export const ShotExportRequestSchema = z.object({
+export const ShotExportRequestSchema = z.strictObject({
   sessionId: z.string().min(1).max(64),
   format: ImageFormatSchema,
   bytes: bytes(MAX_EXPORT_BYTES),
@@ -54,26 +54,26 @@ export const ShotExportRequestSchema = z.object({
   thumbnail: bytes(MAX_THUMBNAIL_BYTES).optional(),
 });
 export const ShotExportResponseSchema = z.union([
-  z.object({ path: z.string() }),
-  z.object({ cancelled: z.literal(true) }),
+  z.strictObject({ path: z.string() }),
+  z.strictObject({ cancelled: z.literal(true) }),
 ]);
 
-export const ShotCopyRequestSchema = z.object({
+export const ShotCopyRequestSchema = z.strictObject({
   sessionId: z.string().min(1).max(64),
   bytes: bytes(MAX_EXPORT_BYTES),
 });
 
 /** The editor reports whether closing the window would lose work (see main/close-guard.ts). */
-export const EditorSetDirtyRequestSchema = z.object({
+export const EditorSetDirtyRequestSchema = z.strictObject({
   dirty: z.boolean(),
   /** A screenshot is open in the editor (saved or not). */
   open: z.boolean().optional(),
 });
 
 /** The user's answer to `app:confirmClose`: discard (close now) or keep editing. */
-export const EditorResolveCloseRequestSchema = z.object({ discard: z.boolean() });
+export const EditorResolveCloseRequestSchema = z.strictObject({ discard: z.boolean() });
 
-export const ShowItemInFolderRequestSchema = z.object({ path: z.string().min(1).max(1024) });
+export const ShowItemInFolderRequestSchema = z.strictObject({ path: z.string().min(1).max(1024) });
 
 // --- overlay -> main -----------------------------------------------------------------------
 
@@ -99,29 +99,44 @@ export const OverlayInitSchema = z.object({
 });
 export type OverlayInit = z.infer<typeof OverlayInitSchema>;
 
-export const OverlayConfirmRequestSchema = z.object({
+export const OverlayConfirmRequestSchema = z.strictObject({
   displayId: z.string().min(1).max(64),
   /** Selection in the overlay's local DIP, origin at the overlay's top-left. */
-  rect: RectSchema,
+  rect: RectSchema.strict(),
 });
 
-export const OverlayPickDisplayRequestSchema = z.object({ displayId: z.string().min(1).max(64) });
+export const OverlayPickDisplayRequestSchema = z.strictObject({
+  displayId: z.string().min(1).max(64),
+});
 
 // --- recorder worker -> main ---------------------------------------------------------------
 
-export const WorkerFrameSchema = z.object({
+export const WorkerFrameSchema = z.strictObject({
   sourceId: SourceIdSchema,
   width: z.number().int().min(1).max(MAX_FRAME_DIMENSION),
   height: z.number().int().min(1).max(MAX_FRAME_DIMENSION),
   png: bytes(MAX_FRAME_PNG_BYTES),
 });
 
-export const WorkerFrameResultSchema = z.object({
-  requestId: z.string().min(1).max(64),
-  frames: z.array(WorkerFrameSchema).min(1).max(8),
-});
+/** All frames of one answer together: eight screens at the per-frame cap would be over a gigabyte. */
+export const MAX_WORKER_FRAMES_TOTAL_BYTES = 512 * 1024 * 1024;
 
-export const WorkerFrameErrorSchema = z.object({
+export const WorkerFrameResultSchema = z
+  .strictObject({
+    requestId: z.string().min(1).max(64),
+    frames: z.array(WorkerFrameSchema).min(1).max(8),
+  })
+  .refine(
+    (result) =>
+      result.frames.reduce((sum, frame) => sum + frame.png.byteLength, 0) <=
+      MAX_WORKER_FRAMES_TOTAL_BYTES,
+    {
+      message: 'Too much frame data in one answer.',
+      path: ['frames'],
+    },
+  );
+
+export const WorkerFrameErrorSchema = z.strictObject({
   requestId: z.string().min(1).max(64),
   code: z.string().max(40),
   message: z.string().max(500),

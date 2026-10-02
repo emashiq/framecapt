@@ -1,6 +1,11 @@
 import { app, type Session } from 'electron';
 import { devCsp, PROD_CSP } from '../shared/csp';
-import { isAppUrl, isPermissionAllowed, type AppOriginConfig } from './app-origin';
+import {
+  isAppUrl,
+  isNetworkRequestAllowed,
+  isPermissionAllowed,
+  type AppOriginConfig,
+} from './app-origin';
 import { log } from './logger';
 
 /**
@@ -16,6 +21,8 @@ export function installNavigationLockdown(getConfig: () => AppOriginConfig): voi
       }
     };
     contents.on('will-navigate', (event, url) => guard(event, url));
+    // Subframes navigate on their own event (will-navigate only covers the top frame).
+    contents.on('will-frame-navigate', (event) => guard(event, event.url));
     contents.on('will-redirect', (event, url) => guard(event, url));
     contents.on('will-attach-webview', (event) => event.preventDefault());
     contents.setWindowOpenHandler(({ url }) => {
@@ -67,4 +74,43 @@ export function installPermissionHandlers(ses: Session, getConfig: () => AppOrig
     );
   });
   // Display capture is not a permission: see capture/authorization.ts.
+
+  // Hardware that needs a device chooser (HID, serial, USB, Bluetooth): never granted, never asked.
+  ses.setDevicePermissionHandler(() => false);
+  ses.on('select-hid-device', (event, _details, callback) => {
+    event.preventDefault();
+    callback();
+  });
+  ses.on('select-serial-port', (event, _ports, _contents, callback) => {
+    event.preventDefault();
+    callback('');
+  });
+  ses.on('select-usb-device', (event, _details, callback) => {
+    event.preventDefault();
+    callback();
+  });
+  ses.setBluetoothPairingHandler((_details, callback) => callback({ confirmed: false }));
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('select-bluetooth-device', (event, _devices, callback) => {
+      event.preventDefault();
+      callback('');
+    });
+  });
+  ses.setSpellCheckerEnabled(false);
+}
+
+/**
+ * No network: every http(s), ws(s) or ftp request is cancelled (the dev server of a development
+ * build excepted). Framelet loads only its own files and `framelet-media:`; the CSP already says so,
+ * this makes it true even if a policy were ever loosened by mistake.
+ */
+export function installNetworkBlocker(ses: Session, getConfig: () => AppOriginConfig): void {
+  ses.webRequest.onBeforeRequest(
+    { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*', 'ftp://*/*'] },
+    (details, callback) => {
+      const allowed = isNetworkRequestAllowed(details.url, getConfig());
+      if (!allowed) log.warn(`Blocked network request to ${redact(details.url)}`);
+      callback({ cancel: !allowed });
+    },
+  );
 }

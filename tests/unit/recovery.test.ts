@@ -435,3 +435,53 @@ describe('discard: containment', () => {
     await expectCode(recovery.streamPathOf(ID_B), 'NOT_FOUND');
   });
 });
+
+describe('recovery: links and tampered session files', () => {
+  /** A folder outside the recordings root that something named like a session points at. */
+  function outsideTarget(): string {
+    const target = path.join(path.dirname(root), 'precious');
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(target, 'important.txt'), 'do not delete');
+    fs.writeFileSync(
+      path.join(target, 'manifest.json'),
+      JSON.stringify(manifestFor(ID_A, { state: 'discarded' })),
+    );
+    fs.writeFileSync(path.join(target, 'stream.webm'), Buffer.alloc(100, 1));
+    return target;
+  }
+
+  it('a junction or symlink named like a session is never scanned, listed, cleaned or discarded', async () => {
+    const target = outsideTarget();
+    fs.symlinkSync(target, path.join(root, ID_A), 'junction');
+    const { recovery } = service();
+
+    const report = await recovery.startup(); // a "discarded" manifest behind the link would be rm -rf'd
+    expect(report.scanned).toBe(0);
+    expect(await recovery.list()).toEqual([]);
+    await expectCode(recovery.discard(ID_A), 'NOT_FOUND');
+    await expectCode(recovery.recover(ID_A), 'NOT_FOUND');
+
+    expect(fs.readFileSync(path.join(target, 'important.txt'), 'utf8')).toBe('do not delete');
+    expect(fs.existsSync(path.join(target, 'stream.webm'))).toBe(true);
+  });
+
+  it('a finalization plan with a relative folder or a path as its file name is not honoured', async () => {
+    const dir = seed(ID_A, {
+      state: 'finalizing',
+      finalize: {
+        outputDir: 'relative/folder',
+        fileName: '../../escape.webm',
+        partialPath: path.join('relative', 'folder', `.framelet-${ID_A}.partial.webm`),
+        startedAt: 1,
+      },
+    });
+    const { recovery } = service();
+    await recovery.startup();
+    // The output went to the app's own output folder under a plain file name.
+    const files = fs.readdirSync(out);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^Framelet .*\.webm$/);
+    expect(fs.existsSync(path.join(path.dirname(out), '..', 'escape.webm'))).toBe(false);
+    expect(fs.existsSync(dir)).toBe(false);
+  });
+});

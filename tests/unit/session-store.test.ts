@@ -163,3 +163,21 @@ describe('FlowState', () => {
     expect(state.phase).toBe('selecting');
   });
 });
+
+describe('ShotSessionStore: links', () => {
+  it('sweep never follows a symlink or junction named like a session directory', async () => {
+    const outside = path.join(tmp, 'outside');
+    fs.mkdirSync(outside, { recursive: true });
+    fs.writeFileSync(path.join(outside, 'keep-me.txt'), 'precious');
+    fs.mkdirSync(root, { recursive: true });
+    const id = '0f0e0d0c-0b0a-4908-8706-050403020100';
+    fs.symlinkSync(outside, path.join(root, id), 'junction');
+    const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(outside, old, old);
+
+    const store = new ShotSessionStore(root);
+    const result = await store.sweep(1000);
+    expect(result.removed).toBe(0);
+    expect(fs.readFileSync(path.join(outside, 'keep-me.txt'), 'utf8')).toBe('precious');
+  });
+});

@@ -20,7 +20,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 06 Storage & recovery | VERIFIED | FFmpeg 9.0.2 bundled (SHA-pinned); remux finalize; forced-kill recovery verified natively |
 | 07 Export & history | VERIFIED | MP4 export (libx264/aac, faststart) with cancel; history with trash-delete, relink |
 | 08 Desktop polish | VERIFIED | settings/shortcuts/tray; axe 0 serious; idle CPU 0.04 %; flakes root-caused |
-| 09 Security/reliability/perf | NOT_STARTED | |
+| 09 Security/reliability/perf | VERIFIED | 13 findings fixed; 30-min 1080p30 bench PASS (29.72 fps, drift +10 ms); lead audit agreed |
 | 10 Packaging/CI/updates | NOT_STARTED | |
 | 11 Open source & sales prep | NOT_STARTED | |
 | 12 Final validation | NOT_STARTED | |
@@ -83,9 +83,18 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Files: src/main/{desktop,shortcuts,actions,tray}.ts, src/main/settings/*, src/shared/{settings,shortcuts,error-messages}.ts, scripts/generate-tray-icons.mjs, settings/home/help UI, tests (e2e desktop/a11y/recording-timestamps, native desktop), docs/keyboard-shortcuts.md.
 - Settings v1 (zod, atomic debounced, corruption set-aside, migration scaffold); global shortcuts with conflict status (native RegisterHotKey conflict detected); tray singleton; close-to-tray; quit-while-recording confirm; home rebalanced; toolbar sized to content (±1 px); focus/aria/skip link/contrast; help dialog.
 - Root causes fixed: (1) region drag flake = buttonless synthetic pointermove from real mouse movement → ignored mid-gesture (4/4 fail → 8/8 pass); (2) 2/30 recordings had duplicate first timestamps → remux now uses setts bsf for strictly increasing timestamps; checks assert monotonic packets.
-- Native: real SendInput Ctrl+Shift+3 → overlays → Esc OK; idle CPU total 0.041 % of one core over 30 s; affected native tests 5/5 stable.
+- Native: real SendInput Ctrl+Shift+3 → overlays → Esc OK; idle CPU total 0.041 % of the whole machine (= ~0.66 % of one core; corrected in phase 09 — Electron percentCPUUsage is machine-relative) over 30 s; affected native tests 5/5 stable.
 - Results: lint/typecheck 0; unit 596/596 (lead re-ran); e2e 150/150 incl. axe (0 serious/critical, both themes); native 38/38.
 - Risks: launch-at-login untested until installer (phase 10); screen reader untested; Ctrl+Shift+0 may collide with IME hotkeys on some systems.
+
+### Phase 09 — Security, reliability & performance (VERIFIED 2026-10-02)
+- Docs: docs/security-review.md (S-01..S-13 fixed with tests, 68-channel IPC table, residual R-01..R-09, lead independent review §12), docs/performance.md (19 thresholds from baseline, all PASS).
+- Fixes: strict IPC schemas everywhere (S-01), ffmpeg protocol whitelist + absolute inputs (S-02), history:open media-only (S-03), no paths to toolbar/countdown/recorder (S-04), no window titles in manifests (S-05), home dir redacted in logs (S-06), no junction following (S-07), frame-navigation/device/spellcheck/network blocker/enableSandbox (S-08), media protocol hardening (S-09), worker frame cap, role alignment, check-no-mocks scans asar (S-10..12).
+- 30-min bench (scripts/bench-recording.mjs, real capture, 1080p30, system audio, motion): 1800.59 s, 29.72 fps (53,511 frames), A/V drift +10.4 ms, CPU tree avg 73.7 % of one core (4.6 % machine), working set +32 MB min2→end (plateau ~min15), queue high-water 1 chunk, stop→completed 1.0 s. Optimization: capture constrained to preset size → GPU private memory 784→220 MB.
+- Failure modes (native): source closure, mic denied, rapid commands, kill during remux ×3, unwritable output → all PASS; real disk-full BLOCKED (needs elevated small volume; injected tests cover).
+- Lead fix: `@electron/get` re-fetched SHASUMS256.txt each package and GitHub's asset CDN timed out → pinned Electron zip SHA-256 (verified against official SHASUMS) in forge.config.ts `download.checksums`.
+- Results: lint/typecheck 0; unit 719/719 (lead); e2e 150/150 (lead re-ran after checksum pin); native 46/46 (implementer); npm audit 0.
+- Risks: R-01 GrantFileProtocolExtraPrivileges fuse on (→ phase 10 app:// scheme); ~0.9 % frames below exact 30 fps under motion; region/60 fps/mic not benchmarked at length.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

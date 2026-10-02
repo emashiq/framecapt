@@ -1,0 +1,192 @@
+{
+  "1-source-closure": {
+    "stopReason": "source-lost",
+    "endedAfterCloseMs": 375,
+    "recordedSeconds": 4.558,
+    "msBeforeCloseRecorded": 4421,
+    "video": {
+      "index": 0,
+      "codec_name": "vp9",
+      "codec_long_name": "Google VP9",
+      "profile": "Profile 0",
+      "codec_type": "video",
+      "codec_tag_string": "[0][0][0][0]",
+      "codec_tag": "0x0000",
+      "mime_codec_string": "vp09.00.30.08",
+      "width": 642,
+      "height": 432,
+      "coded_width": 642,
+      "coded_height": 432,
+      "has_b_frames": 0,
+      "sample_aspect_ratio": "1:1",
+      "display_aspect_ratio": "107:72",
+      "pix_fmt": "yuv420p",
+      "level": -99,
+      "color_range": "tv",
+      "color_space": "bt709",
+      "color_transfer": "bt709",
+      "color_primaries": "bt709",
+      "r_frame_rate": "30/1",
+      "avg_frame_rate": "30/1",
+      "time_base": "1/1000",
+      "start_pts": 0,
+      "start_time": "0.000000",
+      "disposition": {
+        "default": 1,
+        "dub": 0,
+        "original": 0,
+        "comment": 0,
+        "lyrics": 0,
+        "karaoke": 0,
+        "forced": 0,
+        "hearing_impaired": 0,
+        "visual_impaired": 0,
+        "clean_effects": 0,
+        "attached_pic": 0,
+        "timed_thumbnails": 0,
+        "non_diegetic": 0,
+        "captions": 0,
+        "descriptions": 0,
+        "metadata": 0,
+        "dependent": 0,
+        "still_image": 0,
+        "multilayer": 0
+      },
+      "tags": {
+        "language": "eng",
+        "ALPHA_MODE": "1",
+        "DURATION": "00:00:04.558000000"
+      }
+    },
+    "fullDecodeClean": true,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    },
+    "windowsAfter": 2,
+    "recordingUiWindowsAfter": [],
+    "windowsBeforeFirstRecording": 1
+  },
+  "2-permission-denial": {
+    "choiceShown": "mic-denied",
+    "continueWithout": {
+      "audioFlagsWhileRecording": {
+        "mic": false,
+        "system": false
+      },
+      "resultHasAudio": false,
+      "audioStreams": 0,
+      "resourcesAfter": {
+        "liveTracks": 0,
+        "openAudioContexts": 0,
+        "activeLoops": 0,
+        "loopNames": [],
+        "activeRecorders": 0
+      }
+    },
+    "cancel": {
+      "statusAfter": "idle",
+      "newFiles": 0,
+      "resourcesAfter": {
+        "liveTracks": 0,
+        "openAudioContexts": 0,
+        "activeLoops": 0,
+        "loopNames": [],
+        "activeRecorders": 0
+      }
+    }
+  },
+  "3-rapid-commands": {
+    "simultaneousStarts": {
+      "accepted": 1,
+      "refusedBusy": 9
+    },
+    "pauseResumeBurstEndedIn": "recording",
+    "simultaneousStops": 20,
+    "finishedFiles": 2,
+    "startCancelCycles": 5,
+    "resourcesAfter": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    },
+    "windowsBeforeFirstRecording": 1,
+    "windowsAfter": 2,
+    "recordingUiWindowsAfter": [],
+    "strayFfmpegProcesses": 0
+  },
+  "4a-kill-during-remux-main-only-immediate-restart": {
+    "mode": "main-process-only (ffmpeg orphaned)",
+    "streamMB": 813,
+    "partialMBAtKill": 4,
+    "manifestStateAfterKill": "finalizing",
+    "orphanFfmpegRunningAfterKill": false,
+    "orphanFfmpegEndedAfterSeconds": 0,
+    "restartedWhileOrphanRunning": false,
+    "startupLog": [
+      "[info] Recovery scan: 1 session(s), 0 finalization(s) resumed, 0 cleaned, 1 recoverable",
+      "[info] Recovery scan: 1 session(s), 1 finalization(s) resumed, 0 cleaned, 0 recoverable"
+    ],
+    "sessionFinishedByStartup": true,
+    "needsManualRecoverClick": false,
+    "finishedFiles": 1,
+    "partialFilesAfterRestart": 0,
+    "recoveredSeconds": 240,
+    "fullDecodeClean": true
+  },
+  "4b-kill-during-remux-main-only-late-restart": {
+    "mode": "main-process-only (ffmpeg orphaned)",
+    "streamMB": 813,
+    "partialMBAtKill": 4,
+    "manifestStateAfterKill": "finalizing",
+    "orphanFfmpegRunningAfterKill": false,
+    "orphanFfmpegEndedAfterSeconds": 0,
+    "restartedWhileOrphanRunning": false,
+    "startupLog": [
+      "[info] Recovery scan: 1 session(s), 0 finalization(s) resumed, 0 cleaned, 1 recoverable",
+      "[info] Recovery scan: 1 session(s), 1 finalization(s) resumed, 0 cleaned, 0 recoverable"
+    ],
+    "sessionFinishedByStartup": true,
+    "needsManualRecoverClick": false,
+    "finishedFiles": 1,
+    "partialFilesAfterRestart": 0,
+    "recoveredSeconds": 240,
+    "fullDecodeClean": true
+  },
+  "4c-kill-during-remux-whole-tree": {
+    "mode": "whole process tree",
+    "streamMB": 813,
+    "partialMBAtKill": 4,
+    "manifestStateAfterKill": "finalizing",
+    "orphanFfmpegRunningAfterKill": false,
+    "orphanFfmpegEndedAfterSeconds": 0,
+    "restartedWhileOrphanRunning": false,
+    "startupLog": [
+      "[info] Recovery scan: 1 session(s), 0 finalization(s) resumed, 0 cleaned, 1 recoverable",
+      "[info] Recovery scan: 1 session(s), 1 finalization(s) resumed, 0 cleaned, 0 recoverable"
+    ],
+    "sessionFinishedByStartup": true,
+    "needsManualRecoverClick": false,
+    "finishedFiles": 1,
+    "partialFilesAfterRestart": 0,
+    "recoveredSeconds": 240,
+    "fullDecodeClean": true
+  },
+  "5-write-failure-at-finalization": {
+    "errorCode": "FINALIZE_FAILED",
+    "errorMessage": "The recording could not be finished. The recorded data was kept; you can try to recover it the next time Framelet starts.",
+    "keptStreamBytes": 929475,
+    "stateAfterFailure": "error",
+    "recoveredAfterFolderWritable": true,
+    "recoveredSeconds": 5.511
+  },
+  "6-real-disk-full": {
+    "status": "BLOCKED",
+    "reason": "Making a small volume (a VHD or a quota) needs an elevated shell; this session is not elevated. Covered instead by tests/unit/session-service.test.ts (ENOSPC on write, DISK_FULL), recovery.test.ts and the E2E disk-pressure tests (free-space file hook): refuse to start under 1 GB, stop safely under 500 MB."
+  }
+}

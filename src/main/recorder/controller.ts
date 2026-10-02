@@ -29,6 +29,7 @@ import {
   type RecorderMachineState,
 } from '../../shared/recorder-machine';
 import type { OverlayInit } from '../../shared/shot-ipc';
+import type { Role } from '../../shared/types';
 import {
   placeToolbar,
   TOOLBAR_HEIGHT,
@@ -247,11 +248,24 @@ export class RecorderController implements SelectionHost {
     return () => this.changeListeners.delete(listener);
   }
 
+  /**
+   * The state as one role may see it. Only the main window shows the finished file (name, path,
+   * history id); the toolbar, countdown and recorder windows get the same state without it.
+   */
+  snapshotFor(role: Role): RecorderSnapshot {
+    const snapshot = this.snapshot();
+    return role === 'main' ? snapshot : { ...snapshot, result: null };
+  }
+
   private broadcast(): void {
     for (const listener of this.changeListeners) listener();
-    const snapshot = this.snapshot();
-    for (const contents of webContentsWithRoles(['main', 'toolbar', 'recorder', 'countdown'])) {
-      sendEvent(contents, 'recorder:state', snapshot);
+    const full = this.snapshot();
+    const redacted: RecorderSnapshot = { ...full, result: null };
+    for (const contents of webContentsWithRoles(['main'])) {
+      sendEvent(contents, 'recorder:state', full);
+    }
+    for (const contents of webContentsWithRoles(['toolbar', 'recorder', 'countdown'])) {
+      sendEvent(contents, 'recorder:state', redacted);
     }
   }
 
@@ -484,7 +498,9 @@ export class RecorderController implements SelectionHost {
         mime: ctx.mime,
         source: {
           kind: ctx.target,
-          name: ctx.sourceName,
+          // A generic label, never the window's title: titles name documents and people, and this file
+          // stays on disk for as long as a session is unfinished.
+          name: ctx.target === 'window' ? 'Window' : 'Screen',
           ...(ctx.display && { displayId: ctx.display.id }),
         },
         options: ctx.options,

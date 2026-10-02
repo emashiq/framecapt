@@ -15,6 +15,15 @@ const config: ForgeConfig = {
     // The pinned FFmpeg build (npm run fetch:ffmpeg, run by the prepackage/premake/prestart hooks).
     // extraResource copies the folder by its name: <resources>/ffmpeg/win32-x64/{ffmpeg,ffprobe}.exe.
     extraResource: ['vendor/ffmpeg'],
+    // Pinned Electron zip checksum (from the official v44.5.1 SHASUMS256.txt, verified 2026-10-02).
+    // Builds are reproducible and work from the local cache without re-fetching SHASUMS256.txt.
+    // Update together with the electron version in package.json.
+    download: {
+      checksums: {
+        'electron-v44.5.1-win32-x64.zip':
+          '9b382492dcfee91f8f9e92c91f7972550a1b95d2299cac72279dab33a600d7db',
+      },
+    },
   },
   rebuildConfig: {},
   makers: [

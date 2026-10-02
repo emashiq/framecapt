@@ -475,3 +475,136 @@ describe('recorder machine: status helpers', () => {
     expect(RECORDER_STATUSES.filter(isFinished)).toEqual(['idle', 'completed', 'error']);
   });
 });
+
+describe('recorder machine: invariants under random event streams (seeded)', () => {
+  /** Builds one event of a type, with the fields it needs (timestamps from a monotonic clock). */
+  function make(type: RecorderEventType, random: () => number, at: number): RecorderEvent {
+    const source = random() < 0.5 ? ('mic' as const) : ('system' as const);
+    switch (type) {
+      case 'START_REQUESTED':
+        return { type, sessionId: `s${Math.floor(random() * 1e6)}` };
+      case 'PREFLIGHT_NEEDS_CHOICE':
+        return { type, choice: 'mic-denied' };
+      case 'STARTED':
+        return { type, at, wallClock: 1_700_000_000_000 + at, audio: BOTH };
+      case 'PAUSE':
+      case 'RESUME':
+      case 'SOURCE_LOST':
+        return { type, at };
+      case 'STOP':
+        return random() < 0.5 ? { type, at } : { type, at, reason: 'app-quit' };
+      case 'WRITE_FAILED':
+        return { type, at, code: 'DISK_FULL', message: 'm' };
+      case 'FAILED':
+        return { type, code: 'E', message: 'm' };
+      case 'MUTE_SET':
+        return { type, source, muted: random() < 0.5 };
+      case 'AUDIO_LOST':
+        return { type, source };
+      default:
+        return { type } as RecorderEvent;
+    }
+  }
+
+  /**
+   * Mostly an event the current status accepts (so runs get deep into a recording: pauses, stops,
+   * failures), sometimes any event at all (which must be rejected without harm).
+   */
+  function randomEvent(
+    random: () => number,
+    clock: { now: number },
+    status: RecorderStatus,
+  ): RecorderEvent {
+    clock.now += Math.floor(random() * 400);
+    const all = Object.keys(SAMPLE) as RecorderEventType[];
+    const accepted = ACCEPTED[status];
+    // The terminal-ish events are rare among the accepted ones, or no run would last.
+    const calm = accepted.filter(
+      (type) =>
+        !['STOP', 'CANCEL', 'FAILED', 'SOURCE_LOST', 'WRITE_FAILED', 'RESET'].includes(type),
+    );
+    const pool = random() < 0.12 ? all : random() < 0.85 && calm.length > 0 ? calm : accepted;
+    return make(pool[Math.floor(random() * pool.length)] as RecorderEventType, random, clock.now);
+  }
+
+  it('holds the machine rules after every event of 600 random runs', () => {
+    let seed = 987654321;
+    const next = (): number => {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    };
+    const reached = new Set<string>();
+    for (let run = 0; run < 600; run += 1) {
+      const clock = { now: 1000 };
+      let state = createInitialState();
+      let lastActive = 0;
+      let lastSession: string | null = null;
+      for (let step = 0; step < 60; step += 1) {
+        const event = randomEvent(next, clock, state.status);
+        const before = state;
+        const result = reduce(before, event);
+        state = result.state;
+        reached.add(state.status);
+        const where = `run ${run} step ${step}: ${event.type} in ${before.status}`;
+
+        // A rejected event changes nothing at all (same object back).
+        if (result.rejected) expect(state, where).toBe(before);
+
+        // One session at a time: a session exists exactly while the status is not idle, and it
+        // never changes except through a fresh START from idle.
+        expect(state.sessionId === null, where).toBe(state.status === 'idle');
+        if (
+          event.type !== 'START_REQUESTED' &&
+          state.status !== 'idle' &&
+          before.status !== 'idle'
+        ) {
+          expect(state.sessionId, where).toBe(before.sessionId);
+        }
+        if (event.type === 'START_REQUESTED' && !result.rejected) {
+          expect(before.status, where).toBe('idle');
+          lastSession = state.sessionId;
+          lastActive = 0;
+        }
+        if (result.rejected && event.type === 'START_REQUESTED') {
+          expect(state.sessionId, `${where}: second start must not replace the session`).toBe(
+            before.sessionId,
+          );
+        }
+        expect(
+          lastSession === null || state.status === 'idle' || state.sessionId === lastSession,
+          where,
+        ).toBe(true);
+
+        // Durations are never negative and never run backwards within a session.
+        expect(state.activeDurationMs, where).toBeGreaterThanOrEqual(0);
+        const duration = activeDurationAt(state, clock.now);
+        expect(duration, where).toBeGreaterThanOrEqual(0);
+        // (An error state carries no recording, so its time restarts at zero by design.)
+        if (state.status === 'error') lastActive = 0;
+        else if (state.status !== 'idle') {
+          expect(duration, `${where}: active time went backwards`).toBeGreaterThanOrEqual(
+            lastActive,
+          );
+          lastActive = duration;
+        }
+
+        // The clock fields agree with the status.
+        expect(state.segmentStartedAt !== null, where).toBe(state.status === 'recording');
+        expect(state.pausedAt !== null, where).toBe(state.status === 'paused');
+        // Mute and loss only ever concern sources that are part of the recording.
+        for (const source of ['mic', 'system'] as const) {
+          if (state.muted[source])
+            expect(state.audio[source], `${where}: muted ${source}`).toBe(true);
+          if (state.lost[source])
+            expect(state.audio[source], `${where}: lost ${source}`).toBe(true);
+        }
+        // A finished recording keeps its result facts; an error always has its reason.
+        if (state.status === 'error') expect(state.error, where).not.toBeNull();
+        if (state.status === 'idle') expect(state.choice, where).toBeNull();
+      }
+    }
+    // The runs were deep enough to mean something.
+    for (const status of ['recording', 'paused', 'stopping', 'processing', 'completed', 'error'])
+      expect(reached.has(status), `${status} was reached`).toBe(true);
+  });
+});

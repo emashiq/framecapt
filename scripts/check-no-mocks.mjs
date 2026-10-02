@@ -1,30 +1,38 @@
-// Fails when the production main bundle contains the mock capture provider.
-// Usage: node scripts/check-no-mocks.mjs [--expect-mock]   (--expect-mock is the positive control
-// for builds made with FRAMELET_E2E_BUILD=1: it fails when the mock is NOT present.)
+// Fails when a production build contains the mock capture provider or any E2E-only test hook.
+// Usage: node scripts/check-no-mocks.mjs [--expect-mock] [--root <dir>]
+// It scans the main and preload bundles (.vite/build), the renderer bundle (.vite/renderer) and,
+// when one exists, the packaged app.asar (out/<app>/resources/app.asar), because that is the file
+// that ships. --expect-mock is the positive control for builds made with FRAMELET_E2E_BUILD=1: it
+// fails when the mock is NOT present in both the main bundle and the renderer.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const argv = process.argv.slice(2);
+const rootArg = argv.indexOf('--root');
+const root =
+  rootArg === -1
+    ? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+    : path.resolve(argv[rootArg + 1] ?? '.');
+const expectMock = argv.includes('--expect-mock');
+
 const buildDir = path.join(root, '.vite', 'build');
+const rendererDir = path.join(root, '.vite', 'renderer');
+
+// `FRAMELET_E2E` catches every E2E hook (env switches and the build constant's name) in one
+// marker; the others name the mock modules themselves, which have no such prefix.
 const markers = [
+  'FRAMELET_E2E',
+  '__FRAMELET_E2E__',
   'MockCaptureProvider',
   'mock-provider',
   'Mock display',
-  'FRAMELET_E2E_MOCK_CAPTURE',
-  'FRAMELET_E2E_FREE_BYTES_FILE',
-  'FRAMELET_E2E_FFMPEG_DELAY_MS',
-  'FRAMELET_E2E_QUIT_CAP_MS',
-  'FRAMELET_E2E_NO_H264',
-  'FRAMELET_E2E_FAKE_SHORTCUTS',
-  'FRAMELET_E2E_TAKEN_SHORTCUTS',
   '__frameletTest',
   'drawSyntheticFrame',
   'synthetic-frame',
   'createSyntheticDisplayStream',
   'synthetic-stream',
 ];
-const expectMock = process.argv.includes('--expect-mock');
 
 if (!fs.existsSync(buildDir)) {
   console.error(
@@ -33,7 +41,6 @@ if (!fs.existsSync(buildDir)) {
   process.exit(2);
 }
 
-const rendererDir = path.join(root, '.vite', 'renderer');
 const jsFilesIn = (dir) =>
   fs.existsSync(dir)
     ? fs
@@ -42,15 +49,28 @@ const jsFilesIn = (dir) =>
         .map((entry) => path.join(entry.parentPath, entry.name))
     : [];
 
-const files = [...jsFilesIn(buildDir), ...jsFilesIn(rendererDir)];
-if (!files.some((file) => path.basename(file) === 'main.cjs')) {
-  console.error('check-no-mocks: .vite/build/main.cjs not found.');
-  process.exit(2);
+/** Every app.asar a packaged build left under out/ (files inside an asar are stored unpacked, so they can be searched as text). */
+function asarFiles() {
+  const out = path.join(root, 'out');
+  if (!fs.existsSync(out)) return [];
+  return fs
+    .readdirSync(out, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name === 'app.asar')
+    .map((entry) => path.join(entry.parentPath, entry.name));
 }
 
+const files = [...jsFilesIn(buildDir), ...jsFilesIn(rendererDir)];
+for (const required of ['main.cjs', 'preload.cjs']) {
+  if (!files.some((file) => path.basename(file) === required)) {
+    console.error(`check-no-mocks: .vite/build/${required} not found.`);
+    process.exit(2);
+  }
+}
+const asars = asarFiles();
+
 const hits = [];
-for (const file of files) {
-  const text = fs.readFileSync(file, 'utf8');
+for (const file of [...files, ...asars]) {
+  const text = fs.readFileSync(file, 'latin1');
   for (const marker of markers) {
     if (text.includes(marker)) hits.push(`${path.relative(root, file)}: ${marker}`);
   }
@@ -67,9 +87,11 @@ if (expectMock) {
   }
   console.log(`check-no-mocks: mock present as expected (${hits.length} marker hits).`);
 } else if (hits.length > 0) {
-  console.error('check-no-mocks: FAIL, mock code found in the production bundle:');
+  console.error('check-no-mocks: FAIL, mock or test-hook code found in the production build:');
   for (const hit of hits) console.error(`  ${hit}`);
   process.exit(1);
 } else {
-  console.log(`check-no-mocks: OK (${files.length} files scanned, no mock markers).`);
+  console.log(
+    `check-no-mocks: OK (${files.length} bundle files and ${asars.length} app.asar scanned, no mock or test-hook markers).`,
+  );
 }

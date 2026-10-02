@@ -5,7 +5,12 @@ import { registerMediaScheme } from './recording/media-protocol';
 import { setupDesktop, type Desktop } from './desktop';
 import { registerHandlers } from './handlers';
 import { initLogger, log } from './logger';
-import { installCsp, installNavigationLockdown, installPermissionHandlers } from './security';
+import {
+  installCsp,
+  installNavigationLockdown,
+  installNetworkBlocker,
+  installPermissionHandlers,
+} from './security';
 import { createAppSettings, watchSettings } from './settings';
 import { HIDDEN_ARG } from './settings/login-item';
 import { SettingsStore, SETTINGS_FILE } from './settings/store';
@@ -27,6 +32,8 @@ if (!handleSquirrelEvent()) {
 }
 
 function start(): void {
+  // Every renderer is sandboxed, including any window a future change forgets to configure.
+  app.enableSandbox();
   // Privileged schemes must be registered before the app is ready.
   registerMediaScheme();
 
@@ -97,6 +104,7 @@ function start(): void {
 
     installCsp(session.defaultSession, getOriginConfig());
     installPermissionHandlers(session.defaultSession, getOriginConfig);
+    installNetworkBlocker(session.defaultSession, getOriginConfig);
     const appSettings = createAppSettings(store);
     const services = registerHandlers(
       await createCaptureProvider(),

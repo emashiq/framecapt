@@ -41,6 +41,29 @@ export function isAppUrl(url: string | undefined | null, config: AppOriginConfig
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
+/**
+ * The only network-scheme requests the app may ever make: its own dev server (development builds)
+ * and nothing else. Framelet has no telemetry, uploads or remote content; anything with an
+ * http(s), ws(s) or ftp scheme is cancelled in the session (defence in depth behind the CSP).
+ */
+export function isNetworkRequestAllowed(url: string, config: AppOriginConfig): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (!config.devServerUrl) return false;
+  try {
+    const dev = new URL(config.devServerUrl);
+    const sameHost = parsed.host === dev.host;
+    const schemes = dev.protocol === 'https:' ? ['https:', 'wss:'] : ['http:', 'ws:'];
+    return sameHost && schemes.includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
 const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write']);
 
 /**

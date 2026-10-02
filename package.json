@@ -20,6 +20,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:mocks": "node scripts/check-no-mocks.mjs",
+    "bench:recording": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/bench-recording.mjs",
+    "smoke:packaged": "node scripts/smoke-packaged.mjs",
     "prepackage:e2e": "node scripts/clean-build.mjs && node scripts/fetch-ffmpeg.mjs",
     "package:e2e": "node scripts/package-e2e.mjs",
     "test:e2e": "npm run package:e2e && node scripts/check-no-mocks.mjs --expect-mock && playwright test",

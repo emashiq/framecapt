@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Session ids are random uuids made by main; anything else is rejected before it is looked at. */
-export const RecoverySessionIdSchema = z.object({
+export const RecoverySessionIdSchema = z.strictObject({
   sessionId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
 });
 

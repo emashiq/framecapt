@@ -21,6 +21,16 @@ export async function mapLimit<T, R>(
   return results;
 }
 
+/**
+ * What `history:open` may hand to the shell: only the media types Framelet itself produces. A
+ * history entry that points at anything else (an edited history file, a re-linked odd file) is
+ * never launched, whatever program Windows would pick for it.
+ */
+const OPENABLE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webm', '.mp4']);
+export function isOpenableMedia(file: string): boolean {
+  return OPENABLE_EXTENSIONS.has(path.extname(file).toLowerCase());
+}
+
 /** Case-insensitive path equality (Windows file names). */
 export function samePath(a: string, b: string): boolean {
   return path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();

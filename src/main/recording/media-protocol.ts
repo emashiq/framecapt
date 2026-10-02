@@ -28,9 +28,10 @@ export function registerMediaScheme(): void {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: MEDIA_SCHEME,
-      // standard + secure: media elements and the CSP treat it like a normal origin.
-      // stream: media playback may stream the response. supportFetchAPI: fetch() can read it.
-      privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true },
+      // standard + secure: media elements and the CSP treat it like a normal origin. stream: media
+      // playback may stream the response. Nothing else: no fetch API (pages only load it through
+      // <img> and <video>), no CORS, and never bypassCSP.
+      privileges: { standard: true, secure: true, stream: true },
     },
   ]);
 }
@@ -105,7 +106,9 @@ export function installMediaProtocol(registry: MediaRegistry, history?: HistoryM
 
     let size: number;
     try {
-      size = (await fs.promises.stat(file)).size;
+      const stat = await fs.promises.stat(file);
+      if (!stat.isFile()) return new Response(null, { status: 404, headers: NO_STORE });
+      size = stat.size;
     } catch {
       log.warn('Media file is gone');
       return new Response(null, { status: 404, headers: NO_STORE });

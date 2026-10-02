@@ -19,6 +19,8 @@ export interface SessionFs {
   rm(target: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
   copyFile(from: string, to: string, mode?: number): Promise<void>;
   stat(file: string): Promise<{ size: number; mtimeMs: number; isDirectory(): boolean }>;
+  /** Like stat, but a symbolic link or junction is reported as itself (never followed). */
+  lstat(file: string): Promise<{ isDirectory(): boolean; isSymbolicLink(): boolean }>;
   statfs(dir: string): Promise<{ bavail: number; bsize: number }>;
 }
 
@@ -43,6 +45,7 @@ export const nodeSessionFs: SessionFs = {
   rm: (target, options) => fs.promises.rm(target, options),
   copyFile: (from, to, mode) => fs.promises.copyFile(from, to, mode),
   stat: (file) => fs.promises.stat(file),
+  lstat: (file) => fs.promises.lstat(file),
   statfs: (dir) => fs.promises.statfs(dir),
 };
 

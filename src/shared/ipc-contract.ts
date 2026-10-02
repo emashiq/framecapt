@@ -99,7 +99,7 @@ export type AppInfo = z.infer<typeof AppInfoSchema>;
 /** Length caps keep a misbehaving renderer from flooding the log. */
 export const ERROR_REPORT_LIMITS = { message: 2000, stack: 8000, componentStack: 8000 } as const;
 
-export const ReportErrorSchema = z.object({
+export const ReportErrorSchema = z.strictObject({
   source: z.enum(['error-boundary', 'window-error', 'unhandled-rejection']),
   message: z.string().max(ERROR_REPORT_LIMITS.message),
   stack: z.string().max(ERROR_REPORT_LIMITS.stack).optional(),
@@ -258,7 +258,7 @@ export const ipcContract = {
   },
   /** The toolbar reports the width its content needs; main sizes the window to it (no clipping). */
   'toolbar:resize': {
-    request: z.object({ width: z.number().min(120).max(900) }),
+    request: z.strictObject({ width: z.number().min(120).max(900) }),
     response: z.void(),
     roles: ['toolbar'],
   },

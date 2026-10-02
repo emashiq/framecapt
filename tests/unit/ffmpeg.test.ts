@@ -15,8 +15,10 @@ import {
   runProcess,
   STDERR_TAIL_BYTES,
   TailBuffer,
+  thumbnailArgs,
   type ProcessDeps,
 } from '../../src/main/media/ffmpeg';
+import { mp4Args } from '../../src/main/media/export';
 
 describe('resolveFfmpeg', () => {
   const location = {
@@ -59,15 +61,20 @@ describe('resolveFfmpeg', () => {
 
 describe('argument building', () => {
   it('remux copies every stream and writes WebM, with machine-readable progress', () => {
-    const args = remuxArgs('in.webm', 'out.partial.webm');
+    const args = remuxArgs('C:/in.webm', 'C:/out.partial.webm');
     expect(args).toEqual([
       '-hide_banner',
       '-nostats',
       '-progress',
       'pipe:1',
       '-y',
+      // Only local files, and only the Matroska/WebM demuxer, for the recorder's own stream.
+      '-protocol_whitelist',
+      'file',
+      '-f',
+      'matroska',
       '-i',
-      'in.webm',
+      'C:/in.webm',
       '-c',
       'copy',
       '-map',
@@ -76,12 +83,36 @@ describe('argument building', () => {
       STRICTLY_INCREASING_TIMESTAMPS,
       '-f',
       'webm',
-      'out.partial.webm',
+      'C:/out.partial.webm',
     ]);
     // The commas inside the expression are escaped for the filter-chain parser.
     expect(STRICTLY_INCREASING_TIMESTAMPS).toContain('\\,');
     expect(STRICTLY_INCREASING_TIMESTAMPS.replaceAll('\\,', '')).not.toContain(',');
     expect(STRICTLY_INCREASING_TIMESTAMPS.startsWith('setts=')).toBe(true);
+  });
+
+  it('relative paths and paths that look like options are refused, never passed on', () => {
+    for (const bad of ['in.webm', '-i', '-f', '--help', './x.webm', 'x/../-y']) {
+      expect(() => remuxArgs(bad, 'C:/out.webm'), bad).toThrow(FfmpegError);
+      expect(() => remuxArgs('C:/in.webm', bad), bad).toThrow(FfmpegError);
+      expect(() => probeArgs(bad), bad).toThrow(FfmpegError);
+    }
+  });
+
+  it('every input is opened with the file protocol only (no network via a crafted playlist)', () => {
+    const inputs: string[][] = [
+      remuxArgs('C:/a.webm', 'C:/b.webm'),
+      mp4Args('C:/a.webm', 'C:/b.mp4'),
+      thumbnailArgs('C:/a.mp4', 'C:/t.png', 1, 480),
+      probeArgs('C:/a.webm'),
+    ];
+    for (const args of inputs) {
+      const at = args.indexOf('-protocol_whitelist');
+      expect(at, args.join(' ')).toBeGreaterThanOrEqual(0);
+      expect(args[at + 1]).toBe('file');
+      // ... and it applies to the input: it comes before the file name.
+      expect(at).toBeLessThan(args.findIndex((arg) => arg.startsWith('C:')));
+    }
   });
 
   it('a path with spaces or shell characters stays ONE argument (no shell is involved)', () => {
@@ -174,7 +205,7 @@ describe('runProcess', () => {
     const run = tools.run(['-version']);
     children[0]?.emit('close', 0);
     await run;
-    const probe = tools.probe('x.webm');
+    const probe = tools.probe('C:/x.webm');
     children[1]?.stdout.write(JSON.stringify({ streams: [], format: {} }));
     children[1]?.emit('close', 0);
     await probe;

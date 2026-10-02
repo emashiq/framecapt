@@ -41,11 +41,7 @@ describe('capture contract', () => {
     expect(parse({ ext: 'exe', data: new ArrayBuffer(10) })).toBe(false);
     expect(parse({ ext: 'webm', data: 'not bytes' })).toBe(false);
     expect(DIAGNOSTICS_MAX_BYTES).toBe(200 * 1024 * 1024);
-    const unknownKeys = SaveDiagnosticsRequestSchema.parse({
-      ext: 'png',
-      data: new ArrayBuffer(1),
-      path: 'C:/x',
-    });
-    expect('path' in unknownKeys).toBe(false);
+    // A path smuggled in beside the bytes is rejected outright, not silently dropped.
+    expect(parse({ ext: 'png', data: new ArrayBuffer(1), path: 'C:/x' })).toBe(false);
   });
 });

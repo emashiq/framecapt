@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { Logger } from '../../src/main/logger';
+import { Logger, redactHome } from '../../src/main/logger';
 
 const dirs: string[] = [];
 function tempDir(): string {
@@ -34,6 +34,34 @@ describe('Logger', () => {
     expect(fs.statSync(path.join(dir, 'main.log')).size).toBeLessThanOrEqual(500);
     expect(fs.readdirSync(dir).sort()).toEqual(['main.log', 'main.old.log']);
     expect(fs.readFileSync(path.join(dir, 'main.log'), 'utf8')).toMatch(/line 39/);
+  });
+
+  it('replaces the home folder in every slash style and case, and leaves other text alone', () => {
+    const home = 'C:\\Users\\Jane Doe';
+    const text = [
+      'open C:\\Users\\Jane Doe\\Videos\\Framelet\\a.webm failed',
+      'open C:/Users/Jane Doe/Videos/a.webm failed',
+      'json "C:\\\\Users\\\\Jane Doe\\\\x"',
+      'c:\\users\\jane doe\\x',
+      'D:\\Capture\\clip.webm stays',
+    ].join('\n');
+    const out = redactHome(text, home);
+    expect(out).not.toMatch(/Jane/i);
+    expect(out).toContain('~\\Videos\\Framelet\\a.webm');
+    expect(out).toContain('~/Videos/a.webm');
+    expect(out).toContain('D:\\Capture\\clip.webm stays');
+    expect(redactHome('nothing here', home)).toBe('nothing here');
+    expect(redactHome('x', '')).toBe('x');
+  });
+
+  it('writes the real home folder as ~ (a log attached to a bug report has no user name)', () => {
+    const dir = tempDir();
+    const logger = new Logger(dir);
+    logger.info(`save failed: ${path.join(os.homedir(), 'Videos', 'a.webm')}`);
+    logger.error('crash', new Error(`cannot read ${os.homedir()}`));
+    const text = fs.readFileSync(path.join(dir, 'main.log'), 'utf8');
+    expect(text.toLowerCase()).not.toContain(os.homedir().toLowerCase());
+    expect(text).toContain('~');
   });
 
   it('caps very long messages', () => {

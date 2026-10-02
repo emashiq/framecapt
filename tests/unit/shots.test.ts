@@ -114,6 +114,21 @@ describe('screenshot IPC schemas', () => {
     expect(WorkerFrameResultSchema.safeParse({ requestId: 'r', frames: [] }).success).toBe(false);
   });
 
+  it('bounds all frames of one answer together, not just each one', () => {
+    const png = new ArrayBuffer(100 * 1024 * 1024); // one allocation, listed several times
+    const many = (count: number) => ({
+      requestId: 'r1',
+      frames: Array.from({ length: count }, () => ({
+        sourceId: 'screen:1:0',
+        width: 100,
+        height: 100,
+        png,
+      })),
+    });
+    expect(WorkerFrameResultSchema.safeParse(many(5)).success).toBe(true); // 500 MB
+    expect(WorkerFrameResultSchema.safeParse(many(6)).success).toBe(false); // 600 MB
+  });
+
   it('accepts a grab request with and without synthetic hints', () => {
     expect(
       GrabFramesEventSchema.safeParse({ requestId: 'x', sources: [{ sourceId: 'screen:1:0' }] })

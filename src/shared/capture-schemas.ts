@@ -40,7 +40,7 @@ export type SourceInfo = z.infer<typeof SourceInfoSchema>;
 
 export const THUMBNAIL_MAX_WIDTH = 320;
 
-export const ListSourcesRequestSchema = z.object({
+export const ListSourcesRequestSchema = z.strictObject({
   types: z.array(SourceKindSchema).min(1).max(2),
   thumbnailWidth: z.number().int().min(0).max(THUMBNAIL_MAX_WIDTH).optional(),
 });
@@ -49,7 +49,7 @@ export type ListSourcesRequest = z.infer<typeof ListSourcesRequestSchema>;
 /** A capture grant is valid for a few seconds and is consumed by the first matching request. */
 export const GRANT_TTL_MS = 5000;
 
-export const CaptureGrantRequestSchema = z.object({
+export const CaptureGrantRequestSchema = z.strictObject({
   sourceId: z
     .string()
     .min(1)
@@ -68,7 +68,7 @@ export const CaptureGrantResponseSchema = z.object({
 /** Whole-blob saving is acceptable only for the bounded diagnostics prototype (10 s limit). */
 export const DIAGNOSTICS_MAX_BYTES = 200 * 1024 * 1024;
 
-export const SaveDiagnosticsRequestSchema = z.object({
+export const SaveDiagnosticsRequestSchema = z.strictObject({
   ext: z.enum(['webm', 'mp4', 'mkv', 'png']),
   data: z
     .instanceof(ArrayBuffer)

@@ -12,10 +12,8 @@ describe('recovery IPC schemas', () => {
     }
   });
 
-  it('extra keys (a path smuggled in by a renderer) are dropped', () => {
-    expect(RecoverySessionIdSchema.parse({ sessionId: ok, path: 'C:/x' })).toEqual({
-      sessionId: ok,
-    });
+  it('extra keys (a path smuggled in by a renderer) are rejected', () => {
+    expect(RecoverySessionIdSchema.safeParse({ sessionId: ok, path: 'C:/x' }).success).toBe(false);
   });
 
   it('a recover response is either recovered (with a result id) or unrecoverable (with where it was kept)', () => {

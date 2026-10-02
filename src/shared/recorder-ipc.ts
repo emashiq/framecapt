@@ -10,8 +10,8 @@ import { SourceIdSchema } from './shot-ipc';
 export const RecordTargetSchema = z.enum(['screen', 'window', 'region']);
 export type RecordTarget = z.infer<typeof RecordTargetSchema>;
 
-export const RecordOptionsSchema = z.object({
-  mic: z.object({
+export const RecordOptionsSchema = z.strictObject({
+  mic: z.strictObject({
     enabled: z.boolean(),
     /** Undefined = the default microphone. */
     deviceId: z.string().max(256).optional(),
@@ -33,7 +33,7 @@ export const DEFAULT_RECORD_OPTIONS: RecordOptions = {
 };
 
 export const RecorderStartRequestSchema = z
-  .object({
+  .strictObject({
     target: RecordTargetSchema,
     /** Window recordings: the window to record. */
     sourceId: SourceIdSchema.optional(),
@@ -48,7 +48,7 @@ export const RecorderStartRequestSchema = z
 export type RecorderStartRequest = z.infer<typeof RecorderStartRequestSchema>;
 
 export const AudioSourceSchema = z.enum(['mic', 'system']);
-export const ToggleMuteRequestSchema = z.object({ source: AudioSourceSchema });
+export const ToggleMuteRequestSchema = z.strictObject({ source: AudioSourceSchema });
 
 export const PreflightChoiceKindSchema = z.enum([
   'system-audio-unavailable',
@@ -57,13 +57,13 @@ export const PreflightChoiceKindSchema = z.enum([
   'mic-unavailable',
 ]);
 export const ChoiceAnswerSchema = z.enum(['continue-without', 'use-default', 'cancel']);
-export const ResolveChoiceRequestSchema = z.object({ answer: ChoiceAnswerSchema });
+export const ResolveChoiceRequestSchema = z.strictObject({ answer: ChoiceAnswerSchema });
 
-export const RecordingIdRequestSchema = z.object({ resultId: z.string().min(1).max(64) });
+export const RecordingIdRequestSchema = z.strictObject({ resultId: z.string().min(1).max(64) });
 
 // --- state broadcast (main -> every app window) ----------------------------------------------
 
-const AudioFlagsSchema = z.object({ mic: z.boolean(), system: z.boolean() });
+const AudioFlagsSchema = z.strictObject({ mic: z.boolean(), system: z.boolean() });
 
 export const RecordingResultSchema = z.object({
   /** Main-owned id: the media URL is `framelet-media://<id>`. */
@@ -128,7 +128,7 @@ export const EnginePrepareSchema = z.object({
   sourceId: SourceIdSchema,
   kind: z.enum(['screen', 'window']),
   /** Region in PIXELS of the display, already clamped and even-aligned by main. */
-  region: RectSchema.nullable(),
+  region: RectSchema.strict().nullable(),
   /** Physical size of the display (screen and region); used for sizing and validation. */
   displaySize: z.object({ width: z.number(), height: z.number() }).nullable(),
   options: RecordOptionsSchema,
@@ -151,7 +151,7 @@ export type EngineCommand = z.infer<typeof EngineCommandSchema>;
 export type EnginePrepareCommand = z.infer<typeof EnginePrepareSchema>;
 
 export const EngineEventSchema = z.discriminatedUnion('type', [
-  z.object({
+  z.strictObject({
     type: z.literal('prepared'),
     requestId: z.string(),
     mime: z.string().max(200),
@@ -159,32 +159,32 @@ export const EngineEventSchema = z.discriminatedUnion('type', [
     height: z.number().int(),
     audio: AudioFlagsSchema,
   }),
-  z.object({
+  z.strictObject({
     type: z.literal('needsChoice'),
     requestId: z.string(),
     choice: PreflightChoiceKindSchema,
     canUseDefaultMic: z.boolean(),
   }),
-  z.object({
+  z.strictObject({
     type: z.literal('prepareFailed'),
     requestId: z.string(),
     code: z.string().max(60),
     message: z.string().max(500),
   }),
-  z.object({ type: z.literal('started'), requestId: z.string() }),
-  z.object({ type: z.literal('paused') }),
-  z.object({ type: z.literal('resumed') }),
-  z.object({
+  z.strictObject({ type: z.literal('started'), requestId: z.string() }),
+  z.strictObject({ type: z.literal('paused') }),
+  z.strictObject({ type: z.literal('resumed') }),
+  z.strictObject({
     type: z.literal('stopped'),
     requestId: z.string(),
     lastSeq: z.number().int().min(-1),
     chunks: z.number().int().min(0),
     bytes: z.number().min(0),
   }),
-  z.object({ type: z.literal('sourceLost') }),
-  z.object({ type: z.literal('trackEnded'), source: AudioSourceSchema }),
-  z.object({ type: z.literal('levels'), mic: z.number(), system: z.number() }),
-  z.object({
+  z.strictObject({ type: z.literal('sourceLost') }),
+  z.strictObject({ type: z.literal('trackEnded'), source: AudioSourceSchema }),
+  z.strictObject({ type: z.literal('levels'), mic: z.number(), system: z.number() }),
+  z.strictObject({
     type: z.literal('error'),
     code: z.string().max(60),
     message: z.string().max(500),
@@ -204,12 +204,12 @@ export const CHUNK_TIMESLICE_MS = 1000;
 
 const SessionIdSchema = z.string().min(1).max(64);
 
-export const AppendChunkRequestSchema = z.object({
+export const AppendChunkRequestSchema = z.strictObject({
   sessionId: SessionIdSchema,
   seq: z.number().int().min(0).max(1_000_000_000),
   /** The renderer's own queue when this chunk was sent (backpressure statistics only). */
   queued: z
-    .object({
+    .strictObject({
       chunks: z.number().int().min(0).max(1_000_000),
       bytes: z.number().min(0),
     })
@@ -219,17 +219,17 @@ export const AppendChunkRequestSchema = z.object({
     .refine((buffer) => buffer.byteLength > 0, 'empty')
     .refine((buffer) => buffer.byteLength <= MAX_CHUNK_BYTES, 'too large'),
 });
-export const AppendChunkResponseSchema = z.object({
+export const AppendChunkResponseSchema = z.strictObject({
   /** True when this exact chunk had already been written (an idempotent retry). */
   duplicate: z.boolean(),
   lastSeq: z.number().int(),
 });
 
-export const FinishSessionRequestSchema = z.object({
+export const FinishSessionRequestSchema = z.strictObject({
   sessionId: SessionIdSchema,
   lastSeq: z.number().int().min(-1),
 });
-export const FinishSessionResponseSchema = z.object({
+export const FinishSessionResponseSchema = z.strictObject({
   chunks: z.number().int(),
   bytes: z.number(),
 });

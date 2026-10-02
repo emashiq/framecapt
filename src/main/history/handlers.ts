@@ -10,7 +10,7 @@ import { log } from '../logger';
 import type { Mp4Capability } from '../media/export';
 import { getMainWindow } from '../windows';
 import type { ExportService } from './export-service';
-import { copyFileAtomic } from './files';
+import { copyFileAtomic, isOpenableMedia } from './files';
 import type { HistoryService } from './service';
 
 function requireItem(history: HistoryService, id: string) {
@@ -73,6 +73,9 @@ export function registerHistoryHandlers(
 
   handle('history:open', { roles: ['main'] }, async (request) => {
     const item = requireItem(history, request.id);
+    if (!isOpenableMedia(item.path)) {
+      throw new IpcError('INVALID_PAYLOAD', 'Only images and videos can be opened from here.');
+    }
     await requireFile(item.path);
     const failure = await shell.openPath(item.path);
     if (failure) {

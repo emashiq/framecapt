@@ -1,0 +1,3872 @@
+{
+  "benchmark": "recording",
+  "startedAt": "2026-10-02T13:59:28.492Z",
+  "plan": {
+    "durationMin": 3,
+    "sampleSec": 5,
+    "warmupSec": 120,
+    "preset": "1080p",
+    "fps": 30,
+    "systemAudio": true,
+    "mic": false
+  },
+  "environment": {
+    "os": "Windows_NT 10.0.26300 (Windows 11 Pro)",
+    "cpu": "AMD Ryzen 7 7700 8-Core Processor",
+    "logicalCores": 16,
+    "ramGiB": 63.1,
+    "node": "v24.15.0",
+    "ffmpeg": "ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+    "app": {
+      "version": "0.1.0",
+      "electron": "44.5.1",
+      "chrome": "152.0.7977.130",
+      "isPackaged": false
+    },
+    "displays": [
+      {
+        "bounds": {
+          "x": 3440,
+          "y": 0,
+          "width": 2560,
+          "height": 1440
+        },
+        "scaleFactor": 1,
+        "physicalSize": {
+          "width": 2560,
+          "height": 1440
+        },
+        "isPrimary": false
+      },
+      {
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 3440,
+          "height": 1440
+        },
+        "scaleFactor": 1,
+        "physicalSize": {
+          "width": 3440,
+          "height": 1440
+        },
+        "isPrimary": true
+      }
+    ]
+  },
+  "build": "production bundle (.vite/build), check-no-mocks OK, launched as `electron .` with a temporary userData",
+  "notes": [],
+  "beacon": {
+    "bounds": {
+      "x": 40,
+      "y": 40,
+      "width": 200,
+      "height": 200
+    },
+    "contentBounds": {
+      "x": 40,
+      "y": 40,
+      "width": 200,
+      "height": 200
+    },
+    "scaleFactor": 1,
+    "display": {
+      "id": "111732923",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      },
+      "size": {
+        "width": 3440,
+        "height": 1440
+      }
+    }
+  },
+  "idle": {
+    "seconds": 10.4,
+    "processes": 6,
+    "electronMetricsPercentOfOneCore": 0.317,
+    "osCpuPercentOfOneCore": 0.289,
+    "note": "app open (main window, no recording yet, recorder window not created); Electron percentCPUUsage x logical cores, and the OS TotalProcessorTime delta"
+  },
+  "recordingStartedAtEpochMs": 1790949592212,
+  "finishedAt": "2026-10-02T14:03:08.407Z",
+  "recording": {
+    "sessionId": "[session id]",
+    "wallSecondsRecording": 180,
+    "appActiveSeconds": 180.58,
+    "stopToCompletedSeconds": 0.5,
+    "outputBytes": 89903351,
+    "unindexed": false,
+    "stats": {
+      "queueHighWaterChunks": 1,
+      "queueHighWaterBytes": 760475,
+      "mainQueueHighWater": 1,
+      "maxWriteMs": 74.80650000000605
+    },
+    "beaconRanSeconds": 219
+  },
+  "output": {
+    "probe": {
+      "container": "matroska,webm",
+      "sizeBytes": 89903351,
+      "durationSec": 180.583,
+      "bitRateKbps": 3983,
+      "video": {
+        "codec": "vp9",
+        "width": 1920,
+        "height": 804,
+        "avgFrameRate": "30/1",
+        "rFrameRate": "30/1"
+      },
+      "audio": {
+        "codec": "opus",
+        "sampleRate": 48000,
+        "channels": 2
+      }
+    },
+    "frames": {
+      "decoded": 5415,
+      "decodeSeconds": 9,
+      "avgFps": 29.991,
+      "videoSeconds": 180.556,
+      "packets": 5416,
+      "spanSec": 180.523,
+      "meanGapMs": 33.34,
+      "p50GapMs": 33,
+      "p99GapMs": 35,
+      "maxGapMs": 100,
+      "gapsOver100ms": 0,
+      "gapsOver250ms": 0,
+      "minFramesInASecond": 30,
+      "secondsBelow25fps": 0
+    },
+    "audioSeconds": 180.58,
+    "avgFpsFromContainer": 29.992,
+    "audioMinusVideoDurationSec": 0.024,
+    "containerMinusAppSeconds": 0
+  },
+  "avSync": {
+    "method": "beep onsets (1 kHz band, silencedetect) vs flash onsets (beacon crop brightness) in the recorded file; offset = flash minus beep",
+    "beaconCropInVideo": {
+      "x": 45,
+      "y": 45,
+      "width": 67,
+      "height": 67
+    },
+    "start": {
+      "fromSec": 5,
+      "lengthSec": 45,
+      "beepsDetected": 5,
+      "flashesDetected": 5,
+      "videoFramesAnalysed": 1350,
+      "maxBrightness": 255,
+      "beepOnsetsSec": [
+        4.672,
+        14.685,
+        24.696,
+        34.708,
+        44.719
+      ],
+      "flashOnsetsSec": [
+        4.724,
+        14.724,
+        24.757,
+        34.791,
+        44.79
+      ],
+      "pairs": 5,
+      "offsetsMs": [
+        52,
+        39,
+        61,
+        83,
+        71
+      ],
+      "medianOffsetMs": 61,
+      "meanOffsetMs": 61.2
+    },
+    "end": {
+      "fromSec": 130.583,
+      "lengthSec": 45,
+      "beepsDetected": 4,
+      "flashesDetected": 4,
+      "videoFramesAnalysed": 1350,
+      "maxBrightness": 255,
+      "beepOnsetsSec": [
+        9.239,
+        19.25,
+        29.261,
+        39.272
+      ],
+      "flashOnsetsSec": [
+        9.309,
+        19.342,
+        29.342,
+        39.375
+      ],
+      "pairs": 4,
+      "offsetsMs": [
+        70,
+        92,
+        81,
+        103
+      ],
+      "medianOffsetMs": 92,
+      "meanOffsetMs": 86.5
+    },
+    "driftMs": 25.3,
+    "driftMedianMs": 31,
+    "driftNote": "drift = mean(end offsets) - mean(start offsets) (the beeps are 10.0111 s apart so successive beeps fall on different phases of the 30 fps frame grid and the quantisation averages out); constant latencies cancel"
+  },
+  "process": {
+    "samples": 36,
+    "cpuPercentOfOneCore": {
+      "avg": 72.22,
+      "avgAfterWarmup": 72.77,
+      "p95": 74.47,
+      "max": 75.76,
+      "avgOfWholeMachinePercent": 4.51
+    },
+    "cpuByType": {
+      "Browser": {
+        "cpuAvg": 21.5,
+        "cpuMax": 27.9,
+        "workingSetAtWarmupMB": 245.2,
+        "workingSetAtEndMB": 244.5,
+        "privateAtWarmupMB": 200.9,
+        "privateAtEndMB": 200
+      },
+      "GPU": {
+        "cpuAvg": 10.49,
+        "cpuMax": 20.56,
+        "workingSetAtWarmupMB": 249.6,
+        "workingSetAtEndMB": 249.6,
+        "privateAtWarmupMB": 220.2,
+        "privateAtEndMB": 220.3
+      },
+      "Utility": {
+        "cpuAvg": 0.81,
+        "cpuMax": 0.88,
+        "workingSetAtWarmupMB": 271.3,
+        "workingSetAtEndMB": 271.3,
+        "privateAtWarmupMB": 83.3,
+        "privateAtEndMB": 83.3
+      },
+      "Tab": {
+        "cpuAvg": 39.42,
+        "cpuMax": 42.47,
+        "workingSetAtWarmupMB": 527.1,
+        "workingSetAtEndMB": 527.5,
+        "privateAtWarmupMB": 303.6,
+        "privateAtEndMB": 303.7
+      }
+    },
+    "memory": {
+      "warmupAtSec": 120,
+      "workingSetAtWarmupMB": 1293.2,
+      "workingSetAtEndMB": 1292.9,
+      "workingSetGrowthMB": -0.3,
+      "workingSetMaxMB": 1327.5,
+      "privateAtWarmupMB": 808,
+      "privateAtEndMB": 807.3,
+      "privateGrowthMB": -0.7,
+      "privateMaxMB": 920.3,
+      "workingSetSlopeMBPerMinAfterWarmup": -0.534,
+      "privateSlopeMBPerMinAfterWarmup": -1.002
+    },
+    "processCountMin": 8,
+    "processCountMax": 8,
+    "osCpuSecondsPerPid": {
+      "8556": 9.66,
+      "9332": 19.34,
+      "16500": 1.25,
+      "30260": 38.61,
+      "34160": 0.09,
+      "57276": 0,
+      "64660": 2.09,
+      "66504": 59.95
+    },
+    "osCpuAvgPercentOfOneCore": 72.77,
+    "osCpuNote": "TotalProcessorTime deltas of the processes alive at both ends (start/end of the recording); a cross-check of getAppMetrics",
+    "machineCpuPercentAvg": 15.9,
+    "machineCpuPercentMax": 21
+  },
+  "recorderWindow": {
+    "jsHeapAtWarmupMB": 13.6,
+    "jsHeapAtEndMB": 13.6,
+    "jsHeapMaxMB": 13.6,
+    "activeLoopsDuringRecording": [
+      [
+        2,
+        [
+          "crop-timer",
+          "level-sampler"
+        ]
+      ]
+    ],
+    "liveTracksDuringRecording": [
+      4
+    ],
+    "audioContextsDuringRecording": [
+      1
+    ],
+    "afterStop": {
+      "liveTracks": 0,
+      "openAudioContexts": 0,
+      "activeLoops": 0,
+      "loopNames": [],
+      "activeRecorders": 0
+    }
+  },
+  "queue": {
+    "rendererQueueHighWaterChunks": 1,
+    "rendererQueueHighWaterBytes": 760475,
+    "mainQueueHighWater": 1,
+    "slowestWriteMs": 74.8,
+    "chunksWritten": 175,
+    "limits": {
+      "maxPendingChunks": 16,
+      "maxPendingBytes": 67108864
+    }
+  },
+  "disk": {
+    "streamBytesAtEnd": 89407429,
+    "avgGrowthMBPerMin": 28.37,
+    "finalFileMB": 85.7,
+    "streamVsFinalNote": "stream.webm (live MediaRecorder file) vs the remuxed output; the session folder is deleted after publishing"
+  },
+  "afterStopMetrics": [
+    {
+      "type": "Browser",
+      "workingSetMB": 175.8
+    },
+    {
+      "type": "GPU",
+      "workingSetMB": 256.6
+    },
+    {
+      "type": "Utility",
+      "workingSetMB": 74.6
+    },
+    {
+      "type": "Tab",
+      "workingSetMB": 146.1
+    },
+    {
+      "type": "Utility",
+      "workingSetMB": 82.4
+    },
+    {
+      "type": "Utility",
+      "workingSetMB": 114.3
+    },
+    {
+      "type": "Tab",
+      "workingSetMB": 133.1
+    }
+  ],
+  "samples": [
+    {
+      "t": 5,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 27.9,
+          "wakeups": 0,
+          "workingSetMB": 253.4,
+          "privateMB": 211.3
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 20.56,
+          "wakeups": 0,
+          "workingSetMB": 278,
+          "privateMB": 310.9
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0.02,
+          "wakeups": 0,
+          "workingSetMB": 74.8,
+          "privateMB": 11.8
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.83,
+          "wakeups": 0,
+          "workingSetMB": 114.8,
+          "privateMB": 50.8
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.74,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.4,
+          "privateMB": 61.5
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 291.6,
+          "privateMB": 218.3
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 118.1,
+          "privateMB": 45.1
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 51.12,
+        "workingSetMB": 1327.5,
+        "privateMB": 920.3
+      },
+      "machineCpuPercent": 16.8,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 5,
+        "bytesWritten": 2638164,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 699691,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 2638164
+    },
+    {
+      "t": 10,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 22.34,
+          "wakeups": 0,
+          "workingSetMB": 249.2,
+          "privateMB": 205.8
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.12,
+          "wakeups": 0,
+          "workingSetMB": 247.4,
+          "privateMB": 219.4
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.8,
+          "privateMB": 11.8
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 2.21,
+          "wakeups": 0,
+          "workingSetMB": 110.7,
+          "privateMB": 45.3
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.75,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.08,
+          "wakeups": 0,
+          "workingSetMB": 114.4,
+          "privateMB": 61.5
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 35.14,
+          "wakeups": 0,
+          "workingSetMB": 298.7,
+          "privateMB": 222.4
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.12,
+          "wakeups": 0,
+          "workingSetMB": 121.8,
+          "privateMB": 47.9
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 75.76,
+        "workingSetMB": 1299.4,
+        "privateMB": 824.7
+      },
+      "machineCpuPercent": 14.7,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 10,
+        "bytesWritten": 5131091,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 699691,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 5131091
+    },
+    {
+      "t": 15,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.23,
+          "wakeups": 0,
+          "workingSetMB": 254.1,
+          "privateMB": 211.1
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.1,
+          "wakeups": 0,
+          "workingSetMB": 248.5,
+          "privateMB": 220.3
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.8,
+          "privateMB": 11.8
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.44,
+          "wakeups": 0,
+          "workingSetMB": 110.8,
+          "privateMB": 45.3
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.75,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.4,
+          "privateMB": 61.5
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.31,
+          "wakeups": 0,
+          "workingSetMB": 303.2,
+          "privateMB": 227.1
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5,
+          "wakeups": 0,
+          "workingSetMB": 119.3,
+          "privateMB": 45.1
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.9,
+        "workingSetMB": 1307.5,
+        "privateMB": 832.8
+      },
+      "machineCpuPercent": 12.6,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 10,
+        "bytesWritten": 5131091,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 699691,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 7233773
+    },
+    {
+      "t": 20,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.81,
+          "wakeups": 0,
+          "workingSetMB": 256.2,
+          "privateMB": 212.9
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.25,
+          "wakeups": 0,
+          "workingSetMB": 248.5,
+          "privateMB": 220.5
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.8,
+          "privateMB": 11.8
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.45,
+          "wakeups": 0,
+          "workingSetMB": 110.8,
+          "privateMB": 45.3
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.73,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.08,
+          "wakeups": 0,
+          "workingSetMB": 114.4,
+          "privateMB": 61.5
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.43,
+          "wakeups": 0,
+          "workingSetMB": 302.2,
+          "privateMB": 225.9
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.93,
+          "wakeups": 0,
+          "workingSetMB": 122.6,
+          "privateMB": 46.6
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.68,
+        "workingSetMB": 1311.9,
+        "privateMB": 835.1
+      },
+      "machineCpuPercent": 15.2,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 15,
+        "bytesWritten": 7640197,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 699691,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 9622338
+    },
+    {
+      "t": 25,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.21,
+          "wakeups": 0,
+          "workingSetMB": 259.7,
+          "privateMB": 216.3
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.08,
+          "wakeups": 0,
+          "workingSetMB": 247.6,
+          "privateMB": 219.3
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.8,
+          "privateMB": 11.8
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.44,
+          "wakeups": 0,
+          "workingSetMB": 110.8,
+          "privateMB": 45.3
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.71,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.4,
+          "privateMB": 61.5
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.68,
+          "wakeups": 0,
+          "workingSetMB": 305.9,
+          "privateMB": 229.4
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.96,
+          "wakeups": 0,
+          "workingSetMB": 124.8,
+          "privateMB": 48.4
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.15,
+        "workingSetMB": 1320.4,
+        "privateMB": 842.6
+      },
+      "machineCpuPercent": 17,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 20,
+        "bytesWritten": 10207992,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 699691,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 12337675
+    },
+    {
+      "t": 30,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 22.07,
+          "wakeups": 0,
+          "workingSetMB": 244,
+          "privateMB": 200.3
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.44,
+          "wakeups": 0,
+          "workingSetMB": 248.6,
+          "privateMB": 220.4
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.8,
+          "privateMB": 11.8
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.47,
+          "wakeups": 0,
+          "workingSetMB": 110.9,
+          "privateMB": 45.3
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.75,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.4,
+          "privateMB": 61.5
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.97,
+          "wakeups": 0,
+          "workingSetMB": 288.2,
+          "privateMB": 209.7
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.7,
+          "wakeups": 0,
+          "workingSetMB": 119,
+          "privateMB": 41.2
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 74.47,
+        "workingSetMB": 1282.3,
+        "privateMB": 800.8
+      },
+      "machineCpuPercent": 21,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 25,
+        "bytesWritten": 12756862,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 741941,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 14705612
+    },
+    {
+      "t": 35,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.43,
+          "wakeups": 0,
+          "workingSetMB": 248.5,
+          "privateMB": 204.8
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.27,
+          "wakeups": 0,
+          "workingSetMB": 248.7,
+          "privateMB": 220.3
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.8,
+          "privateMB": 11.8
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.47,
+          "wakeups": 0,
+          "workingSetMB": 110.9,
+          "privateMB": 45.3
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.4,
+          "privateMB": 61.5
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.71,
+          "wakeups": 0,
+          "workingSetMB": 294.6,
+          "privateMB": 216.4
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.26,
+          "wakeups": 0,
+          "workingSetMB": 117.2,
+          "privateMB": 40.2
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.93,
+        "workingSetMB": 1291.5,
+        "privateMB": 810.9
+      },
+      "machineCpuPercent": 18.3,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 30,
+        "bytesWritten": 15452569,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 17418499
+    },
+    {
+      "t": 40,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.11,
+          "wakeups": 0,
+          "workingSetMB": 246.2,
+          "privateMB": 202.5
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.16,
+          "wakeups": 0,
+          "workingSetMB": 248,
+          "privateMB": 219.8
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0.01,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.5,
+          "wakeups": 0,
+          "workingSetMB": 108.8,
+          "privateMB": 43
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.08,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 32.68,
+          "wakeups": 0,
+          "workingSetMB": 297.6,
+          "privateMB": 219.3
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.97,
+          "wakeups": 0,
+          "workingSetMB": 119.6,
+          "privateMB": 42.5
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.23,
+        "workingSetMB": 1291.5,
+        "privateMB": 810.6
+      },
+      "machineCpuPercent": 16.6,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 35,
+        "bytesWritten": 17805601,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 19763042
+    },
+    {
+      "t": 45,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.46,
+          "wakeups": 0,
+          "workingSetMB": 241,
+          "privateMB": 197.3
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.17,
+          "wakeups": 0,
+          "workingSetMB": 248,
+          "privateMB": 219.6
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0.01,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.48,
+          "wakeups": 0,
+          "workingSetMB": 108.8,
+          "privateMB": 43
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.73,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 35.12,
+          "wakeups": 0,
+          "workingSetMB": 295.5,
+          "privateMB": 217.2
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.92,
+          "wakeups": 0,
+          "workingSetMB": 120.5,
+          "privateMB": 43.2
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.96,
+        "workingSetMB": 1285.1,
+        "privateMB": 803.8
+      },
+      "machineCpuPercent": 19.3,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 40,
+        "bytesWritten": 20363564,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 22443128
+    },
+    {
+      "t": 50,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.31,
+          "wakeups": 0,
+          "workingSetMB": 243.2,
+          "privateMB": 199.3
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.11,
+          "wakeups": 0,
+          "workingSetMB": 248.1,
+          "privateMB": 219.8
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.49,
+          "wakeups": 0,
+          "workingSetMB": 108.2,
+          "privateMB": 42.5
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.71,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 32.92,
+          "wakeups": 0,
+          "workingSetMB": 298.2,
+          "privateMB": 219.7
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.82,
+          "wakeups": 0,
+          "workingSetMB": 122.1,
+          "privateMB": 45.1
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.43,
+        "workingSetMB": 1291.1,
+        "privateMB": 809.9
+      },
+      "machineCpuPercent": 15.9,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 45,
+        "bytesWritten": 22867294,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 24859556
+    },
+    {
+      "t": 55,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.09,
+          "wakeups": 0,
+          "workingSetMB": 249.6,
+          "privateMB": 205.9
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.13,
+          "wakeups": 0,
+          "workingSetMB": 248.1,
+          "privateMB": 219.6
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.46,
+          "wakeups": 0,
+          "workingSetMB": 108.2,
+          "privateMB": 42.4
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.86,
+          "wakeups": 0,
+          "workingSetMB": 292.9,
+          "privateMB": 213.7
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.87,
+          "wakeups": 0,
+          "workingSetMB": 123.6,
+          "privateMB": 46.5
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.2,
+        "workingSetMB": 1293.7,
+        "privateMB": 811.6
+      },
+      "machineCpuPercent": 16.6,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 50,
+        "bytesWritten": 25516327,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 27500969
+    },
+    {
+      "t": 60,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.2,
+          "wakeups": 0,
+          "workingSetMB": 245,
+          "privateMB": 201.1
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.26,
+          "wakeups": 0,
+          "workingSetMB": 249.7,
+          "privateMB": 221
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.45,
+          "wakeups": 0,
+          "workingSetMB": 108.2,
+          "privateMB": 42.4
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.71,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.16,
+          "wakeups": 0,
+          "workingSetMB": 293.7,
+          "privateMB": 214.4
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.95,
+          "wakeups": 0,
+          "workingSetMB": 123.7,
+          "privateMB": 46.6
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.8,
+        "workingSetMB": 1291.6,
+        "privateMB": 809
+      },
+      "machineCpuPercent": 16.7,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 55,
+        "bytesWritten": 27915105,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 29936095,
+      "status": "recording"
+    },
+    {
+      "t": 65,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 20.98,
+          "wakeups": 0,
+          "workingSetMB": 244.2,
+          "privateMB": 200.2
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.12,
+          "wakeups": 0,
+          "workingSetMB": 248,
+          "privateMB": 219.1
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.47,
+          "wakeups": 0,
+          "workingSetMB": 108.3,
+          "privateMB": 42.5
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.71,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.96,
+          "wakeups": 0,
+          "workingSetMB": 298.3,
+          "privateMB": 219.3
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.27,
+          "wakeups": 0,
+          "workingSetMB": 123.9,
+          "privateMB": 46.5
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.58,
+        "workingSetMB": 1294,
+        "privateMB": 811.1
+      },
+      "machineCpuPercent": 16,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 60,
+        "bytesWritten": 30650499,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 0.4,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 32201205
+    },
+    {
+      "t": 70,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.21,
+          "wakeups": 0,
+          "workingSetMB": 240.4,
+          "privateMB": 196.1
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.07,
+          "wakeups": 0,
+          "workingSetMB": 248.1,
+          "privateMB": 219.3
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.47,
+          "wakeups": 0,
+          "workingSetMB": 107.8,
+          "privateMB": 41.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.3,
+          "wakeups": 0,
+          "workingSetMB": 293.5,
+          "privateMB": 214.3
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.73,
+          "wakeups": 0,
+          "workingSetMB": 123.8,
+          "privateMB": 46.1
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.57,
+        "workingSetMB": 1284.9,
+        "privateMB": 801.2
+      },
+      "machineCpuPercent": 16.6,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 65,
+        "bytesWritten": 33017412,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 1.1,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 34570826
+    },
+    {
+      "t": 75,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.23,
+          "wakeups": 0,
+          "workingSetMB": 245.9,
+          "privateMB": 201.9
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.24,
+          "wakeups": 0,
+          "workingSetMB": 249,
+          "privateMB": 220
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.47,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 41
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.73,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.72,
+          "wakeups": 0,
+          "workingSetMB": 297.4,
+          "privateMB": 218.5
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.74,
+          "wakeups": 0,
+          "workingSetMB": 122.9,
+          "privateMB": 45
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.2,
+        "workingSetMB": 1293.5,
+        "privateMB": 809.9
+      },
+      "machineCpuPercent": 18,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 70,
+        "bytesWritten": 35669004,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 3,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 37101418
+    },
+    {
+      "t": 80,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.53,
+          "wakeups": 0,
+          "workingSetMB": 244.1,
+          "privateMB": 200.2
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10,
+          "wakeups": 0,
+          "workingSetMB": 248,
+          "privateMB": 219.1
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.44,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 41
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.73,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.33,
+          "wakeups": 0,
+          "workingSetMB": 293.7,
+          "privateMB": 214.7
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.63,
+          "wakeups": 0,
+          "workingSetMB": 122.8,
+          "privateMB": 44.8
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.73,
+        "workingSetMB": 1286.9,
+        "privateMB": 803.3
+      },
+      "machineCpuPercent": 15.3,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 75,
+        "bytesWritten": 38061963,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 17.7,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 39613700
+    },
+    {
+      "t": 85,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.3,
+          "wakeups": 0,
+          "workingSetMB": 244.1,
+          "privateMB": 200
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.31,
+          "wakeups": 0,
+          "workingSetMB": 248.1,
+          "privateMB": 219
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.5,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 41
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.74,
+          "wakeups": 0,
+          "workingSetMB": 82.5,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.43,
+          "wakeups": 0,
+          "workingSetMB": 296.7,
+          "privateMB": 217.7
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.02,
+          "wakeups": 0,
+          "workingSetMB": 123.1,
+          "privateMB": 45
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.37,
+        "workingSetMB": 1290.4,
+        "privateMB": 806.2
+      },
+      "machineCpuPercent": 17,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 80,
+        "bytesWritten": 40735855,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 17.7,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 42301109
+    },
+    {
+      "t": 90,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.86,
+          "wakeups": 0,
+          "workingSetMB": 245.4,
+          "privateMB": 201.1
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.27,
+          "wakeups": 0,
+          "workingSetMB": 249.1,
+          "privateMB": 220.1
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.46,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 41
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.76,
+          "wakeups": 0,
+          "workingSetMB": 82.5,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.24,
+          "wakeups": 0,
+          "workingSetMB": 291.1,
+          "privateMB": 211.6
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.01,
+          "wakeups": 0,
+          "workingSetMB": 123.2,
+          "privateMB": 45.1
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.67,
+        "workingSetMB": 1287.2,
+        "privateMB": 802.4
+      },
+      "machineCpuPercent": 16.5,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 85,
+        "bytesWritten": 43125879,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 44640862
+    },
+    {
+      "t": 95,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.07,
+          "wakeups": 0,
+          "workingSetMB": 244.4,
+          "privateMB": 200.2
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.2,
+          "wakeups": 0,
+          "workingSetMB": 249.1,
+          "privateMB": 220
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.48,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 41
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.76,
+          "wakeups": 0,
+          "workingSetMB": 82.5,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.54,
+          "wakeups": 0,
+          "workingSetMB": 296.3,
+          "privateMB": 217.1
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.13,
+          "wakeups": 0,
+          "workingSetMB": 123.8,
+          "privateMB": 45.9
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.25,
+        "workingSetMB": 1292,
+        "privateMB": 807.7
+      },
+      "machineCpuPercent": 15.8,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 90,
+        "bytesWritten": 45719124,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 47251751
+    },
+    {
+      "t": 100,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 19.8,
+          "wakeups": 0,
+          "workingSetMB": 246.9,
+          "privateMB": 202.3
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.3,
+          "wakeups": 0,
+          "workingSetMB": 249.3,
+          "privateMB": 220.1
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0.01,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.47,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 41
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.76,
+          "wakeups": 0,
+          "workingSetMB": 82.5,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.18,
+          "wakeups": 0,
+          "workingSetMB": 298.5,
+          "privateMB": 219.2
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.21,
+          "wakeups": 0,
+          "workingSetMB": 123.6,
+          "privateMB": 45.6
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 70.8,
+        "workingSetMB": 1296.7,
+        "privateMB": 811.7
+      },
+      "machineCpuPercent": 16.4,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 95,
+        "bytesWritten": 48126061,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 49688492
+    },
+    {
+      "t": 105,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.2,
+          "wakeups": 0,
+          "workingSetMB": 242.3,
+          "privateMB": 197.7
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.39,
+          "wakeups": 0,
+          "workingSetMB": 249.5,
+          "privateMB": 220.1
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.47,
+          "wakeups": 0,
+          "workingSetMB": 106.8,
+          "privateMB": 40.8
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.78,
+          "wakeups": 0,
+          "workingSetMB": 82.5,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.08,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.45,
+          "wakeups": 0,
+          "workingSetMB": 295.7,
+          "privateMB": 216.2
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5,
+          "wakeups": 0,
+          "workingSetMB": 123.6,
+          "privateMB": 45.5
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.37,
+        "workingSetMB": 1289.3,
+        "privateMB": 803.8
+      },
+      "machineCpuPercent": 17.6,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 100,
+        "bytesWritten": 50825245,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 52329484
+    },
+    {
+      "t": 110,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.39,
+          "wakeups": 0,
+          "workingSetMB": 247.2,
+          "privateMB": 202.9
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.3,
+          "wakeups": 0,
+          "workingSetMB": 249.5,
+          "privateMB": 220.3
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.6
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.45,
+          "wakeups": 0,
+          "workingSetMB": 106.9,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.76,
+          "wakeups": 0,
+          "workingSetMB": 82.5,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.3
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.8,
+          "wakeups": 0,
+          "workingSetMB": 297.9,
+          "privateMB": 218.4
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.78,
+          "wakeups": 0,
+          "workingSetMB": 124,
+          "privateMB": 45.9
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.55,
+        "workingSetMB": 1296.9,
+        "privateMB": 811.9
+      },
+      "machineCpuPercent": 17.1,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 105,
+        "bytesWritten": 53195487,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 54739258
+    },
+    {
+      "t": 115,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.43,
+          "wakeups": 0,
+          "workingSetMB": 242.1,
+          "privateMB": 197.9
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.21,
+          "wakeups": 0,
+          "workingSetMB": 249.5,
+          "privateMB": 220.1
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0.01,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.5
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.44,
+          "wakeups": 0,
+          "workingSetMB": 106.9,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.74,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.08,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 35.41,
+          "wakeups": 0,
+          "workingSetMB": 293.3,
+          "privateMB": 213.7
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.75,
+          "wakeups": 0,
+          "workingSetMB": 123.7,
+          "privateMB": 45.6
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 74.07,
+        "workingSetMB": 1286.8,
+        "privateMB": 801.5
+      },
+      "machineCpuPercent": 16.5,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 110,
+        "bytesWritten": 55835861,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 56667616
+    },
+    {
+      "t": 120,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.03,
+          "wakeups": 0,
+          "workingSetMB": 245.2,
+          "privateMB": 200.9
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.19,
+          "wakeups": 0,
+          "workingSetMB": 249.6,
+          "privateMB": 220.2
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.5
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.44,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.36,
+          "wakeups": 0,
+          "workingSetMB": 296.5,
+          "privateMB": 217.2
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.9,
+          "wakeups": 0,
+          "workingSetMB": 123.6,
+          "privateMB": 45.5
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.71,
+        "workingSetMB": 1293.2,
+        "privateMB": 808
+      },
+      "machineCpuPercent": 13,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 115,
+        "bytesWritten": 58209140,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 59356005,
+      "status": "recording"
+    },
+    {
+      "t": 125,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.61,
+          "wakeups": 0,
+          "workingSetMB": 244.9,
+          "privateMB": 200.5
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.12,
+          "wakeups": 0,
+          "workingSetMB": 248.3,
+          "privateMB": 218.8
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.5
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.47,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 41.1
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.8,
+          "wakeups": 0,
+          "workingSetMB": 298.7,
+          "privateMB": 219.4
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.94,
+          "wakeups": 0,
+          "workingSetMB": 123.5,
+          "privateMB": 45.4
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.73,
+        "workingSetMB": 1293.7,
+        "privateMB": 808.5
+      },
+      "machineCpuPercent": 14.8,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 120,
+        "bytesWritten": 60887441,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 61767799
+    },
+    {
+      "t": 130,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.24,
+          "wakeups": 0,
+          "workingSetMB": 244.3,
+          "privateMB": 200
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.14,
+          "wakeups": 0,
+          "workingSetMB": 248.3,
+          "privateMB": 218.9
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.5
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.46,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 41
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.08,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.44,
+          "wakeups": 0,
+          "workingSetMB": 296,
+          "privateMB": 216.4
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.03,
+          "wakeups": 0,
+          "workingSetMB": 123.7,
+          "privateMB": 45.6
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.11,
+        "workingSetMB": 1290.6,
+        "privateMB": 805.2
+      },
+      "machineCpuPercent": 13.4,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 125,
+        "bytesWritten": 63351874,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 64498488
+    },
+    {
+      "t": 135,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.39,
+          "wakeups": 0,
+          "workingSetMB": 245.7,
+          "privateMB": 201.3
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.26,
+          "wakeups": 0,
+          "workingSetMB": 249.3,
+          "privateMB": 219.8
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0.08,
+          "wakeups": 0,
+          "workingSetMB": 74.5,
+          "privateMB": 11.4
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.45,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.73,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.1,
+          "wakeups": 0,
+          "workingSetMB": 298.6,
+          "privateMB": 219.1
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.06,
+          "wakeups": 0,
+          "workingSetMB": 124.1,
+          "privateMB": 46
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.14,
+        "workingSetMB": 1295.9,
+        "privateMB": 810.3
+      },
+      "machineCpuPercent": 18.5,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 130,
+        "bytesWritten": 66069000,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 746957,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 66908368
+    },
+    {
+      "t": 140,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.17,
+          "wakeups": 0,
+          "workingSetMB": 243.1,
+          "privateMB": 198.5
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.15,
+          "wakeups": 0,
+          "workingSetMB": 249.3,
+          "privateMB": 219.9
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.5,
+          "privateMB": 11.4
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.49,
+          "wakeups": 0,
+          "workingSetMB": 107,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.71,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.22,
+          "wakeups": 0,
+          "workingSetMB": 294.7,
+          "privateMB": 215.1
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.13,
+          "wakeups": 0,
+          "workingSetMB": 124.2,
+          "privateMB": 46.1
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.94,
+        "workingSetMB": 1289.5,
+        "privateMB": 803.7
+      },
+      "machineCpuPercent": 13.3,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 135,
+        "bytesWritten": 68506282,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 69661141
+    },
+    {
+      "t": 145,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21,
+          "wakeups": 0,
+          "workingSetMB": 243,
+          "privateMB": 198.1
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.21,
+          "wakeups": 0,
+          "workingSetMB": 249.3,
+          "privateMB": 219.8
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.5,
+          "privateMB": 11.4
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.43,
+          "wakeups": 0,
+          "workingSetMB": 107.1,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.72,
+          "wakeups": 0,
+          "workingSetMB": 296.4,
+          "privateMB": 216.9
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.7,
+          "wakeups": 0,
+          "workingSetMB": 123.5,
+          "privateMB": 45.3
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.85,
+        "workingSetMB": 1290.5,
+        "privateMB": 804.2
+      },
+      "machineCpuPercent": 13.6,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 140,
+        "bytesWritten": 71138957,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 72139734
+    },
+    {
+      "t": 150,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 22.13,
+          "wakeups": 0,
+          "workingSetMB": 243,
+          "privateMB": 198.3
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.48,
+          "wakeups": 0,
+          "workingSetMB": 250.3,
+          "privateMB": 220.9
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.5,
+          "privateMB": 11.4
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.45,
+          "wakeups": 0,
+          "workingSetMB": 107.1,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.74,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.32,
+          "wakeups": 0,
+          "workingSetMB": 293.8,
+          "privateMB": 214.1
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.88,
+          "wakeups": 0,
+          "workingSetMB": 123.5,
+          "privateMB": 45.3
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 74.07,
+        "workingSetMB": 1288.9,
+        "privateMB": 802.7
+      },
+      "machineCpuPercent": 16.4,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 145,
+        "bytesWritten": 73550563,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 74649270
+    },
+    {
+      "t": 155,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 20.9,
+          "wakeups": 0,
+          "workingSetMB": 245.8,
+          "privateMB": 201.1
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.18,
+          "wakeups": 0,
+          "workingSetMB": 250.3,
+          "privateMB": 220.8
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.5,
+          "privateMB": 11.4
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.45,
+          "wakeups": 0,
+          "workingSetMB": 107.1,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.71,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.58,
+          "wakeups": 0,
+          "workingSetMB": 296,
+          "privateMB": 216.4
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.96,
+          "wakeups": 0,
+          "workingSetMB": 123.6,
+          "privateMB": 45.4
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.85,
+        "workingSetMB": 1294,
+        "privateMB": 807.8
+      },
+      "machineCpuPercent": 14.4,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 150,
+        "bytesWritten": 76181073,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 77252946
+    },
+    {
+      "t": 160,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.6,
+          "wakeups": 0,
+          "workingSetMB": 247.8,
+          "privateMB": 203.2
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.3,
+          "wakeups": 0,
+          "workingSetMB": 248.9,
+          "privateMB": 219.5
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.5,
+          "privateMB": 11.4
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.46,
+          "wakeups": 0,
+          "workingSetMB": 107.1,
+          "privateMB": 40.9
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 33.77,
+          "wakeups": 0,
+          "workingSetMB": 298.3,
+          "privateMB": 218.8
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.89,
+          "wakeups": 0,
+          "workingSetMB": 124.3,
+          "privateMB": 46.2
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.81,
+        "workingSetMB": 1297.6,
+        "privateMB": 811.8
+      },
+      "machineCpuPercent": 16.2,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 155,
+        "bytesWritten": 78583088,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 79697682
+    },
+    {
+      "t": 165,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 20.95,
+          "wakeups": 0,
+          "workingSetMB": 243.7,
+          "privateMB": 199.2
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.11,
+          "wakeups": 0,
+          "workingSetMB": 249.9,
+          "privateMB": 220.4
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.5
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.44,
+          "wakeups": 0,
+          "workingSetMB": 107.1,
+          "privateMB": 41.1
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.72,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.89,
+          "wakeups": 0,
+          "workingSetMB": 295,
+          "privateMB": 215.3
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.91,
+          "wakeups": 0,
+          "workingSetMB": 124.3,
+          "privateMB": 46.2
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.09,
+        "workingSetMB": 1291.3,
+        "privateMB": 805.5
+      },
+      "machineCpuPercent": 14.3,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 160,
+        "bytesWritten": 81250354,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 81671121
+    },
+    {
+      "t": 170,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.61,
+          "wakeups": 0,
+          "workingSetMB": 246.8,
+          "privateMB": 202.4
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.15,
+          "wakeups": 0,
+          "workingSetMB": 249.9,
+          "privateMB": 220.5
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.5
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.43,
+          "wakeups": 0,
+          "workingSetMB": 107.1,
+          "privateMB": 41.2
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.71,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 32.83,
+          "wakeups": 0,
+          "workingSetMB": 297.4,
+          "privateMB": 217.7
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.03,
+          "wakeups": 0,
+          "workingSetMB": 123.8,
+          "privateMB": 45.5
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 71.83,
+        "workingSetMB": 1296.3,
+        "privateMB": 810.6
+      },
+      "machineCpuPercent": 13.1,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 165,
+        "bytesWritten": 83662637,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 84401386
+    },
+    {
+      "t": 175,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 20.73,
+          "wakeups": 0,
+          "workingSetMB": 241.6,
+          "privateMB": 197.2
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.09,
+          "wakeups": 0,
+          "workingSetMB": 248.6,
+          "privateMB": 219.1
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.5
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.46,
+          "wakeups": 0,
+          "workingSetMB": 107.2,
+          "privateMB": 41.2
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.71,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.07,
+          "wakeups": 0,
+          "workingSetMB": 293.8,
+          "privateMB": 214.1
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 5.28,
+          "wakeups": 0,
+          "workingSetMB": 124.2,
+          "privateMB": 46
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 72.41,
+        "workingSetMB": 1286.7,
+        "privateMB": 800.9
+      },
+      "machineCpuPercent": 13.7,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 170,
+        "bytesWritten": 86324911,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 86746244
+    },
+    {
+      "t": 180,
+      "processes": [
+        {
+          "pid": 30260,
+          "type": "Browser",
+          "cpu": 21.61,
+          "wakeups": 0,
+          "workingSetMB": 244.5,
+          "privateMB": 200
+        },
+        {
+          "pid": 9332,
+          "type": "GPU",
+          "cpu": 10.28,
+          "wakeups": 0,
+          "workingSetMB": 249.6,
+          "privateMB": 220.3
+        },
+        {
+          "pid": 57276,
+          "type": "Utility",
+          "cpu": 0,
+          "wakeups": 0,
+          "workingSetMB": 74.6,
+          "privateMB": 11.5
+        },
+        {
+          "pid": 64660,
+          "type": "Tab",
+          "cpu": 1.46,
+          "wakeups": 0,
+          "workingSetMB": 107.3,
+          "privateMB": 41.3
+        },
+        {
+          "pid": 16500,
+          "type": "Utility",
+          "cpu": 0.73,
+          "wakeups": 0,
+          "workingSetMB": 82.4,
+          "privateMB": 10.6
+        },
+        {
+          "pid": 34160,
+          "type": "Utility",
+          "cpu": 0.07,
+          "wakeups": 0,
+          "workingSetMB": 114.3,
+          "privateMB": 61.2
+        },
+        {
+          "pid": 66504,
+          "type": "Tab",
+          "cpu": 34.71,
+          "wakeups": 0,
+          "workingSetMB": 296.6,
+          "privateMB": 217
+        },
+        {
+          "pid": 8556,
+          "type": "Tab",
+          "cpu": 4.65,
+          "wakeups": 0,
+          "workingSetMB": 123.6,
+          "privateMB": 45.4
+        }
+      ],
+      "totals": {
+        "processes": 8,
+        "cpuPercentOfOneCore": 73.51,
+        "workingSetMB": 1292.9,
+        "privateMB": 807.3
+      },
+      "machineCpuPercent": 14.3,
+      "recorder": {
+        "liveTracks": 4,
+        "audioContexts": 1,
+        "activeLoops": 2,
+        "loopNames": [
+          "crop-timer",
+          "level-sampler"
+        ],
+        "activeRecorders": 1,
+        "jsHeapUsedMB": 13.6
+      },
+      "session": {
+        "chunksWritten": 175,
+        "bytesWritten": 88697968,
+        "queueHighWaterChunks": 1,
+        "queueHighWaterBytes": 760475,
+        "mainQueueHighWater": 1,
+        "maxWriteMs": 74.8,
+        "state": "recording"
+      },
+      "streamBytesOnDisk": 89407429,
+      "status": "recording"
+    }
+  ],
+  "cleanup": {
+    "sessionDirRemoved": true,
+    "partialFilesLeft": []
+  }
+}

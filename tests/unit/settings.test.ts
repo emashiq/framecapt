@@ -141,9 +141,10 @@ describe('patches', () => {
   });
 
   it('the patch schema has no output folder and rejects unknown values', () => {
-    expect(
-      SettingsPatchSchema.safeParse({ screenshots: { outputDir: 'C:\\x' } }).data?.screenshots,
-    ).toEqual({});
+    // An output folder in a patch is an unknown key: rejected, never applied.
+    expect(SettingsPatchSchema.safeParse({ screenshots: { outputDir: 'C:\\x' } }).success).toBe(
+      false,
+    );
     expect(SettingsPatchSchema.safeParse({ general: { theme: 'x' } }).success).toBe(false);
     expect(SettingsPatchSchema.safeParse({ recording: { fps: 61 } }).success).toBe(false);
     // A partial patch must not fill in defaults.

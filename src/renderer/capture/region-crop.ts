@@ -134,13 +134,13 @@ export async function createCanvasTransform(
     let lastDraw = -Infinity;
     context.imageSmoothingQuality = 'medium';
     const draw = (): void => {
-      const from = rect ?? { x: 0, y: 0, width: video.videoWidth, height: video.videoHeight };
+      // No object is made per frame: the whole frame is read from the element when there is no crop.
       context.drawImage(
         video,
-        from.x,
-        from.y,
-        from.width,
-        from.height,
+        rect ? rect.x : 0,
+        rect ? rect.y : 0,
+        rect ? rect.width : video.videoWidth,
+        rect ? rect.height : video.videoHeight,
         0,
         0,
         outSize.width,

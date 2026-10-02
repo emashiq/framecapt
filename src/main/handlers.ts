@@ -110,7 +110,7 @@ export function registerHandlers(
 
   handle(
     'app:reportError',
-    { roles: ['main', 'overlay', 'toolbar', 'recorder'] },
+    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown'] },
     (report, ctx) => {
       const parts = [`Renderer error (${ctx.role}, ${report.source}): ${report.message}`];
       if (report.stack) parts.push(report.stack);

@@ -1,7 +1,24 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 export type LogLevel = 'info' | 'warn' | 'error';
+
+/**
+ * Replaces the user's home folder (every slash style, any case) with `~`: error messages and ffmpeg
+ * output name files, and a log that gets attached to a bug report must not carry the Windows user
+ * name. Pure; `home` is a parameter for the tests.
+ */
+export function redactHome(text: string, home: string = os.homedir()): string {
+  if (!home || home.length < 3) return text;
+  let result = text;
+  const variants = new Set([home, home.replaceAll('\\', '/'), home.replaceAll('\\', '\\\\')]);
+  for (const variant of variants) {
+    const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(escaped, 'gi'), '~');
+  }
+  return result;
+}
 
 export const MAX_LOG_BYTES = 2 * 1024 * 1024;
 const MAX_LINE_CHARS = 8000;
@@ -42,8 +59,9 @@ export class Logger {
 
   private write(level: LogLevel, message: string): void {
     try {
-      const text =
+      const clipped =
         message.length > MAX_LINE_CHARS ? `${message.slice(0, MAX_LINE_CHARS)}...` : message;
+      const text = redactHome(clipped);
       const line = `${new Date().toISOString()} [${level}] ${text.replace(/\r?\n/g, '\n  ')}\n`;
       this.rotateIfNeeded(Buffer.byteLength(line));
       fs.appendFileSync(this.file, line, 'utf8');

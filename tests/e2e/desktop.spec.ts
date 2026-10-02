@@ -323,13 +323,13 @@ test.describe('settings', () => {
     ).toBeVisible();
     await expect(page.getByTestId('folder-path-screenshots')).toContainText('(default)');
 
-    // The channel has no way to carry a path in a patch.
+    // The channel has no way to carry a path in a patch: it is refused outright (not ignored).
     const sneaky = await page.evaluate(() =>
       (window.framelet.invoke as (c: string, p: unknown) => Promise<unknown>)('settings:update', {
         patch: { recording: { outputDir: 'C:\\Windows' } },
       }),
     );
-    expect(sneaky).toMatchObject({ ok: true });
+    expect(sneaky).toMatchObject({ ok: false, error: { code: 'INVALID_PAYLOAD' } });
     expect(readSettings(dir).recording?.outputDir ?? null).not.toBe('C:\\Windows');
 
     await page.getByTestId('folder-default-recording').click();

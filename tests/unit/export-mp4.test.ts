@@ -49,12 +49,16 @@ function partials(): string[] {
 
 describe('mp4Args', () => {
   it('is the documented H.264 + AAC command, as an array', () => {
-    const args = mp4Args('in.webm', 'out.partial.mp4');
+    const args = mp4Args('C:/in.webm', 'C:/out.partial.mp4');
     expect(args).toEqual([
       '-hide_banner',
       '-y',
+      '-protocol_whitelist',
+      'file',
+      '-f',
+      'matroska',
       '-i',
-      'in.webm',
+      'C:/in.webm',
       '-map',
       '0:v:0',
       '-map',
@@ -78,7 +82,7 @@ describe('mp4Args', () => {
       '-progress',
       'pipe:1',
       '-nostats',
-      'out.partial.mp4',
+      'C:/out.partial.mp4',
     ]);
   });
 

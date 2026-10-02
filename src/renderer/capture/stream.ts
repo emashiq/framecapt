@@ -7,6 +7,12 @@ export interface AcquireDisplayOptions {
   /** Request Windows loopback audio. Throws `system-audio-unavailable` if no audio track arrives. */
   systemAudio: boolean;
   maxFrameRate: number;
+  /**
+   * Ask the capturer to deliver frames no larger than this (aspect kept): a recording that is
+   * scaled down to 1080p anyway then never moves full-size desktop frames around. Leave it out
+   * when the full-resolution picture is needed (a region of the screen).
+   */
+  maxSize?: { width: number; height: number } | undefined;
 }
 
 /**
@@ -30,7 +36,13 @@ export async function acquireDisplayStream(options: AcquireDisplayOptions): Prom
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: options.maxFrameRate, max: options.maxFrameRate } },
+      video: {
+        frameRate: { ideal: options.maxFrameRate, max: options.maxFrameRate },
+        ...(options.maxSize && {
+          width: { max: options.maxSize.width },
+          height: { max: options.maxSize.height },
+        }),
+      },
       audio: options.systemAudio,
     });
   } catch (error) {

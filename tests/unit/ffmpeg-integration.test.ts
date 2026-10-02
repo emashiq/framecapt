@@ -6,11 +6,13 @@
  * Set FRAMELET_WRITE_EVIDENCE=1 to write docs/evidence/phase06/ffmpeg-integration.json.
  */
 import { spawnSync } from 'node:child_process';
+import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_RECORD_OPTIONS } from '../../src/shared/recorder-ipc';
+import { mp4Args } from '../../src/main/media/export';
 import { createMediaTools, FfmpegError, resolveFfmpeg } from '../../src/main/media/ffmpeg';
 import { RecoveryService } from '../../src/main/recording/recovery';
 import { nodeSessionFs } from '../../src/main/recording/session-fs';
@@ -461,3 +463,86 @@ describe.skipIf(paths === null)('real ffmpeg: finalization and recovery', () => 
     expect(fs.existsSync(path.join(root, ID))).toBe(false);
   }, 60_000);
 });
+
+describe.skipIf(paths === null)(
+  'real ffmpeg: a crafted file cannot make the tools reach the network',
+  () => {
+    const tools = createMediaTools(() => resolveFfmpeg(location));
+
+    /** A local HTTP server that records every request it receives. */
+    async function withServer<T>(body: (url: string, hits: string[]) => Promise<T>): Promise<T> {
+      const hits: string[] = [];
+      const server = http.createServer((request, response) => {
+        hits.push(`${request.method} ${request.url}`);
+        response.statusCode = 404;
+        response.end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address() as { port: number };
+      try {
+        return await body(`http://127.0.0.1:${port}`, hits);
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    }
+
+    it('a crafted playlist (what a user could re-link) is never fetched by the probe or the export', async () => {
+      const work = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-ffnet-'));
+      try {
+        await withServer(async (url, hits) => {
+          const text = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:5
+#EXTINF:5,
+${url}/segment.ts
+#EXT-X-ENDLIST
+`;
+          const playlist = path.join(work, 'evil.m3u8');
+          const disguised = path.join(work, 'evil.webm');
+          fs.writeFileSync(playlist, text);
+          fs.writeFileSync(disguised, text);
+          // Positive control: the same playlist, with the network protocols allowed, is fetched.
+          await tools
+            .run(
+              [
+                '-hide_banner',
+                '-v',
+                'error',
+                '-allowed_extensions',
+                'ALL',
+                '-protocol_whitelist',
+                'file,http,tcp,hls',
+                '-i',
+                playlist,
+                '-f',
+                'null',
+                '-',
+              ],
+              { timeoutMs: 15_000 },
+            )
+            .catch(() => undefined);
+          expect(
+            hits.length,
+            'control: an unrestricted ffmpeg fetches the segment',
+          ).toBeGreaterThan(0);
+          hits.length = 0;
+          // The app's own commands: nothing is requested, and nothing is produced.
+          await expect(tools.probe(playlist, { timeoutMs: 15_000 })).rejects.toBeInstanceOf(
+            FfmpegError,
+          );
+          for (const source of [playlist, disguised]) {
+            const out = path.join(work, `out-${path.basename(source)}.mp4`);
+            const result = await tools
+              .run(mp4Args(source, out), { timeoutMs: 15_000 })
+              .catch(() => ({ code: -1 }));
+            expect(result.code).not.toBe(0);
+            expect(fs.existsSync(out)).toBe(false);
+          }
+          expect(hits, 'probe and export made no request').toEqual([]);
+        });
+      } finally {
+        fs.rmSync(work, { recursive: true, force: true });
+      }
+    }, 60_000);
+  },
+);

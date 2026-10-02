@@ -154,11 +154,7 @@ export class RecoveryService {
   private async inspectNow(sessionId: string): Promise<Inspected | null> {
     const dir = this.dirFor(sessionId);
     if (!dir) return null;
-    const isDir = await this.deps.fs.stat(dir).then(
-      (stat) => stat.isDirectory(),
-      () => false,
-    );
-    if (!isDir) return null;
+    if (!(await this.isRealDirectory(dir))) return null;
     const bytes = await this.streamBytes(dir);
     const manifest = await this.readManifest(dir);
     if (manifest && manifest.sessionId === sessionId) {
@@ -170,6 +166,17 @@ export class RecoveryService {
       streamBytes: bytes,
       adopted: true,
     };
+  }
+
+  /**
+   * A directory that is itself a directory: a symbolic link or junction with a session's name is
+   * never looked into, repaired or deleted (it could point anywhere), only a real folder is.
+   */
+  private async isRealDirectory(dir: string): Promise<boolean> {
+    return this.deps.fs.lstat(dir).then(
+      (stat) => stat.isDirectory() && !stat.isSymbolicLink(),
+      () => false,
+    );
   }
 
   private async sessionIds(): Promise<string[]> {
@@ -277,7 +284,12 @@ export class RecoveryService {
     const { manifest } = item;
     const plan = manifest.finalize;
     const expected = plan ? path.join(plan.outputDir, partialFileName(manifest.sessionId)) : null;
-    if (plan && expected && path.resolve(plan.partialPath) === path.resolve(expected)) {
+    if (
+      plan &&
+      expected &&
+      path.isAbsolute(plan.outputDir) &&
+      path.resolve(plan.partialPath) === path.resolve(expected)
+    ) {
       await this.deps.fs.rm(expected, { force: true });
     } else if (plan) {
       log.warn(
@@ -285,8 +297,16 @@ export class RecoveryService {
       );
     }
     if (item.streamBytes === 0) return;
-    const outputDir = plan?.outputDir ?? this.deps.outputDir();
-    const fileName = plan?.fileName ?? defaultRecordingFileName(new Date(manifest.createdAt));
+    // The plan comes from a file on disk: only a plain file name in an absolute folder is honoured.
+    const planOk =
+      plan !== undefined &&
+      path.isAbsolute(plan.outputDir) &&
+      plan.fileName !== '' &&
+      plan.fileName === path.basename(plan.fileName);
+    const outputDir = planOk ? plan.outputDir : this.deps.outputDir();
+    const fileName = planOk
+      ? plan.fileName
+      : defaultRecordingFileName(new Date(manifest.createdAt));
     await this.remuxAndComplete(item, { outputDir, fileName, recovered: false });
   }
 
@@ -408,6 +428,9 @@ export class RecoveryService {
     if (this.deps.isActive(sessionId) || this.busy.has(sessionId)) {
       throw new IpcError('BUSY', 'That recording is in use.');
     }
+    if (!(await this.isRealDirectory(dir))) {
+      throw new IpcError('NOT_FOUND', 'That unfinished recording could not be verified.');
+    }
     const manifest = await this.readManifest(dir);
     if (!manifest || manifest.sessionId !== sessionId) {
       throw new IpcError('NOT_FOUND', 'That unfinished recording could not be verified.');
@@ -417,7 +440,10 @@ export class RecoveryService {
     const plan = manifest.finalize;
     if (plan) {
       const expected = path.join(plan.outputDir, partialFileName(sessionId));
-      if (path.resolve(plan.partialPath) === path.resolve(expected)) {
+      if (
+        path.isAbsolute(plan.outputDir) &&
+        path.resolve(plan.partialPath) === path.resolve(expected)
+      ) {
         await this.deps.fs.rm(expected, { force: true }).catch(() => undefined);
       }
     }

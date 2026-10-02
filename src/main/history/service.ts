@@ -13,7 +13,7 @@ import {
 import { detectImageFormat, validateImageBytes } from '../../shared/shots';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
-import type { MediaTools } from '../media/ffmpeg';
+import { thumbnailArgs, type MediaTools } from '../media/ffmpeg';
 import { CompletionRecordSchema, COMPLETED_DIR } from '../recording/manifest';
 import { HistoryStore, type HistoryItem } from './store';
 import { mapLimit, samePath } from './files';
@@ -285,21 +285,7 @@ export class HistoryService {
     try {
       await fs.promises.mkdir(this.thumbs.dir, { recursive: true });
       const result = await this.deps.tools.run(
-        [
-          '-hide_banner',
-          '-v',
-          'error',
-          '-y',
-          '-ss',
-          seek.toFixed(3),
-          '-i',
-          item.path,
-          '-frames:v',
-          '1',
-          '-vf',
-          `scale=min(${MAX_THUMBNAIL_WIDTH}\\,iw):-2`,
-          partial,
-        ],
+        thumbnailArgs(item.path, partial, seek, MAX_THUMBNAIL_WIDTH),
         { timeoutMs: THUMB_TIMEOUT_MS },
       );
       const size = result.code === 0 ? (await fs.promises.stat(partial)).size : 0;

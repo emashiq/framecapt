@@ -241,6 +241,7 @@ export class RecorderEngine {
       sourceId: command.sourceId,
       systemAudio: command.options.systemAudio,
       maxFrameRate: command.options.fps,
+      maxSize: command.region ? undefined : (qualityLimit(command.options.quality) ?? undefined),
     });
   }
 

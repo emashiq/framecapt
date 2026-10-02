@@ -1,0 +1,95 @@
+/* global window, document */
+// Smoke test of the PACKAGED app (out/Framelet-win32-x64/Framelet.exe, fuses on): it starts, the
+// renderer loads from the asar, the CSP meta tag is there, the bridge exposes only invoke/on, and
+// a payload with an extra key is refused. Usage: npm run smoke:packaged (after `npm run package`).
+// The app runs with a temporary --user-data-dir and a DevTools port that only listens on loopback.
+import { spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from '@playwright/test';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const exe = path.join(root, 'out', 'Framelet-win32-x64', 'Framelet.exe');
+if (!fs.existsSync(exe)) throw new Error(`${exe} not found. Run \`npm run package\` first.`);
+
+const port = await new Promise((resolve) => {
+  const server = net.createServer();
+  server.listen(0, '127.0.0.1', () => {
+    const { port: free } = server.address();
+    server.close(() => resolve(free));
+  });
+});
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-smoke-'));
+const child = spawn(exe, [`--remote-debugging-port=${port}`, `--user-data-dir=${userData}`], {
+  stdio: 'ignore',
+  shell: false,
+});
+const failures = [];
+const check = (name, ok, detail = '') => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+  if (!ok) failures.push(name);
+};
+
+try {
+  let browser;
+  for (let attempt = 0; attempt < 40 && !browser; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`).catch(() => undefined);
+  }
+  if (!browser) throw new Error('could not attach to the packaged app');
+  let page;
+  for (let attempt = 0; attempt < 40 && !page; attempt += 1) {
+    page = browser
+      .contexts()
+      .flatMap((c) => c.pages())
+      .find((p) => p.url().includes('index.html'));
+    if (!page) await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  check('the renderer loads from the packaged app', page !== undefined);
+  if (page) {
+    await page.waitForSelector('text=Capture', { timeout: 15_000 }).catch(() => undefined);
+    const facts = await page.evaluate(() => ({
+      title: document.title,
+      rendered: document.body.innerText.length > 20,
+      csp: document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content ?? '',
+      api: Object.keys(window.framelet ?? {}).sort(),
+      node: typeof window.require !== 'undefined' || typeof window.process !== 'undefined',
+    }));
+    check('the UI rendered', facts.rendered && facts.title === 'Framelet', facts.title);
+    check("CSP meta tag with default-src 'none'", facts.csp.startsWith("default-src 'none'"));
+    check(
+      'the bridge exposes exactly invoke and on',
+      JSON.stringify(facts.api) === '["invoke","on"]',
+    );
+    check('no Node globals in the page', facts.node === false);
+    const info = await page.evaluate(() => window.framelet.invoke('app:getInfo'));
+    check('app:getInfo answers, packaged', info.ok && info.data.isPackaged === true);
+    const extra = await page.evaluate(() =>
+      window.framelet.invoke('history:list', { path: 'C:/x' }),
+    );
+    check('an extra key is refused', !extra.ok && extra.error.code === 'INVALID_PAYLOAD');
+    const unknown = await page.evaluate(() => window.framelet.invoke('shell:openExternal', {}));
+    check('an unknown channel is refused', !unknown.ok && unknown.error.code === 'UNKNOWN_CHANNEL');
+    const remote = await page.evaluate(() =>
+      fetch('https://example.com/', { mode: 'no-cors' }).then(
+        () => 'reached',
+        () => 'blocked',
+      ),
+    );
+    check('a network request from the page is blocked', remote === 'blocked');
+  }
+  await browser.close().catch(() => undefined);
+} finally {
+  if (child.pid)
+    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  fs.rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+}
+if (failures.length > 0) {
+  console.error(`smoke:packaged FAILED: ${failures.join('; ')}`);
+  process.exit(1);
+}
+console.log('smoke:packaged OK');

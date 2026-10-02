@@ -1,7 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { FfmpegError, type FfmpegProgress, type MediaTools, type ProbeResult } from './ffmpeg';
+import {
+  FfmpegError,
+  localInput,
+  mediaPath,
+  type FfmpegProgress,
+  type MediaTools,
+  type ProbeResult,
+} from './ffmpeg';
 
 /** Shown wherever MP4 export is offered but this FFmpeg build cannot make it. */
 export const MP4_UNAVAILABLE_MESSAGE =
@@ -60,8 +67,7 @@ export function mp4Args(input: string, output: string): string[] {
   return [
     '-hide_banner',
     '-y',
-    '-i',
-    input,
+    ...localInput(input, 'matroska'),
     '-map',
     '0:v:0',
     '-map',
@@ -85,7 +91,7 @@ export function mp4Args(input: string, output: string): string[] {
     '-progress',
     'pipe:1',
     '-nostats',
-    output,
+    mediaPath(output),
   ];
 }
 

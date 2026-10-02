@@ -224,6 +224,26 @@ export function runProcess(
 // --- arguments --------------------------------------------------------------------------------
 
 /**
+ * Every file handed to ffmpeg or ffprobe is an absolute path made by main, so it can never start
+ * with `-` (which the tools would read as an option). Anything else is a bug, not an input.
+ */
+export function mediaPath(file: string): string {
+  if (!path.isAbsolute(file)) {
+    throw new FfmpegError('FFMPEG_FAILED', 'Media tools only take absolute file paths.');
+  }
+  return file;
+}
+
+/**
+ * Input options for a local file: only the `file` protocol may be opened (a crafted playlist or
+ * `concat` script cannot make ffmpeg reach the network or other protocols), and, where the format
+ * is known, only that demuxer is tried. Placed right before `-i`.
+ */
+export function localInput(file: string, format?: 'matroska'): string[] {
+  return ['-protocol_whitelist', 'file', ...(format ? ['-f', format] : []), '-i', mediaPath(file)];
+}
+
+/**
  * Makes every packet's timestamps strictly increase (a packet that would not move up by at least one
  * timebase tick, 1 ms in WebM, is put one tick after its predecessor). MediaRecorder stamps frames
  * with the time they were captured at millisecond resolution; the very first frames of a recording
@@ -246,8 +266,7 @@ export function remuxArgs(input: string, output: string): string[] {
     '-progress',
     'pipe:1',
     '-y',
-    '-i',
-    input,
+    ...localInput(input, 'matroska'),
     '-c',
     'copy',
     '-map',
@@ -256,12 +275,45 @@ export function remuxArgs(input: string, output: string): string[] {
     STRICTLY_INCREASING_TIMESTAMPS,
     '-f',
     'webm',
-    output,
+    mediaPath(output),
   ];
 }
 
 export function probeArgs(file: string): string[] {
-  return ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file];
+  return [
+    '-v',
+    'error',
+    '-protocol_whitelist',
+    'file',
+    '-show_streams',
+    '-show_format',
+    '-of',
+    'json',
+    mediaPath(file),
+  ];
+}
+
+/** One frame of a video, `seek` seconds in, at most `maxWidth` wide, as a PNG (history thumbnails). */
+export function thumbnailArgs(
+  input: string,
+  output: string,
+  seek: number,
+  maxWidth: number,
+): string[] {
+  return [
+    '-hide_banner',
+    '-v',
+    'error',
+    '-y',
+    '-ss',
+    seek.toFixed(3),
+    ...localInput(input),
+    '-frames:v',
+    '1',
+    '-vf',
+    `scale=min(${maxWidth}\\,iw):-2`,
+    mediaPath(output),
+  ];
 }
 
 // --- probing ----------------------------------------------------------------------------------

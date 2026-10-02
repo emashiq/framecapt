@@ -32,8 +32,10 @@ export function registerRecorderHandlers(
   handle('toolbar:resize', { roles: ['toolbar'] }, (request) =>
     controller.resizeToolbar(request.width),
   );
-  handle('recorder:getState', { roles: ['main', 'toolbar', 'recorder', 'countdown'] }, () =>
-    controller.snapshot(),
+  handle(
+    'recorder:getState',
+    { roles: ['main', 'toolbar', 'recorder', 'countdown'] },
+    (_request, ctx) => controller.snapshotFor(ctx.role),
   );
   handle('recorder:resolveChoice', { roles: ['main'] }, (request) =>
     controller.resolveChoice(request.answer),

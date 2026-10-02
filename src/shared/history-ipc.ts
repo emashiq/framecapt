@@ -43,7 +43,7 @@ export const HistoryItemViewSchema = z.object({
 });
 export type HistoryItemView = z.infer<typeof HistoryItemViewSchema>;
 
-export const HistoryListRequestSchema = z.object({
+export const HistoryListRequestSchema = z.strictObject({
   filter: HistoryTypeSchema.optional(),
   query: z.string().max(200).optional(),
   limit: z.number().int().min(1).max(1000).optional(),
@@ -57,7 +57,7 @@ export const HistoryListResponseSchema = z.object({
 });
 export type HistoryListResponse = z.infer<typeof HistoryListResponseSchema>;
 
-export const HistoryIdRequestSchema = z.object({ id: HistoryIdSchema });
+export const HistoryIdRequestSchema = z.strictObject({ id: HistoryIdSchema });
 
 export const HistoryCancelledSchema = z.object({ cancelled: z.literal(true) });
 
@@ -69,12 +69,12 @@ export const ExportCapabilitiesSchema = z.object({
 });
 export type ExportCapabilities = z.infer<typeof ExportCapabilitiesSchema>;
 
-export const ExportMp4RequestSchema = z.object({ historyId: HistoryIdSchema });
+export const ExportMp4RequestSchema = z.strictObject({ historyId: HistoryIdSchema });
 export const ExportMp4ResponseSchema = z.union([
-  z.object({ jobId: z.string() }),
+  z.strictObject({ jobId: z.string() }),
   HistoryCancelledSchema,
 ]);
-export const ExportCancelRequestSchema = z.object({ jobId: z.string().min(1).max(64) });
+export const ExportCancelRequestSchema = z.strictObject({ jobId: z.string().min(1).max(64) });
 
 export const ExportProgressEventSchema = z.object({
   jobId: z.string(),
