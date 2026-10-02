@@ -22,7 +22,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 08 Desktop polish | VERIFIED | settings/shortcuts/tray; axe 0 serious; idle CPU 0.04 %; flakes root-caused |
 | 09 Security/reliability/perf | VERIFIED | 13 findings fixed; 30-min 1080p30 bench PASS (29.72 fps, drift +10 ms); lead audit agreed |
 | 10 Packaging/CI/updates | VERIFIED | Squirrel installer (UNSIGNED) installed/captured/uninstalled on host; app:// scheme, fuse off; CI files |
-| 11 Open source & sales prep | NOT_STARTED | |
+| 11 Open source & sales prep | VERIFIED | canonical GPLv3, notices (53 deps, no incompatibility), user/build docs, commercial plan, provider research (none selected) |
 | 12 Final validation | NOT_STARTED | |
 
 ## Phase log
@@ -104,6 +104,12 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Artifacts (UNSIGNED): Framelet-Setup-0.1.0.exe sha256 5fab53a2…246f (228,981,760 B); Framelet-0.1.0-full.nupkg ff3f4003…7e9a; zip 36ddda97…6984 — docs/evidence/phase10/artifacts.json.
 - Results: lint/typecheck 0; unit 762/762 (lead re-ran); e2e 151 pass + 1 pre-existing Playwright worker crash flake (0xC0000409, reproduced on phase 09 commit 1/6); native 46/46; make, check:mocks, smoke:packaged, smoke:installed OK; workflows validated locally only. Evidence writing now gated by FRAMELET_WRITE_EVIDENCE=1.
 - Risks: signing never exercised; workflows never run on GitHub; no update feed; Win10/arm64/upgrade/SmartScreen untested; e2e worker-crash flake (→ phase 12).
+
+### Phase 11 — Open source & sales preparation (VERIFIED 2026-10-02, docs only)
+- Files: LICENSE (canonical GPLv3 from gnu.org, 674 lines), THIRD_PARTY_NOTICES.md (53 prod deps: 50 MIT, ISC, 0BSD, OFL-1.1; FFmpeg 9.0.2 = n9.0.2 tag, source URL verified), README, CONTRIBUTING (no CLA), CODE_OF_CONDUCT (Contributor Covenant 2.1, contact placeholder), SECURITY/PRIVACY (placeholders, no invented contacts), CHANGELOG, .github issue/PR templates, docs/{user-guide,building-on-windows,licensing,commercial-plan,release-notes-0.1.0,product-copy,checkout-integration-requirements,OWNER-TASKS}.md.
+- Commercial: $15 current major + 12 months updates, optional $29 supporter, no gating/keys, GPL rights preserved. Providers (official pages 2026-10-02): Stripe no BD; Lemon Squeezy & Gumroad list BD bank payouts; Paddle/FastSpring unverified → none selected.
+- Checks: prettier --check . and lint pass (lead reviewed README for overstatements: none).
+- Open (→ phase 12): package must ship Framelet LICENSE + THIRD_PARTY_NOTICES; OFL font & Squirrel stub notices flagged for owner review; README home screenshot shows a test-modified shortcut.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

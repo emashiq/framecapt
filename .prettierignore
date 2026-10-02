@@ -12,3 +12,6 @@ capture-prompts
 docs/agent-progress.md
 docs/evidence
 src/main/tray-icons.generated.ts
+THIRD_PARTY_NOTICES.md
+LICENSE
+CODE_OF_CONDUCT.md

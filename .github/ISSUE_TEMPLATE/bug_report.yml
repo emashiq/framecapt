@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in Framelet does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do not attach captures or recordings that contain sensitive content. For security problems do not use this form: see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Framelet version
+      description: Settings > About, or the installer file name.
+      placeholder: '0.1.0'
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and architecture
+      placeholder: 'Windows 11 23H2 x64'
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How was it installed?
+      options:
+        - Installer (Framelet-Setup)
+        - Portable zip
+        - Built from source
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Screenshot (screen/window/region)
+        - Editor / redaction
+        - Recording / audio
+        - Recovery of an unfinished recording
+        - MP4 export
+        - History
+        - Settings / shortcuts / tray
+        - Installer / uninstall
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Display and audio setup
+      description: Number of monitors, resolution and scaling, microphone and output device (if audio is involved).
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant log lines
+      description: From %APPDATA%\Framelet\logs\main.log. It contains no capture content, but read it before pasting.
+      render: text

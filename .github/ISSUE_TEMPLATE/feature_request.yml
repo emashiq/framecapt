@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Framelet is a Windows-first, offline tool. Features that need accounts, cloud services, telemetry or network access are out of scope by design.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like Framelet to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Checks
+      options:
+        - label: It works offline and does not send data anywhere
+        - label: I searched existing issues first
