@@ -31,6 +31,9 @@ const TYPES: Record<string, string> = {
   '.webm': 'video/webm',
   '.mp4': 'video/mp4',
   '.mkv': 'video/x-matroska',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
 };
 
 export function mediaContentType(file: string): string {

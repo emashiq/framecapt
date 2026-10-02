@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { ImageFormat, ShotSessionMeta } from '../../../shared/shots';
-import { flattenToBlob } from '../../editor/export';
+import { MAX_THUMBNAIL_BYTES } from '../../../shared/history-ipc';
+import { flattenThumbnail, flattenToBlob } from '../../editor/export';
 import type { Command } from '../../editor/model/commands';
 import {
   canRedo,
@@ -317,10 +318,16 @@ function EditorWorkspace({
       setBusy(format);
       try {
         const bytes = await (await flattenToBlob(bitmap, exporting, format)).arrayBuffer();
+        // History shows a thumbnail of the FLATTENED result (redactions applied), never of the
+        // original capture. Without one the entry just has no thumbnail; saving still works.
+        const thumbnail = await flattenThumbnail(bitmap, exporting)
+          .then((blob) => (blob.size <= MAX_THUMBNAIL_BYTES ? blob.arrayBuffer() : undefined))
+          .catch(() => undefined);
         const result = await window.framelet.invoke('shot:export', {
           sessionId: shot.session.id,
           format,
           bytes,
+          ...(thumbnail && { thumbnail }),
         });
         if (!result.ok) {
           toast.error(result.error.message);

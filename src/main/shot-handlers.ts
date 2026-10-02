@@ -1,8 +1,16 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { app, clipboard, ClipboardItem, dialog, nativeImage, shell } from 'electron';
-import { defaultShotFileName, validateImageBytes, type ImageFormat } from '../shared/shots';
+import { MAX_THUMBNAIL_BYTES } from '../shared/history-ipc';
+import {
+  defaultShotFileName,
+  readImageSize,
+  validateImageBytes,
+  type ImageFormat,
+} from '../shared/shots';
 import type { CaptureFlow } from './capture-flow';
+import type { HistoryService } from './history/service';
+import { validThumbnail } from './history/service';
 import type { RecorderController } from './recorder/controller';
 import type { SelectionHost } from './selection-host';
 import { handle } from './ipc';
@@ -41,6 +49,7 @@ export function registerShotHandlers(
   flow: CaptureFlow,
   store: ShotSessionStore,
   recorder: RecorderController,
+  history: Pick<HistoryService, 'addScreenshot'>,
 ): void {
   /** The overlays belong to the recorder (record-region, pick a screen) or to the screenshot flow. */
   const host = (): SelectionHost => (recorder.selecting ? recorder : flow);
@@ -68,12 +77,22 @@ export function registerShotHandlers(
   });
 
   handle('shot:export', { roles: ['main'] }, async (request) => {
-    if (!store.get(request.sessionId)) {
+    const session = store.get(request.sessionId);
+    if (!session) {
       throw new IpcError('NOT_FOUND', 'That screenshot is no longer available.');
     }
     const bytes = Buffer.from(request.bytes);
     const check = validateImageBytes(request.format, bytes);
     if (!check.ok) throw new IpcError('INVALID_PAYLOAD', check.reason);
+    // The history thumbnail comes from the renderer, drawn from the FLATTENED image (redactions
+    // applied). Main never derives one from the original capture.
+    const thumbnail = request.thumbnail ? new Uint8Array(request.thumbnail) : undefined;
+    if (thumbnail && !validThumbnail(thumbnail)) {
+      throw new IpcError(
+        'INVALID_PAYLOAD',
+        `The thumbnail must be a PNG of at most ${MAX_THUMBNAIL_BYTES / 1024 / 1024} MB and 480 px wide.`,
+      );
+    }
 
     const folder = path.join(app.getPath('pictures'), 'Framelet');
     await fs.promises.mkdir(folder, { recursive: true });
@@ -93,6 +112,18 @@ export function registerShotHandlers(
     await writeFileAtomic(target, bytes);
     exportedPaths.add(path.resolve(target));
     log.info(`Screenshot exported (${request.format}, ${bytes.byteLength} bytes)`);
+    const size = readImageSize(bytes) ?? { width: session.width, height: session.height };
+    await history
+      .addScreenshot({
+        path: target,
+        width: size.width,
+        height: size.height,
+        sizeBytes: bytes.byteLength,
+        format: request.format,
+        source: session.kind,
+        thumbnail,
+      })
+      .catch((error: unknown) => log.error('The screenshot could not be added to history', error));
     return { path: target };
   });
 

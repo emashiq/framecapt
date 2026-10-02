@@ -1,22 +1,13 @@
 import { useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import {
-  AppWindow,
-  Camera,
-  Images,
-  Loader2,
-  Monitor,
-  ScanLine,
-  TriangleAlert,
-  Video,
-} from 'lucide-react';
+import { AppWindow, Camera, Loader2, Monitor, ScanLine, TriangleAlert, Video } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
+import { RecentCaptures } from '../components/RecentCaptures';
 import { RecoveryBanner } from '../components/RecoveryBanner';
 import { RecordOptions } from '../components/RecordOptions';
 import { SourcePicker } from '../components/SourcePicker';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import { EmptyState } from '../components/ui/EmptyState';
 import { Kbd } from '../components/ui/Kbd';
 import { useCaptureFlow } from '../capture/use-capture-flow';
 import { useRecordOptions } from '../recorder/options-store';
@@ -104,7 +95,12 @@ function ModeCard({
   );
 }
 
-export function CaptureView() {
+export interface CaptureViewProps {
+  /** Opens History, with one item selected when an id is given. */
+  onOpenHistory: (id?: string) => void;
+}
+
+export function CaptureView({ onOpenHistory }: CaptureViewProps) {
   const flow = useCaptureFlow();
   const recorder = useRecorderState();
   const [options, setOptions] = useRecordOptions();
@@ -222,16 +218,7 @@ export function CaptureView() {
         ) : null}
       </p>
 
-      <section aria-labelledby="recent-heading" className="mt-6">
-        <h2 id="recent-heading" className="mb-3 text-sm font-semibold text-fg">
-          Recent captures
-        </h2>
-        <EmptyState
-          icon={<Images className="size-6" />}
-          title="No captures yet"
-          description="Your screenshots and recordings will show up here for quick access."
-        />
-      </section>
+      <RecentCaptures onOpen={(id) => onOpenHistory(id)} onViewAll={() => onOpenHistory()} />
 
       <SourcePicker
         open={picker !== null}

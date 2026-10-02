@@ -1,0 +1,286 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  ArrowLeft,
+  Copy,
+  ExternalLink,
+  FileX2,
+  FolderOpen,
+  Link2,
+  Save,
+  Trash2,
+} from 'lucide-react';
+import type { HistoryItemView } from '../../../shared/history-ipc';
+import { formatBytes, formatDuration } from '../../../shared/recording';
+import { Mp4Export } from '../../components/Mp4Export';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { fileUrl, newNonce } from '../../history/media-url';
+import { cn } from '../../lib/cn';
+import { revealDuration } from '../../lib/reveal-duration';
+import { formatExact, formatRelative } from '../../lib/time';
+import type { ItemActions } from './actions';
+import { dimensionsText, TypeBadge } from './HistoryCard';
+import { Thumb } from './Thumb';
+
+export interface HistoryDetailsProps {
+  item: HistoryItemView;
+  /** The recording this MP4 was made from, when it is still in history. */
+  original: HistoryItemView | undefined;
+  now: number;
+  actions: ItemActions;
+  onBack: () => void;
+  onSelect: (item: HistoryItemView) => void;
+  onAskDelete: (item: HistoryItemView) => void;
+}
+
+const SOURCE_LABEL: Record<HistoryItemView['source'], string> = {
+  screen: 'Whole screen',
+  window: 'Window',
+  region: 'Region',
+  unknown: 'Unknown',
+};
+
+function Row({ label, children, testId }: { label: string; children: ReactNode; testId?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-1.5 text-[13px]">
+      <dt className="shrink-0 text-fg-muted">{label}</dt>
+      <dd className="selectable min-w-0 text-right text-fg tabular-nums" data-testid={testId}>
+        {children}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * The image or the video of an item, served by the main-owned file route. Every mount (a new
+ * item, a re-linked file, a re-saved screenshot) uses a URL of its own: the media stack remembers
+ * a failed load per URL, and an entry that was removed and restored, or a file that was missing and
+ * re-linked, keeps its id.
+ */
+function Preview({ item }: { item: HistoryItemView }) {
+  const [nonce] = useState(newNonce);
+  const src = fileUrl(item.id, nonce);
+  return item.type === 'recording' ? (
+    <video
+      data-testid="history-video"
+      src={src}
+      controls
+      preload="metadata"
+      onLoadedMetadata={(event) => revealDuration(event.currentTarget)}
+      className="max-h-[min(58vh,520px)] w-full rounded-lg bg-black"
+    />
+  ) : (
+    <div className="checkerboard flex items-center justify-center rounded-lg">
+      <img
+        data-testid="history-image"
+        src={src}
+        alt={`Screenshot ${item.fileName}`}
+        className="max-h-[min(58vh,520px)] w-full object-contain"
+      />
+    </div>
+  );
+}
+
+export function HistoryDetails({
+  item,
+  original,
+  now,
+  actions,
+  onBack,
+  onSelect,
+  onAskDelete,
+}: HistoryDetailsProps) {
+  const headingRef = useRef<HTMLDivElement>(null);
+  const missing = !item.exists;
+  const isVideo = item.type === 'recording';
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [item.id]);
+
+  return (
+    <div
+      data-testid="history-details"
+      data-id={item.id}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !event.defaultPrevented) onBack();
+      }}
+    >
+      <div className="mb-5 flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid="history-back"
+          icon={<ArrowLeft className="size-4" aria-hidden="true" />}
+          onClick={onBack}
+        >
+          All captures
+        </Button>
+      </div>
+      <div ref={headingRef} tabIndex={-1} className="mb-5 flex items-center gap-3 outline-none">
+        <h1 className="selectable min-w-0 truncate text-xl font-semibold tracking-tight text-fg">
+          {item.fileName}
+        </h1>
+        <TypeBadge item={item} />
+      </div>
+
+      <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Card padding="none" className="overflow-hidden p-3">
+            {missing ? (
+              <div
+                data-testid="history-missing-details"
+                className="relative flex aspect-video flex-col items-center justify-center gap-2 rounded-lg bg-surface-2 px-6 text-center"
+              >
+                <Thumb item={item} className="absolute inset-0 rounded-lg" />
+                <div className="relative flex flex-col items-center gap-1.5 rounded-xl bg-bg/80 px-5 py-4 backdrop-blur-sm">
+                  <FileX2 className="size-6 text-fg-subtle" aria-hidden="true" />
+                  <p className="text-sm font-medium text-fg">File moved or deleted</p>
+                  <p className="max-w-xs text-[13px] text-fg-muted">
+                    Framelet can no longer find this file. Nothing else was changed. If you moved
+                    it, point Framelet to its new place.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <Preview key={`${item.id}|${item.path}|${item.createdAt}`} item={item} />
+            )}
+          </Card>
+
+          {isVideo && item.format === 'webm' && !missing ? (
+            <Mp4Export historyId={item.id} className="w-full" />
+          ) : null}
+          <p className="selectable text-xs break-all text-fg-subtle" data-testid="history-path">
+            {item.path}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <Card padding="md" className="p-4">
+            <dl className="divide-y divide-line">
+              <Row label="Type">
+                {isVideo ? 'Recording' : 'Screenshot'} · {item.format.toUpperCase()}
+              </Row>
+              <Row label="Created">
+                <span title={formatExact(item.createdAt)}>
+                  {formatRelative(item.createdAt, now)}
+                </span>
+              </Row>
+              {dimensionsText(item) ? <Row label="Size">{dimensionsText(item)}</Row> : null}
+              {item.durationMs !== null ? (
+                <Row label="Duration">{formatDuration(item.durationMs)}</Row>
+              ) : null}
+              <Row label="File size">{formatBytes(item.sizeBytes)}</Row>
+              {isVideo && item.hasAudio !== null ? (
+                <Row label="Audio">{item.hasAudio ? 'With audio' : 'No audio'}</Row>
+              ) : null}
+              <Row label="Captured">{SOURCE_LABEL[item.source]}</Row>
+              {item.derivedFrom ? (
+                <Row label="Converted from">
+                  {original ? (
+                    <button
+                      type="button"
+                      className="max-w-full truncate text-accent-fg underline-offset-2 hover:underline"
+                      onClick={() => onSelect(original)}
+                    >
+                      {original.fileName}
+                    </button>
+                  ) : (
+                    'a recording no longer in history'
+                  )}
+                </Row>
+              ) : null}
+            </dl>
+          </Card>
+
+          <div className={cn('flex flex-col gap-2')}>
+            {missing ? (
+              <>
+                <Button
+                  variant="primary"
+                  data-testid="details-locate"
+                  icon={<Link2 className="size-4" aria-hidden="true" />}
+                  onClick={() => actions.locate(item)}
+                >
+                  Locate…
+                </Button>
+                <Button
+                  variant="secondary"
+                  data-testid="details-remove"
+                  icon={<Trash2 className="size-4" aria-hidden="true" />}
+                  onClick={() => {
+                    actions.remove(item);
+                    onBack();
+                  }}
+                >
+                  Remove from history
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="primary"
+                  data-testid="details-open"
+                  icon={<ExternalLink className="size-4" aria-hidden="true" />}
+                  onClick={() => actions.open(item)}
+                >
+                  Open
+                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="secondary"
+                    data-testid="details-reveal"
+                    icon={<FolderOpen className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.reveal(item)}
+                  >
+                    Show in folder
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    data-testid="details-copy"
+                    icon={<Copy className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.copy(item)}
+                  >
+                    {isVideo ? 'Copy path' : 'Copy image'}
+                  </Button>
+                </div>
+                {isVideo ? (
+                  <Button
+                    variant="secondary"
+                    data-testid="details-save-copy"
+                    icon={<Save className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.saveCopy(item)}
+                  >
+                    Save a copy as…
+                  </Button>
+                ) : null}
+                <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3">
+                  <Button
+                    variant="ghost"
+                    data-testid="details-remove"
+                    icon={<Trash2 className="size-4" aria-hidden="true" />}
+                    onClick={() => {
+                      actions.remove(item);
+                      onBack();
+                    }}
+                  >
+                    Remove from history
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    data-testid="details-delete"
+                    className="text-danger! not-aria-disabled:hover:bg-danger-soft not-aria-disabled:hover:text-danger!"
+                    icon={<Trash2 className="size-4" aria-hidden="true" />}
+                    onClick={() => onAskDelete(item)}
+                  >
+                    Delete file…
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { RectSchema } from './capture-schemas';
+import { HistoryIdSchema } from './history-ipc';
 import { FPS_VALUES, QUALITY_VALUES } from './recording';
 import { RECORDER_STATUSES } from './recorder-machine';
 import { SourceIdSchema } from './shot-ipc';
@@ -67,6 +68,8 @@ const AudioFlagsSchema = z.object({ mic: z.boolean(), system: z.boolean() });
 export const RecordingResultSchema = z.object({
   /** Main-owned id: the media URL is `framelet-media://<id>`. */
   id: z.string(),
+  /** The history entry of the file (`export:mp4` takes it); null when it could not be added. */
+  historyId: HistoryIdSchema.nullable(),
   fileName: z.string(),
   path: z.string(),
   durationMs: z.number(),

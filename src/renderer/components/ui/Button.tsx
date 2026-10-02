@@ -19,7 +19,7 @@ export interface ButtonProps extends ComponentProps<'button'> {
 }
 
 const base =
-  'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap ' +
+  'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap [&_svg]:shrink-0 ' +
   'transition-colors duration-150 disabled:opacity-50 aria-disabled:opacity-55 aria-disabled:cursor-not-allowed';
 
 const variants: Record<ButtonVariant, string> = {

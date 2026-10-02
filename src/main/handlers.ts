@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, session } from 'electron';
+import { app, session, shell } from 'electron';
+import { ExportService } from './history/export-service';
+import { registerHistoryHandlers, mp4SaveDialog } from './history/handlers';
+import { HistoryService } from './history/service';
+import { detectMp4Capability, MP4_UNAVAILABLE_MESSAGE, type Mp4Capability } from './media/export';
 import { createMediaTools, FfmpegError, resolveFfmpeg, type MediaTools } from './media/ffmpeg';
 import { installMediaProtocol, MediaRegistry } from './recording/media-protocol';
 import { RecoveryService } from './recording/recovery';
@@ -17,6 +21,7 @@ import { registerWorkerHandlers } from './worker';
 import { installCaptureAuthorization } from './capture/authorization';
 import { registerDiagnosticsHandlers } from './capture/diagnostics';
 import type { CaptureProvider } from './capture/types';
+import type { IpcEventPayload } from '../shared/ipc-contract';
 import { sendEvent } from './events';
 import { getOriginConfig, setMainCloseInterceptor, webContentsWithRoles } from './windows';
 import { handle } from './ipc';
@@ -62,6 +67,13 @@ function withE2eRemuxDelay(tools: MediaTools): MediaTools {
       return tools.run(args, options);
     },
   };
+}
+
+function emitToMain<E extends 'export:progress' | 'export:done' | 'export:failed'>(
+  event: E,
+  payload: IpcEventPayload<E>,
+): void {
+  for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
 }
 
 /** Registers every IPC channel. Feature modules own their channels (capture/, diagnostics). */
@@ -115,6 +127,36 @@ export function registerHandlers(provider: CaptureProvider): void {
     appVersion: app.getVersion(),
     onDiskLow: (sessionId) => recorder.onDiskLow(sessionId),
   });
+  const history = new HistoryService({
+    dir: path.join(app.getPath('userData'), 'history'),
+    tools,
+    trashItem: (file) => shell.trashItem(file),
+    onChange: () => {
+      for (const contents of webContentsWithRoles(['main']))
+        sendEvent(contents, 'history:changed', {});
+    },
+  });
+  // Capability is asked once, at startup, and cached (the answer cannot change while running).
+  // E2E builds only (FRAMELET_E2E_NO_H264=1): behave like a build without an H.264 encoder.
+  const detected: Promise<Mp4Capability> =
+    __FRAMELET_E2E__ && process.env.FRAMELET_E2E_NO_H264 === '1'
+      ? Promise.resolve({ available: false, reason: MP4_UNAVAILABLE_MESSAGE })
+      : detectMp4Capability(tools);
+  const mp4Capability: Promise<Mp4Capability> = detected.then((capability) => {
+    log.info(`MP4 export ${capability.available ? 'available (libx264 + aac)' : 'unavailable'}`);
+    return capability;
+  });
+  const exports = new ExportService({
+    history,
+    tools,
+    capability: () => mp4Capability,
+    pickDestination: mp4SaveDialog,
+    emit: {
+      progress: (event) => emitToMain('export:progress', event),
+      done: (event) => emitToMain('export:done', event),
+      failed: (event) => emitToMain('export:failed', event),
+    },
+  });
   const recovery = new RecoveryService({
     rootDir: recordingsDir,
     fs: nodeSessionFs,
@@ -122,9 +164,10 @@ export function registerHandlers(provider: CaptureProvider): void {
     outputDir,
     isActive: (sessionId) => sessions.has(sessionId),
     appVersion: app.getVersion(),
+    history,
   });
   const media = new MediaRegistry();
-  installMediaProtocol(media);
+  installMediaProtocol(media, history);
   const recorder: RecorderController = new RecorderController({
     provider,
     sessions,
@@ -133,6 +176,7 @@ export function registerHandlers(provider: CaptureProvider): void {
     isScreenshotBusy: () => flow.state.active,
     outputDir,
     tools,
+    history,
     // E2E builds only: a short cap to test quitting while finalizing takes too long.
     ...(__FRAMELET_E2E__ &&
       Number(process.env.FRAMELET_E2E_QUIT_CAP_MS) > 0 && {
@@ -146,19 +190,34 @@ export function registerHandlers(provider: CaptureProvider): void {
     isBlocked: () => recorder.busy,
   });
   registerWorkerHandlers();
-  registerShotHandlers(flow, store, recorder);
+  registerShotHandlers(flow, store, recorder, history);
+  registerHistoryHandlers(history, exports, () => mp4Capability);
   registerRecorderHandlers(recorder, sessions, media);
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.
   setMainCloseInterceptor(() => recorder.isRecording && !recorder.isQuitting);
   app.on('before-quit', (event) => recorder.handleBeforeQuit(event, () => app.quit()));
   app.on('will-quit', () => void sessions.closeAll());
+  // An export in progress is cancelled (its partial file removed) before the app exits.
+  app.on('before-quit', (event) => {
+    if (!exports.active) return;
+    event.preventDefault();
+    const quit = (): void => app.quit();
+    void Promise.race([
+      exports.cancelAll(),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]).then(quit, quit);
+  });
   // ffmpeg finishes every recording: say in the log whether it is usable, then clean up and
   // count what earlier runs left behind (interrupted finalizations are resumed once).
   void tools.version().then(
     (version) => log.info(`ffmpeg ok ${version}`),
     (error: unknown) =>
       log.error('ffmpeg is not usable (run "npm run fetch:ffmpeg" in development)', error),
+  );
+  void history.backfillFromCompleted(recordingsDir).then(
+    (added) => added > 0 && log.info(`History: added ${added} earlier recordings`),
+    (error: unknown) => log.error('History backfill failed', error),
   );
   void recovery
     .startup()

@@ -1,6 +1,6 @@
 # FFmpeg
 
-Framelet finishes every recording with FFmpeg (`-c copy` remux, probing, recovery). FFmpeg is a **local child process**, started per job with `shell: false` and an argument array, never a server and never found through `PATH`.
+Framelet finishes every recording with FFmpeg (`-c copy` remux, probing, recovery) and converts recordings to MP4 on request (H.264 + AAC, phase 07). FFmpeg is a **local child process**, started per job with `shell: false` and an argument array, never a server and never found through `PATH`.
 
 ## The pinned build
 
@@ -25,7 +25,7 @@ Framelet is proposed as GPL-3.0-only and runs FFmpeg as a separate program, so t
 
 Build configuration summary (full list in `PROVENANCE.json`, field `buildConfiguration`): static, gcc 16.2.0 (MSYS2), `--disable-autodetect`; libvpx, libaom, libx264, libx265, libxvid, libopus, libvorbis, libmp3lame, libwebp and others; hardware paths (NVENC, AMF, QSV via libvpl, D3D11/D3D12VA); no `--enable-nonfree`.
 
-Codec and patent review for the codecs inside (x264/x265/AAC-related) is an owner action before a commercial release; nothing here is legal clearance. Phase 06 itself only uses stream copy for WebM (VP9/Opus), no encoder.
+Codec and patent review for the codecs inside (x264/x265/AAC-related) is an owner action before a commercial release; nothing here is legal clearance. Phase 06 only used stream copy for WebM (VP9/Opus). Since phase 07 the MP4 export encodes H.264 (libx264) and AAC: H.264 and AAC may carry patent licensing obligations in some jurisdictions (patent pool terms, for example, can apply to distributing or selling an H.264/AAC encoder or content), and libx264 is GPL code that is part of this GPL-3.0-or-later build. **Owner review is required before a commercial release; this document does not assert that any of it is cleared.** If the review says no, the product can ship without MP4 export: the capability check below simply reports it unavailable, and WebM stays the deliverable.
 
 ## What Framelet runs
 
@@ -41,9 +41,39 @@ Calls (every one an argument array, `shell: false`, `windowsHide: true`, `stdio:
 ffmpeg -hide_banner -nostats -progress pipe:1 -y -i <stream.webm> -c copy -map 0 -f webm <partial>
 ffprobe -v error -show_streams -show_format -of json <file>
 ffmpeg -hide_banner -version
+ffmpeg -hide_banner -encoders                      (once at startup: are libx264 and aac there?)
+ffmpeg -hide_banner -v error -y -ss <t> -i <recording> -frames:v 1 -vf scale=min(480\,iw):-2 <thumb>.partial.png
+ffmpeg <MP4 export command, below>
 ```
 
 stderr is kept as a 64 KB tail in memory (and written to `finalize.log` in a failed session). The JSON of ffprobe is validated with zod before use.
+
+## MP4 export (phase 07)
+
+Code: `src/main/media/export.ts` (`detectMp4Capability`, `mp4Args`, `exportMp4`, `verifyMp4`), jobs in `src/main/history/export-service.ts`.
+
+```
+ffmpeg -hide_banner -y -i <source.webm> -map 0:v:0 -map 0:a:0? -c:v libx264 -preset veryfast -crf 20
+       -pix_fmt yuv420p -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:a aac -b:a 160k
+       -movflags +faststart -progress pipe:1 -nostats <dir>/.framelet-export-<random>.partial.mp4
+```
+
+| Piece                                               | Why                                                                                                                                                                      |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-map 0:v:0 -map 0:a:0?`                            | The first video stream and the first audio stream if there is one (a silent recording stays silent). Nothing else is copied                                              |
+| `libx264 -preset veryfast -crf 20 -pix_fmt yuv420p` | A fast, near-transparent H.264 that every player and browser plays (4:2:0, 8 bit). `veryfast` was chosen for speed; 6 s of 1920x804 + audio took 0.9 s on the host       |
+| `-vf scale=trunc(iw/2)*2:trunc(ih/2)*2`             | 4:2:0 needs even sides; an odd side is rounded DOWN by at most one pixel (641x361 became 640x360 in the test)                                                            |
+| `aac -b:a 160k`                                     | FFmpeg's native AAC-LC encoder (`aac`), not the Media Foundation one (`aac_mf`), so the result does not depend on the Windows version                                    |
+| `-movflags +faststart`                              | The `moov` index is moved in front of `mdat`; the file plays while it downloads and previews quickly. Verified by reading the top-level boxes (`ftyp, moov, free, mdat`) |
+| `-progress pipe:1 -nostats`                         | Machine-readable progress: percent = `out_time` / the source's probed duration, capped at 99 until the output was verified                                               |
+
+Every flag was run against the bundled 9.0.2 build (the integration tests and the native test use the real binary; each produced a clean H.264 + AAC file). The default frame-rate handling (variable frame rate in, constant out) was kept: the 6 s native recording came out within 0.005 s of the source length.
+
+**Capability.** MP4 is offered only if `ffmpeg -hide_banner -encoders` lists both `libx264` and `aac`. The result is cached for the run. Otherwise the UI shows "MP4 export needs an FFmpeg build with H.264 — your recording is saved as WebM", the `export:mp4` channel refuses, and nothing is produced. A WebM is never renamed to `.mp4`.
+
+**Safety.** The output is written to a partial file next to the destination (same volume, atomic rename), probed (`mov,mp4` container, `h264`, `aac` when the source had audio, duration within 0.5 s of the source) and only then renamed onto the destination the user chose (the save dialog already asked about overwriting). On cancel, timeout (max(10 min, 4x the duration)), failure or a failed check, the partial file is removed (with retries: Windows keeps a killed process's file open for a moment) and the original is untouched (SHA-256 compared in the tests). The partial name carries 6 random bytes, so a user file can never be mistaken for it. There is one export at a time.
+
+**Measured** (host: Ryzen 7 7700, FFmpeg 9.0.2; `docs/evidence/phase07/export-integration.json`, `export-native.json`): a 4 s 640x360 VP9 + Opus test file exports in 0.18 s to 595 KB; a real 6.07 s 1920x804 screen recording with system audio exports in 0.89 s (6.9x real time) from 1.07 MB to 281 KB, H.264 yuv420p + AAC, duration 6.067 s, fast start, and a full decode with `ffmpeg -v error -i out.mp4 -f null -` exits 0 with empty stderr; a 40 s 1080p test file cancelled at 38 % after 1.7 s left the original byte-identical, no partial file and no running ffmpeg, and the retry completed (40.0 s).
 
 ## Fetching and updating
 

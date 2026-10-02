@@ -23,6 +23,21 @@ describe('ipc contract', () => {
       'diagnostics:saveRecording',
       'editor:resolveClose',
       'editor:setDirty',
+      'export:cancel',
+      'export:capabilities',
+      'export:mp4',
+      'history:clearMissing',
+      'history:consumeNotice',
+      'history:copyImage',
+      'history:copyPath',
+      'history:deleteFile',
+      'history:list',
+      'history:open',
+      'history:relink',
+      'history:remove',
+      'history:reveal',
+      'history:saveCopy',
+      'history:undoRemove',
       'overlay:cancel',
       'overlay:confirm',
       'overlay:getInit',
@@ -60,6 +75,10 @@ describe('ipc contract', () => {
       'app:confirmClose',
       'app:themeChanged',
       'capture:flowEnded',
+      'export:done',
+      'export:failed',
+      'export:progress',
+      'history:changed',
       'overlay:clearSelection',
       'recorder:engineCommand',
       'recorder:levels',
@@ -80,6 +99,10 @@ describe('ipc contract', () => {
       // The recorder window's chunk and engine channels belong to it alone.
       if (channel.startsWith('session:') || channel === 'recorder:engineEvent') {
         expect(roles).toEqual(['recorder']);
+      }
+      // History and export take history ids from the main window only (never paths).
+      if (channel.startsWith('history:') || channel.startsWith('export:')) {
+        expect(roles).toEqual(['main']);
       }
       if (
         channel.startsWith('shot:') ||

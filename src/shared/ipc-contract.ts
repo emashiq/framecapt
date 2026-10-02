@@ -42,6 +42,19 @@ import {
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
 import {
+  ExportCancelRequestSchema,
+  ExportCapabilitiesSchema,
+  ExportDoneEventSchema,
+  ExportFailedEventSchema,
+  ExportMp4RequestSchema,
+  ExportMp4ResponseSchema,
+  ExportProgressEventSchema,
+  HistoryCancelledSchema,
+  HistoryIdRequestSchema,
+  HistoryListRequestSchema,
+  HistoryListResponseSchema,
+} from './history-ipc';
+import {
   RecoverResponseSchema,
   RecoveryListResponseSchema,
   RecoverySessionIdSchema,
@@ -262,6 +275,56 @@ export const ipcContract = {
   },
   'recovery:discard': { request: RecoverySessionIdSchema, response: z.void(), roles: ['main'] },
   'recovery:reveal': { request: RecoverySessionIdSchema, response: z.void(), roles: ['main'] },
+  // --- local history and video export (phase 07). Everything goes by history id, never by path. ---
+  'history:list': {
+    request: HistoryListRequestSchema,
+    response: HistoryListResponseSchema,
+    roles: ['main'],
+  },
+  /** True once after a damaged history file was set aside at startup (the UI then says so). */
+  'history:consumeNotice': {
+    request: z.undefined(),
+    response: z.object({ reset: z.boolean() }),
+    roles: ['main'],
+  },
+  'history:open': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  'history:reveal': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  'history:copyImage': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  'history:copyPath': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  /** Removes the entry only; the file stays. */
+  'history:remove': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  /** Puts an entry removed in the last seconds back (main remembers it; the renderer sends no data). */
+  'history:undoRemove': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  /** Moves the file to the Recycle Bin and removes the entry. A separate, confirmed action. */
+  'history:deleteFile': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  /** Opens a file dialog in main to point a missing entry at its moved file. */
+  'history:relink': {
+    request: HistoryIdRequestSchema,
+    response: z.union([z.object({ relinked: z.literal(true) }), HistoryCancelledSchema]),
+    roles: ['main'],
+  },
+  'history:clearMissing': {
+    request: z.undefined(),
+    response: z.object({ removed: z.number() }),
+    roles: ['main'],
+  },
+  /** Recordings: "Save a copy as..." of the finished WebM (a save dialog in main). */
+  'history:saveCopy': {
+    request: HistoryIdRequestSchema,
+    response: z.union([z.object({ path: z.string() }), HistoryCancelledSchema]),
+    roles: ['main'],
+  },
+  'export:capabilities': {
+    request: z.undefined(),
+    response: ExportCapabilitiesSchema,
+    roles: ['main'],
+  },
+  'export:mp4': {
+    request: ExportMp4RequestSchema,
+    response: ExportMp4ResponseSchema,
+    roles: ['main'],
+  },
+  'export:cancel': { request: ExportCancelRequestSchema, response: z.void(), roles: ['main'] },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;
@@ -285,6 +348,11 @@ export const ipcEvents = {
   'recorder:levels': LevelsEventSchema,
   /** The list of unfinished recordings may have changed (the startup scan finished). */
   'recovery:changed': z.object({}),
+  /** History changed (an item was added, removed or got its thumbnail): lists should reload. */
+  'history:changed': z.object({}),
+  'export:progress': ExportProgressEventSchema,
+  'export:done': ExportDoneEventSchema,
+  'export:failed': ExportFailedEventSchema,
   /** Main -> the hidden recorder window: what the engine should do. */
   'recorder:engineCommand': EngineCommandSchema,
 } as const satisfies Record<string, z.ZodType>;

@@ -1,0 +1,71 @@
+{
+  "export": {
+    "source": {
+      "format": "matroska,webm",
+      "durationSeconds": 6.069,
+      "bytes": 1071904,
+      "streams": [
+        {
+          "type": "video",
+          "codec": "vp9",
+          "width": 1920,
+          "height": 804
+        },
+        {
+          "type": "audio",
+          "codec": "opus"
+        }
+      ],
+      "meanVolumeDb": -37.9
+    },
+    "output": {
+      "format": "mov,mp4,m4a,3gp,3g2,mj2",
+      "durationSeconds": 6.066667,
+      "bytes": 275404,
+      "streams": [
+        {
+          "type": "video",
+          "codec": "h264",
+          "width": 1920,
+          "height": 804,
+          "pixFmt": "yuv420p"
+        },
+        {
+          "type": "audio",
+          "codec": "aac"
+        }
+      ],
+      "topLevelBoxes": [
+        "ftyp",
+        "moov",
+        "free",
+        "mdat"
+      ],
+      "fastStart": true,
+      "meanVolumeDb": -37.9
+    },
+    "durationDifferenceSeconds": 0.0023330000000001405,
+    "fullDecode": {
+      "command": "ffmpeg -v error -i out.mp4 -f null -",
+      "status": 0,
+      "stderr": ""
+    },
+    "originalSha256Unchanged": true,
+    "exportWallClockMs": 888,
+    "realTimeFactor": 6.83445945945946
+  },
+  "history": {
+    "items": 2,
+    "thumbnails": 2,
+    "thumbnailBytes": [
+      85519,
+      88279
+    ],
+    "mp4PlaysInApp": {
+      "videoWidth": 1920,
+      "videoHeight": 804,
+      "durationSeconds": 6.066667
+    },
+    "capabilityLogged": true
+  }
+}

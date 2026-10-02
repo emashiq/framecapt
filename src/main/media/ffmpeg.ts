@@ -254,6 +254,7 @@ const StreamSchema = z.object({
   codec_name: z.string().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
+  pix_fmt: z.string().optional(),
   duration: z.string().optional(),
 });
 const ProbeSchema = z.object({
@@ -270,7 +271,9 @@ const ProbeSchema = z.object({
 export interface ProbeResult {
   hasVideo: boolean;
   hasAudio: boolean;
-  video: { width: number; height: number; codec: string } | null;
+  video: { width: number; height: number; codec: string; pixFmt: string } | null;
+  /** Codec name of the first audio stream (`opus`, `aac`), null without audio. */
+  audioCodec: string | null;
   /** Container duration in seconds; null when the container has none (a live MediaRecorder file). */
   durationSec: number | null;
   formatName: string;
@@ -288,12 +291,19 @@ export function parseProbe(json: unknown): ProbeResult {
   if (!parsed.success) throw new FfmpegError('PROBE_FAILED', 'ffprobe returned unexpected output.');
   const { streams, format } = parsed.data;
   const video = streams.find((stream) => stream.codec_type === 'video');
+  const audio = streams.find((stream) => stream.codec_type === 'audio');
   return {
     hasVideo: video !== undefined,
-    hasAudio: streams.some((stream) => stream.codec_type === 'audio'),
+    hasAudio: audio !== undefined,
     video: video
-      ? { width: video.width ?? 0, height: video.height ?? 0, codec: video.codec_name ?? '' }
+      ? {
+          width: video.width ?? 0,
+          height: video.height ?? 0,
+          codec: video.codec_name ?? '',
+          pixFmt: video.pix_fmt ?? '',
+        }
       : null,
+    audioCodec: audio ? (audio.codec_name ?? '') : null,
     durationSec: positiveNumber(format.duration),
     formatName: format.format_name ?? '',
     sizeBytes: positiveNumber(format.size),
@@ -308,6 +318,8 @@ export interface MediaTools {
   probe(file: string, options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<ProbeResult>;
   /** The first line of `ffmpeg -version`. */
   version(): Promise<string>;
+  /** The raw text of `ffmpeg -hide_banner -encoders` (which encoders this build contains). */
+  encoders(): Promise<string>;
 }
 
 export function createMediaTools(
@@ -351,6 +363,22 @@ export function createMediaTools(
         );
       }
       return line;
+    },
+    async encoders() {
+      const result = await collect(
+        locate().ffmpeg,
+        ['-hide_banner', '-encoders'],
+        { timeoutMs: 15_000 },
+        deps,
+      );
+      if (result.code !== 0) {
+        throw new FfmpegError(
+          'FFMPEG_FAILED',
+          'ffmpeg could not list its encoders.',
+          result.stderrTail,
+        );
+      }
+      return result.stdout;
     },
   };
 }

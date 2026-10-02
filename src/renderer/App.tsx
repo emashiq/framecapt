@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import { AppShell, type ViewId } from './components/AppShell';
 import { RecorderChoiceDialog } from './components/RecorderChoiceDialog';
@@ -10,12 +10,7 @@ import { RecordingResultView } from './views/RecordingResultView';
 import { EditorView, type EditorShot } from './views/editor/EditorView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
-
-const VIEWS: Record<ViewId, () => JSX.Element> = {
-  capture: CaptureView,
-  history: HistoryView,
-  settings: SettingsView,
-};
+import { listenToExports } from './history/export-store';
 
 /** What the discard confirmation will do when the user agrees. */
 type PendingLeave = { kind: 'leave'; then?: () => void } | { kind: 'close' };
@@ -30,6 +25,8 @@ export function App() {
   const [view, setView] = useState<ViewId>('capture');
   const [shot, setShot] = useState<EditorShot | null>(null);
   const [dirty, setDirty] = useState(false);
+  /** An item to open in History (picked in the Recent captures strip). */
+  const [historyFocus, setHistoryFocus] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingLeave | null>(null);
   const shotRef = useRef<EditorShot | null>(null);
   const recorder = useRecorderState();
@@ -58,6 +55,20 @@ export function App() {
       }),
     [],
   );
+
+  // MP4 export progress and results are shown wherever the user is.
+  useEffect(() => listenToExports(), []);
+
+  // A damaged history file is set aside at startup; say so once.
+  useEffect(() => {
+    void window.framelet.invoke('history:consumeNotice').then((response) => {
+      if (response.ok && response.data.reset) {
+        toast('History was reset because its file was damaged. Your files were not touched.', {
+          duration: 10_000,
+        });
+      }
+    });
+  }, []);
 
   // Main asks before closing the window while the editor has unsaved work.
   useEffect(() => window.framelet.on('app:confirmClose', () => setPending({ kind: 'close' })), []);
@@ -112,11 +123,10 @@ export function App() {
 
   const showEditor = view === 'capture' && shot !== null;
   const showRecording = view === 'capture' && !showEditor && recorder.status === 'completed';
-  const View = VIEWS[view];
 
   return (
     <TooltipProvider>
-      <AppShell view={view} onNavigate={navigate} editor={showEditor}>
+      <AppShell view={view} onNavigate={navigate} editor={showEditor} wide={view === 'history'}>
         {showEditor ? (
           <EditorView
             key={shot.session.id}
@@ -131,8 +141,17 @@ export function App() {
             result={recorder.result}
             onNewRecording={() => void window.framelet.invoke('recorder:reset')}
           />
+        ) : view === 'capture' ? (
+          <CaptureView
+            onOpenHistory={(id) => {
+              setHistoryFocus(id ?? null);
+              navigate('history');
+            }}
+          />
+        ) : view === 'history' ? (
+          <HistoryView focusId={historyFocus} onFocusConsumed={() => setHistoryFocus(null)} />
         ) : (
-          <View />
+          <SettingsView />
         )}
       </AppShell>
       <AlertConfirm

@@ -18,7 +18,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 04 Screenshot editor | VERIFIED | editor + pixel-exact capture; redaction pixels verified PNG/JPEG/clipboard |
 | 05 Recording & audio | VERIFIED | native 29/29; ~30 fps all modes; toolbar excluded from capture |
 | 06 Storage & recovery | VERIFIED | FFmpeg 9.0.2 bundled (SHA-pinned); remux finalize; forced-kill recovery verified natively |
-| 07 Export & history | NOT_STARTED | |
+| 07 Export & history | VERIFIED | MP4 export (libx264/aac, faststart) with cancel; history with trash-delete, relink |
 | 08 Desktop polish | NOT_STARTED | |
 | 09 Security/reliability/perf | NOT_STARTED | |
 | 10 Packaging/CI/updates | NOT_STARTED | |
@@ -71,6 +71,13 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Native: 6 s recording format.duration 6.039 s with cues, -ss 3 decodes. Forced kill after 2.3/3.7/5.0 s → recovered 1.97/2.99/5.04 s, video+audio, clean decode. Packaged exe logged "ffmpeg ok 9.0.2".
 - Results: lint/typecheck 0; unit 407/407 (lead re-ran); e2e 76/76; native 31/31. E2E-only env hooks gated by __FRAMELET_E2E__ (lead reviewed) and listed in check-no-mocks.
 - Risks: per-chunk fsync not done (OS crash may lose cached data); orphaned ffmpeg after main death untested; real disk-full only simulated; sub-100 ms recordings saved raw; FFmpeg adds ~211 MB; GPL source offer = owner task.
+
+### Phase 07 — Export & history (VERIFIED 2026-10-02)
+- Files: src/main/media/export.ts, src/main/history/* (store, thumbs, query, service, export-service, handlers), src/shared/history-ipc.ts, renderer history views, Mp4Export, RecentCaptures; tests unit/e2e/native.
+- Native: real 6.07 s recording → MP4 in 0.89 s, h264 yuv420p + aac, Δduration 0.005 s, moov before mdat, clean decode, original SHA unchanged. Cancel at 38 % → original intact, no .partial, no ffmpeg left; retry OK. Corrupt input/unwritable dest/truncated source → typed errors, nothing published.
+- History: zod JSON store with corruption set-aside, 1000 cap, 200 MB thumb cap, thumbnails from flattened editor output only, existence checks + relink, delete via shell.trashItem, undo remove, framelet-media thumb/file routes with nonce.
+- Results: lint/typecheck 0; unit 491/491 (lead re-ran); e2e 101/101; native 33/33 (final run).
+- Risks: native flakes seen once each (region drag 107x139; ffmpeg non-monotonic dts on seek decode) → phase 08; real Recycle Bin/shell windows stubbed; quit-during-export untested; H.264/AAC patent review = owner.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

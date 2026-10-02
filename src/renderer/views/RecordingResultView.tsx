@@ -13,25 +13,11 @@ import {
 } from 'lucide-react';
 import type { RecorderSnapshot, RecordingResult } from '../../shared/recorder-ipc';
 import { formatBytes, formatDuration } from '../../shared/recording';
+import { Mp4Export } from '../components/Mp4Export';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { revealDuration } from '../lib/reveal-duration';
 import { PageHeader } from '../components/PageHeader';
-
-/**
- * MediaRecorder WebM has no duration header, so <video> reports Infinity until it has seen the
- * end. Seeking far past the end makes it find the real duration; it then goes back to the start.
- * Finished files are remuxed with a proper duration and seek index, so this only matters for an
- * unindexed raw copy (a failed remux).
- */
-function revealDuration(video: HTMLVideoElement): void {
-  if (Number.isFinite(video.duration)) return;
-  const restore = (): void => {
-    video.removeEventListener('timeupdate', restore);
-    video.currentTime = 0;
-  };
-  video.addEventListener('timeupdate', restore);
-  video.currentTime = 1e101;
-}
 
 function Badge({
   icon,
@@ -178,6 +164,10 @@ export function RecordingResultView({
           {result.path}
         </p>
       </Card>
+
+      {result.historyId ? (
+        <Mp4Export historyId={result.historyId} className="mt-4 max-w-sm" />
+      ) : null}
 
       <div className="mt-5 flex flex-wrap items-center gap-2.5">
         <Button

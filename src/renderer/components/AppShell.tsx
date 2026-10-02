@@ -20,9 +20,17 @@ export interface AppShellProps {
    * screenshot editor needs the room.
    */
   editor?: boolean;
+  /** A wider content column (the History grid). */
+  wide?: boolean;
 }
 
-export function AppShell({ view, onNavigate, children, editor = false }: AppShellProps) {
+export function AppShell({
+  view,
+  onNavigate,
+  children,
+  editor = false,
+  wide = false,
+}: AppShellProps) {
   const mainRef = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
 
@@ -88,7 +96,10 @@ export function AppShell({ view, onNavigate, children, editor = false }: AppShel
       >
         <div
           key={view}
-          className={cn('view-in', editor ? 'h-full' : 'mx-auto max-w-4xl px-8 py-8')}
+          className={cn(
+            'view-in',
+            editor ? 'h-full' : cn('mx-auto px-8 py-8', wide ? 'max-w-6xl' : 'max-w-4xl'),
+          )}
         >
           {children}
         </div>

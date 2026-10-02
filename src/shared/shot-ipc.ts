@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { RectSchema } from './capture-schemas';
+import { MAX_THUMBNAIL_BYTES } from './history-ipc';
 import {
   MAX_EXPORT_BYTES,
   MAX_FRAME_DIMENSION,
@@ -46,6 +47,11 @@ export const ShotExportRequestSchema = z.object({
   sessionId: z.string().min(1).max(64),
   format: ImageFormatSchema,
   bytes: bytes(MAX_EXPORT_BYTES),
+  /**
+   * PNG thumbnail of the FLATTENED image (`flattenThumbnail`, at most 480 px wide) for history.
+   * Main never makes a screenshot thumbnail itself: it only ever stores this one.
+   */
+  thumbnail: bytes(MAX_THUMBNAIL_BYTES).optional(),
 });
 export const ShotExportResponseSchema = z.union([
   z.object({ path: z.string() }),

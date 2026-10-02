@@ -19,6 +19,7 @@ import {
   type SessionManifest,
 } from './manifest';
 import type { SessionFs } from './session-fs';
+import type { HistorySink } from '../history/service';
 
 export interface RecoveryDeps {
   rootDir: string;
@@ -30,6 +31,8 @@ export interface RecoveryDeps {
   isActive: (sessionId: string) => boolean;
   now?: () => number;
   appVersion?: string;
+  /** Recovered and resumed recordings are added here (a failure never fails the recovery). */
+  history?: HistorySink;
 }
 
 export type RecoverOutcome =
@@ -328,6 +331,21 @@ export class RecoveryService {
         },
         (value) => this.writeManifest(dir, value),
       );
+      await this.deps.history
+        ?.addVideo({
+          path: outcome.outputPath,
+          format: 'webm',
+          durationMs,
+          width: manifest.width,
+          height: manifest.height,
+          sizeBytes: outcome.bytes,
+          hasAudio: manifest.options.mic.enabled || manifest.options.systemAudio,
+          source: manifest.source.kind,
+          createdAt: target.recovered ? manifest.createdAt : this.now(),
+        })
+        .catch((error: unknown) =>
+          log.error('A recovered recording could not be added to history', error),
+        );
       return {
         outcome: 'recovered',
         outputPath: outcome.outputPath,

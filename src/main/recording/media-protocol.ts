@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { Readable } from 'node:stream';
 import { protocol } from 'electron';
+import { HISTORY_ID_PATTERN } from '../../shared/history-ipc';
 import { log } from '../logger';
 import { mediaContentType, parseRange } from './range';
 
@@ -34,30 +35,80 @@ export function registerMediaScheme(): void {
   ]);
 }
 
+/** What history lets the protocol serve: its own thumbnails and the files it lists. */
+export interface HistoryMedia {
+  thumbPathOf(id: string): string | undefined;
+  filePathOf(id: string): string | undefined;
+}
+
+/**
+ * Sent with EVERY response, errors included. A 404 without it can be remembered by the media
+ * element's URL cache, and the same URL (a history id keeps its URL when a file is re-linked or an
+ * entry is restored) would then keep failing without ever asking main again.
+ */
+const NO_STORE = { 'Cache-Control': 'no-store' };
+
+/**
+ * `/<history id>`, optionally followed by one `/<nonce>` of lowercase letters and digits. The nonce
+ * is ignored: it only lets the page give every <video>/<img> load its own URL, because the media
+ * stack remembers a failed load per URL (a file that was missing, an entry that was removed and
+ * restored) and would otherwise fail again without asking main.
+ */
+const HISTORY_ROUTE = new RegExp(
+  '^/(' + HISTORY_ID_PATTERN.source.slice(1, -1) + ')(?:/[0-9a-z]{1,24})?$',
+);
+
+/**
+ * The file a `framelet-media:` URL names, or undefined. Exactly three shapes exist and nothing
+ * else resolves: `//<registry id>` (a recording of this run), `//thumb/<history id>` (a history
+ * thumbnail) and `//file/<history id>` (the file of a history item), each history route with an
+ * optional cache-busting nonce segment. No query, no other segments, no paths.
+ */
+export function resolveMediaUrl(
+  url: URL,
+  registry: MediaRegistry,
+  history?: HistoryMedia,
+): string | undefined {
+  if (url.search !== '' || url.hash !== '' || url.username !== '' || url.port !== '') {
+    return undefined;
+  }
+  if (url.hostname === 'thumb' || url.hostname === 'file') {
+    const id = HISTORY_ROUTE.exec(url.pathname)?.[1];
+    if (!id || !history) return undefined;
+    return url.hostname === 'thumb' ? history.thumbPathOf(id) : history.filePathOf(id);
+  }
+  if (url.pathname !== '' && url.pathname !== '/') return undefined;
+  return registry.resolve(url.hostname);
+}
+
 /**
  * `framelet-media://<id>` serves a finished recording with Range support, so <video> can seek
  * (net.fetch(file://) was not relied on for ranges: they are answered here from the file).
  */
-export function installMediaProtocol(registry: MediaRegistry): void {
+export function installMediaProtocol(registry: MediaRegistry, history?: HistoryMedia): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
-      return new Response(null, { status: 405 });
+      return new Response(null, { status: 405, headers: NO_STORE });
     }
-    let id: string;
+    let url: URL;
     try {
-      id = new URL(request.url).hostname;
+      url = new URL(request.url);
     } catch {
-      return new Response(null, { status: 400 });
+      return new Response(null, { status: 400, headers: NO_STORE });
     }
-    const file = registry.resolve(id);
-    if (!file) return new Response(null, { status: 404 });
+    const file = resolveMediaUrl(url, registry, history);
+    if (!file) return new Response(null, { status: 404, headers: NO_STORE });
+    // Only types the app itself produces; anything else is never served, whatever the path says.
+    if (mediaContentType(file) === 'application/octet-stream') {
+      return new Response(null, { status: 404, headers: NO_STORE });
+    }
 
     let size: number;
     try {
       size = (await fs.promises.stat(file)).size;
     } catch {
       log.warn('Media file is gone');
-      return new Response(null, { status: 404 });
+      return new Response(null, { status: 404, headers: NO_STORE });
     }
     const baseHeaders: Record<string, string> = {
       'Content-Type': mediaContentType(file),

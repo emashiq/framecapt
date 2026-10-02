@@ -15,6 +15,7 @@ const markers = [
   'FRAMELET_E2E_FREE_BYTES_FILE',
   'FRAMELET_E2E_FFMPEG_DELAY_MS',
   'FRAMELET_E2E_QUIT_CAP_MS',
+  'FRAMELET_E2E_NO_H264',
   'drawSyntheticFrame',
   'synthetic-frame',
   'createSyntheticDisplayStream',

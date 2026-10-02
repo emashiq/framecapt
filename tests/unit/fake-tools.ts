@@ -10,11 +10,19 @@ import {
 export const PLAYABLE: ProbeResult = {
   hasVideo: true,
   hasAudio: true,
-  video: { width: 1920, height: 1080, codec: 'vp9' },
+  video: { width: 1920, height: 1080, codec: 'vp9', pixFmt: 'yuv420p' },
+  audioCodec: 'opus',
   durationSec: 5,
   formatName: 'matroska,webm',
   sizeBytes: 1000,
 };
+
+export const ENCODERS_WITH_H264 = [
+  ' V....D libx264              libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (codec h264)',
+  ' A....D aac                  AAC (Advanced Audio Coding)',
+  ' A....D libopus              libopus Opus (codec opus)',
+  '',
+].join('\n');
 
 export interface FakeToolsOptions {
   /** Exit code of the fake remux; non-zero writes no output. */
@@ -25,6 +33,8 @@ export interface FakeToolsOptions {
   /** What the fake ffprobe says about a file. */
   probe?: (file: string) => ProbeResult | Error;
   missing?: boolean;
+  /** Text of the fake `ffmpeg -encoders`. */
+  encoders?: string;
 }
 
 export type FakeTools = MediaTools & { runs: string[][]; probes: string[] };
@@ -61,5 +71,6 @@ export function fakeTools(options: FakeToolsOptions = {}): FakeTools {
       return result;
     },
     version: () => Promise.resolve('ffmpeg version fake'),
+    encoders: () => Promise.resolve(options.encoders ?? ENCODERS_WITH_H264),
   };
 }

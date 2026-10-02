@@ -1,0 +1,57 @@
+{
+  "capability": {
+    "available": true
+  },
+  "ffmpeg": "ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+  "export": {
+    "source": {
+      "durationSec": 4.008,
+      "codec": "vp9",
+      "audio": "opus",
+      "bytes": 661038
+    },
+    "output": {
+      "durationSec": 4,
+      "codec": "h264",
+      "pixFmt": "yuv420p",
+      "audio": "aac",
+      "bytes": 595391,
+      "topLevelBoxes": [
+        "ftyp",
+        "moov",
+        "free",
+        "mdat"
+      ],
+      "decodeExit": 0,
+      "decodeStderr": ""
+    },
+    "progressReports": [
+      99,
+      100
+    ],
+    "elapsedMs": 179
+  },
+  "oddSize": {
+    "in": "641x361",
+    "out": "640x360",
+    "audio": false
+  },
+  "cancelRetry": {
+    "cancelledAtPercent": 38,
+    "msToCancel": 1735,
+    "originalSha256Unchanged": true,
+    "partialFilesLeft": 0,
+    "encoderProcessLeft": false,
+    "retryOk": true,
+    "retryDurationSec": 40
+  },
+  "corruptInput": {
+    "code": "SOURCE_UNREADABLE"
+  },
+  "truncatedInput": {
+    "outcome": "VERIFY_FAILED"
+  },
+  "unwritableDestination": {
+    "code": "FAILED"
+  }
+}

@@ -44,6 +44,7 @@ import type { SelectionHost } from '../selection-host';
 import { getMainWindow, getWorkerWindow, peekWorkerWindow, webContentsWithRoles } from '../windows';
 import { whenWorkerReady } from '../worker';
 import type { MediaTools } from '../media/ffmpeg';
+import type { HistorySink } from '../history/service';
 import type { MediaRegistry } from '../recording/media-protocol';
 import type { SessionService } from '../recording/session-service';
 import { settleWithin } from './quit-cap';
@@ -113,6 +114,8 @@ export interface RecorderDeps {
   outputDir: () => string;
   /** The bundled ffmpeg/ffprobe (remux on finalize). */
   tools: MediaTools;
+  /** Finished recordings are added here (a failure never fails the recording). */
+  history?: HistorySink;
   /** Overrides the 15 s quit cap (E2E builds only). */
   quitCapMs?: number;
 }
@@ -821,8 +824,15 @@ export class RecorderController implements SelectionHost {
       // The file's own duration (probed after the remux); the active time only for a raw copy.
       const durationMs =
         published.durationMs ?? Math.round(activeDurationAt(this.machine, performance.now()));
+      const historyId = await this.addToHistory(
+        ctx,
+        published.outputPath,
+        published.bytes,
+        durationMs,
+      );
       ctx.result = {
         id: this.deps.media.register(published.outputPath),
+        historyId,
         fileName: path.basename(published.outputPath),
         path: published.outputPath,
         durationMs,
@@ -853,6 +863,31 @@ export class RecorderController implements SelectionHost {
       this.send({ cmd: 'abort' });
       this.closeToolbar();
       this.restoreMain();
+    }
+  }
+
+  /** The recording's history entry (it exists before the thumbnail does); null if it failed. */
+  private async addToHistory(
+    ctx: SessionContext,
+    file: string,
+    bytes: number,
+    durationMs: number,
+  ): Promise<string | null> {
+    try {
+      const added = await this.deps.history?.addVideo({
+        path: file,
+        format: 'webm',
+        durationMs,
+        width: ctx.width ?? 0,
+        height: ctx.height ?? 0,
+        sizeBytes: bytes,
+        hasAudio: ctx.audio.mic || ctx.audio.system,
+        source: ctx.target,
+      });
+      return added?.id ?? null;
+    } catch (error) {
+      log.error('The recording could not be added to history', error);
+      return null;
     }
   }
 

@@ -239,7 +239,7 @@ describe('parseProbe', () => {
   it('reduces ffprobe JSON to the facts the app needs', () => {
     const probe = parseProbe({
       streams: [
-        { codec_type: 'video', codec_name: 'vp9', width: 1920, height: 1080 },
+        { codec_type: 'video', codec_name: 'vp9', width: 1920, height: 1080, pix_fmt: 'yuv420p' },
         { codec_type: 'audio', codec_name: 'opus' },
       ],
       format: { format_name: 'matroska,webm', duration: '4.998000', size: '12345' },
@@ -247,7 +247,8 @@ describe('parseProbe', () => {
     expect(probe).toEqual({
       hasVideo: true,
       hasAudio: true,
-      video: { width: 1920, height: 1080, codec: 'vp9' },
+      video: { width: 1920, height: 1080, codec: 'vp9', pixFmt: 'yuv420p' },
+      audioCodec: 'opus',
       durationSec: 4.998,
       formatName: 'matroska,webm',
       sizeBytes: 12345,

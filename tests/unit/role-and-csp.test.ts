@@ -28,9 +28,11 @@ describe('CSP', () => {
     expect(PROD_CSP).toContain("frame-ancestors 'none'");
   });
 
-  it('allows the main-owned recording protocol for media only', () => {
+  it('allows the main-owned media protocol for media and images only', () => {
     expect(PROD_CSP).toContain("media-src 'self' blob: mediastream: framelet-media:");
-    expect(PROD_CSP).not.toMatch(/(script|connect|img)-src[^;]*framelet-media/);
+    // History thumbnails and previews are <img> elements; scripts and fetches stay local.
+    expect(PROD_CSP).toContain("img-src 'self' data: blob: framelet-media:");
+    expect(PROD_CSP).not.toMatch(/(script|connect|style|font)-src[^;]*framelet-media/);
     expect(devCsp('http://localhost:5173')).toContain('framelet-media:');
   });
 
