@@ -20,9 +20,10 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+import { evidenceDirFor } from '../native/evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase03');
+const evidenceDir = evidenceDirFor(projectRoot, 'phase03');
 
 let app: ElectronApplication;
 let page: Page;

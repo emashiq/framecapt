@@ -559,6 +559,25 @@ export function AdvancedSection() {
   );
 }
 
+/** The About line for the update adapter. Plain words: an unconfigured build never checks. */
+export function updatesLabel(updates: AppInfo['updates']): string {
+  switch (updates.state) {
+    case 'unconfigured':
+      return 'Not configured for this build';
+    case 'idle':
+      return 'Configured, not checked';
+    case 'checking':
+      return 'Checking...';
+    case 'available':
+    case 'downloading':
+      return 'Downloading an update...';
+    case 'ready':
+      return 'Update ready, restart to install';
+    case 'error':
+      return updates.message ? `Error: ${updates.message}` : 'Error';
+  }
+}
+
 function infoRows(info: AppInfo): { id: string; label: string; value: string }[] {
   return [
     { id: 'version', label: 'Framelet', value: info.version },
@@ -568,6 +587,7 @@ function infoRows(info: AppInfo): { id: string; label: string; value: string }[]
     { id: 'platform', label: 'Platform', value: `${info.platform} (${info.arch})` },
     { id: 'build', label: 'Build', value: info.isPackaged ? 'Packaged' : 'Development' },
     { id: 'tray', label: 'Tray icon', value: info.tray.active ? 'Active' : 'Unavailable' },
+    { id: 'updates', label: 'Updates', value: updatesLabel(info.updates) },
   ];
 }
 

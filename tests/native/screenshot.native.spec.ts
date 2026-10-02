@@ -23,10 +23,10 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from '../e2e/app-exit';
-import { redactPaths, writeEvidenceJson } from './evidence';
+import { redactPaths, writeEvidenceJson, evidenceDirFor } from './evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase04');
+const evidenceDir = evidenceDirFor(projectRoot, 'phase04');
 const phase03Evidence = path.join(
   projectRoot,
   'docs',

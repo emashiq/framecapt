@@ -52,3 +52,18 @@ export function writeEvidenceJson(dir: string, name: string, value: unknown): vo
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, name), redactedJson(value));
 }
+
+/**
+ * Evidence hygiene: committed evidence (docs/evidence/phaseNN: screenshots, JSON, media samples)
+ * is only rewritten when FRAMELET_WRITE_EVIDENCE=1. Otherwise the tests still write and assert on
+ * their evidence, but into a scratch directory under the OS temp dir, so an ordinary run never
+ * touches files that earlier phases committed.
+ */
+export const WRITE_EVIDENCE = process.env.FRAMELET_WRITE_EVIDENCE === '1';
+
+/** docs/evidence/<phase> when FRAMELET_WRITE_EVIDENCE=1, otherwise a scratch directory. */
+export function evidenceDirFor(repoRoot: string, phase: string): string {
+  return WRITE_EVIDENCE
+    ? path.join(repoRoot, 'docs', 'evidence', phase)
+    : path.join(os.tmpdir(), 'framelet-evidence-scratch', phase);
+}

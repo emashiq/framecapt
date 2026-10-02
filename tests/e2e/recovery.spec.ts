@@ -17,9 +17,10 @@ import {
 } from '@playwright/test';
 import { exitApp } from './app-exit';
 import { decodesClean, generateLiveWebm, hasCues, probeFile } from './media-fixtures';
+import { evidenceDirFor } from '../native/evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase06');
+const evidenceDir = evidenceDirFor(projectRoot, 'phase06');
 
 const ID_TRUNCATED = '0f0e0d0c-0b0a-4908-8706-050403020100';
 const ID_JUNK = '1f1e1d1c-1b1a-4918-8716-151413121110';

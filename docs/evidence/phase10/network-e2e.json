@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-02T16:04:42.302Z",
+  "build": "e2e (production renderer from app://framelet, mock capture)",
+  "watchedSeconds": 63,
+  "requestsSeenBySession": 0,
+  "requestsBySchemeCounts": {},
+  "externalRequests": 0,
+  "blockedByTheAppBlocker": 0,
+  "tcpSamples": [
+    {
+      "atMs": 1292,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 7678,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 13767,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 19885,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 26246,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 32402,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 38529,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 44900,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 50990,
+      "connections": 4,
+      "nonLoopback": 0
+    },
+    {
+      "atMs": 57110,
+      "connections": 4,
+      "nonLoopback": 0
+    }
+  ],
+  "tcpNonLoopbackConnections": 0,
+  "processTreePids": 7,
+  "positiveControl": {
+    "request": "https://example.invalid/ (cancelled by the app, never sent)",
+    "observed": true,
+    "failure": "net::ERR_BLOCKED_BY_CLIENT",
+    "loggedAsBlocked": true
+  }
+}

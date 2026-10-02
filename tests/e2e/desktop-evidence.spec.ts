@@ -15,9 +15,10 @@ import {
 } from '@playwright/test';
 import { exitApp } from './app-exit';
 import { makeWebm, mockScreenshotPng, newId, seedHistory } from './history-fixtures';
+import { evidenceDirFor } from '../native/evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase08');
+const evidenceDir = evidenceDirFor(projectRoot, 'phase08');
 
 let app: ElectronApplication;
 let page: Page;

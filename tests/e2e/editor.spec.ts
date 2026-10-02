@@ -22,11 +22,11 @@ import {
   type Locator,
   type Page,
 } from '@playwright/test';
-import { writeEvidenceJson } from '../native/evidence';
+import { writeEvidenceJson, evidenceDirFor } from '../native/evidence';
 import { exitApp } from './app-exit';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase04');
+const evidenceDir = evidenceDirFor(projectRoot, 'phase04');
 const FRAME = { width: 2560, height: 1440 };
 
 let app: ElectronApplication;

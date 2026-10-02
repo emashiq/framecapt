@@ -23,18 +23,17 @@ export class MediaRegistry {
   }
 }
 
-/** Must run before `app.whenReady()`. */
-export function registerMediaScheme(): void {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: MEDIA_SCHEME,
-      // standard + secure: media elements and the CSP treat it like a normal origin. stream: media
-      // playback may stream the response. Nothing else: no fetch API (pages only load it through
-      // <img> and <video>), no CORS, and never bypassCSP.
-      privileges: { standard: true, secure: true, stream: true },
-    },
-  ]);
-}
+/**
+ * Privileges of the `framelet-media` scheme, registered with the other schemes in one call
+ * (registerPrivilegedSchemes in app-protocol.ts, before `app.whenReady()`).
+ */
+export const MEDIA_SCHEME_PRIVILEGES: Electron.CustomScheme = {
+  scheme: MEDIA_SCHEME,
+  // standard + secure: media elements and the CSP treat it like a normal origin. stream: media
+  // playback may stream the response. Nothing else: no fetch API (pages only load it through
+  // <img> and <video>), no CORS, and never bypassCSP.
+  privileges: { standard: true, secure: true, stream: true },
+};
 
 /** What history lets the protocol serve: its own thumbnails and the files it lists. */
 export interface HistoryMedia {

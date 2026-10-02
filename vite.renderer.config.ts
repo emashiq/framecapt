@@ -5,8 +5,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { PROD_CSP_META } from './src/shared/csp';
 
 /**
- * Production CSP as a <meta> tag. session.webRequest.onHeadersReceived does not
- * reliably cover file:// loads, so packaged builds are also covered by the document itself.
+ * Production CSP as a <meta> tag. The app:// protocol handler also sends the policy as a response
+ * header (src/main/app-protocol.ts); the document carries it too, so it never depends on one layer.
  * Only injected in build mode; dev relies on the (more permissive) header from main.
  */
 function injectProdCsp(): Plugin {

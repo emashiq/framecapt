@@ -1,0 +1,153 @@
+# Manual release workflow. It only ever creates a DRAFT release; publishing it is a human action in
+# the GitHub UI. Never triggered by a push or a tag.
+#
+# Optional secrets (names only; the values live in the repository's Actions secrets, never in git):
+#   WINDOWS_CERTIFICATE_BASE64    base64 of the Authenticode .pfx
+#   WINDOWS_CERTIFICATE_PASSWORD  the .pfx password
+# When either is missing the build is UNSIGNED, the run says so in a visible warning, and the draft
+# release notes say so too. See docs/release-process.md.
+name: Release (draft)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 0.1.0 (must equal "version" in package.json)'
+        required: true
+        type: string
+
+# No token permissions by default; the draft job below grants contents: write to itself only.
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build installer and zip
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Check the version input
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:INPUT_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'version must look like 1.2.3' }
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($pkg -ne $env:INPUT_VERSION) { throw "package.json version is $pkg, not $($env:INPUT_VERSION). Bump it first." }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - name: Cache FFmpeg
+        uses: actions/cache@v6
+        with:
+          path: vendor/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
+      - name: Prepare code signing (optional)
+        id: signing
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ($env:CERT_BASE64 -and $env:CERT_PASSWORD) {
+            $pfx = Join-Path $env:RUNNER_TEMP 'framelet-signing.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_BASE64))
+            "WINDOWS_CERTIFICATE_FILE=$pfx" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+            'signed=true' | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+            Write-Host 'Code signing is ENABLED.'
+          } else {
+            'signed=false' | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+            Write-Host '::warning title=UNSIGNED build::WINDOWS_CERTIFICATE_BASE64 or WINDOWS_CERTIFICATE_PASSWORD is not set. This release is UNSIGNED: Windows SmartScreen will warn users.'
+          }
+      - name: Build (npm run make)
+        run: npm run make
+        env:
+          # Read by forge.config.ts together with WINDOWS_CERTIFICATE_FILE (set above).
+          # Both stay empty for an unsigned build.
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      - run: npm run check:mocks
+      - name: Remove the temporary certificate
+        if: always()
+        shell: pwsh
+        run: |
+          Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:RUNNER_TEMP 'framelet-signing.pfx')
+      - name: Verify the signature matches the claim
+        shell: pwsh
+        env:
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: |
+          $setup = Get-ChildItem out/make/squirrel.windows -Recurse -Filter 'Framelet-Setup-*.exe' | Select-Object -First 1
+          $sig = Get-AuthenticodeSignature $setup.FullName
+          Write-Host "Authenticode status of $($setup.Name): $($sig.Status)"
+          if ($env:SIGNED -eq 'true' -and $sig.Status -eq 'NotSigned') { throw 'Signing was enabled but the installer is not signed.' }
+          if ($env:SIGNED -ne 'true' -and $sig.Status -ne 'NotSigned') { throw 'An unsigned build produced a signed installer?' }
+      - name: Collect assets and checksums
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          Get-ChildItem out/make -Recurse -File |
+            Where-Object { $_.Extension -in '.exe', '.zip', '.nupkg' -or $_.Name -eq 'RELEASES' } |
+            ForEach-Object { Copy-Item $_.FullName release-assets/ }
+          Get-ChildItem release-assets -File | Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Out-File -Encoding ascii release-assets/SHA256SUMS.txt
+          Get-Content release-assets/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-assets
+          path: release-assets/
+          retention-days: 14
+          if-no-files-found: error
+
+  draft:
+    name: Create the DRAFT release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create a draft release and attach assets; no other job has this
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-assets
+          path: release-assets
+      - name: Create the draft (it is never published by this workflow)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          SHA: ${{ github.sha }}
+          SIGNED: ${{ needs.build.outputs.signed }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGNED" = "true" ]; then
+            SIGNING="Signing: the installer and executables are Authenticode-signed (the signing certificate is the owner's)."
+          else
+            SIGNING="Signing: UNSIGNED. No signing certificate was configured, so Windows SmartScreen will warn when the installer is run."
+          fi
+          {
+            echo "Framelet v${VERSION} - DRAFT, not published."
+            echo
+            echo "Built from commit ${SHA} by the Release (draft) workflow."
+            echo "Verify the downloads against SHA256SUMS.txt."
+            echo
+            echo "${SIGNING}"
+          } > notes.md
+          gh release create "v${VERSION}" release-assets/* \
+            --draft \
+            --target "${SHA}" \
+            --title "Framelet v${VERSION} (draft)" \
+            --notes-file notes.md

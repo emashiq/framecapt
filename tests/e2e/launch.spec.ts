@@ -4,7 +4,7 @@
  * Runs the Forge/Vite build output in .vite/build (via `electron .`) and NOT the packaged
  * Framelet.exe: the packaged build disables EnableNodeCliInspectArguments through Electron fuses,
  * and Playwright needs the inspect arguments to drive the app. The renderer is loaded the same way
- * as in a packaged build (file://, because MAIN_WINDOW_VITE_DEV_SERVER_URL is undefined in
+ * as in a packaged build (app://framelet, because MAIN_WINDOW_VITE_DEV_SERVER_URL is undefined in
  * `electron-forge package` output), so the production CSP and sandbox settings are exercised.
  * `npm run test:e2e` runs `scripts/package-e2e.mjs` (electron-forge package with the mock capture
  * provider compiled in) first to produce that output. This file does not set
@@ -47,9 +47,9 @@ test.afterAll(async () => {
   if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
 });
 
-test('opens a Framelet window loaded from file:// with the sidebar nav', async () => {
+test('opens a Framelet window loaded from app://framelet with the sidebar nav', async () => {
   await expect(page).toHaveTitle('Framelet');
-  expect(page.url()).toMatch(/^file:\/\/.*\/renderer\/main_window\/index\.html/);
+  expect(page.url()).toMatch(/^app:\/\/framelet\/index\.html/);
 
   const nav = page.getByRole('navigation', { name: 'Primary' });
   await expect(nav).toBeVisible();
@@ -89,11 +89,13 @@ test('navigating to Settings shows About with the Electron version from app:getI
 
   const electronVersion = await app.evaluate(() => process.versions.electron);
   await expect(page.getByTestId('about-electron')).toHaveText(electronVersion ?? '');
+  // No update feed is compiled in: said plainly, and nothing is ever checked.
+  await expect(page.getByTestId('about-updates')).toHaveText('Not configured for this build');
 
   const result = await page.evaluate(() => window.framelet.invoke('app:getInfo'));
   expect(result).toMatchObject({
     ok: true,
-    data: { electron: electronVersion, isPackaged: false },
+    data: { electron: electronVersion, isPackaged: false, updates: { state: 'unconfigured' } },
   });
 });
 
@@ -219,4 +221,46 @@ test('navigation and window.open to foreign origins are blocked', async () => {
   await page.evaluate(() => window.open('https://example.invalid/', '_blank'));
   await page.waitForTimeout(500);
   expect(app.windows().length).toBe(windowsBefore);
+});
+
+test('the app:// protocol serves the renderer and refuses everything else', async () => {
+  const fetchFromMain = (url: string) =>
+    app.evaluate(async ({ net }, target) => {
+      const response = await net.fetch(target, { bypassCustomProtocolHandlers: false });
+      return {
+        status: response.status,
+        type: response.headers.get('content-type'),
+        csp: response.headers.get('content-security-policy'),
+        sniff: response.headers.get('x-content-type-options'),
+        size: (await response.arrayBuffer()).byteLength,
+      };
+    }, url);
+
+  const entry = await fetchFromMain('app://framelet/index.html');
+  expect(entry).toMatchObject({ status: 200, type: 'text/html; charset=utf-8', sniff: 'nosniff' });
+  expect(entry.csp).toContain("default-src 'none'");
+  expect(entry.size).toBeGreaterThan(100);
+
+  // A built asset (the script the page itself loaded) is served with its MIME type.
+  const script = await page.evaluate(
+    () => document.querySelector<HTMLScriptElement>('script[type="module"]')?.src ?? '',
+  );
+  expect(script).toMatch(/^app:\/\/framelet\/assets\/.+\.js$/);
+  expect(await fetchFromMain(script)).toMatchObject({
+    status: 200,
+    type: 'text/javascript; charset=utf-8',
+  });
+
+  // Everything else never reaches the file system: unknown types, traversal, other hosts.
+  for (const [url, status] of [
+    ['app://framelet/main.cjs', 404],
+    ['app://framelet/assets/missing.js', 404],
+    ['app://framelet/..%2f..%2fmain.cjs', 400],
+    // Chromium folds %2e%2e into the URL path before the handler runs: /preload.cjs, not a served type.
+    ['app://framelet/%2e%2e/preload.cjs', 404],
+    ['app://framelet/assets/..%5c..%5cmain.js', 400],
+    ['app://other/index.html', 404],
+  ] as const) {
+    expect(await fetchFromMain(url), url).toMatchObject({ status });
+  }
 });

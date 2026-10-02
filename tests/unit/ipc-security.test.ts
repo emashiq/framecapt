@@ -4,7 +4,6 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppOriginConfig } from '../../src/main/app-origin';
 import { checkSender, runChannel } from '../../src/main/ipc-core';
@@ -18,9 +17,8 @@ import {
 import { MAX_EXPORT_BYTES } from '../../src/shared/shots';
 import { ROLES } from '../../src/shared/types';
 
-const rendererDir = path.resolve('app', '.vite', 'renderer', 'main_window');
-const origin: AppOriginConfig = { rendererDir };
-const goodUrl = pathToFileURL(path.join(rendererDir, 'index.html')).href;
+const origin: AppOriginConfig = {};
+const goodUrl = 'app://framelet/index.html';
 const defOf = (channel: IpcChannel): ChannelDef => ipcContract[channel];
 const mainSources = path.resolve(__dirname, '..', '..', 'src', 'main');
 

@@ -32,9 +32,10 @@ import {
   installNetworkBlocker,
   installPermissionHandlers,
 } from '../../src/main/security';
+import type { AppOriginConfig } from '../../src/main/app-origin';
 import { securePreferences } from '../../src/main/windows';
 
-const config = { rendererDir: 'C:\\app\\renderer' };
+const config: AppOriginConfig = {};
 
 describe('securePreferences: what every window gets', () => {
   it('isolated, sandboxed, no Node, web security on, nothing insecure allowed', () => {
@@ -104,6 +105,7 @@ describe('navigation lockdown (every webContents)', () => {
         'file:///C:/Windows/win.ini',
         'data:text/html,x',
         'about:blank',
+        'app://evil.example/index.html',
       ]) {
         const event = { preventDefault: vi.fn() };
         target.handlers.get(name)?.(event, url);
@@ -184,7 +186,7 @@ describe('session policies', () => {
       callback: (allowed: boolean) => void,
       details: { requestingUrl: string; mediaTypes?: string[] },
     ) => void;
-    const app = 'file:///C:/app/renderer/index.html';
+    const app = 'app://framelet/index.html';
     const ask = (permission: string, requestingUrl: string, mediaTypes?: string[]) => {
       const callback = vi.fn();
       decide({}, permission, callback, { requestingUrl, ...(mediaTypes && { mediaTypes }) });

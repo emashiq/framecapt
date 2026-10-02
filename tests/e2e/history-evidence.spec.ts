@@ -18,9 +18,10 @@ import {
 import { exitApp } from './app-exit';
 import { makeWebm, mockScreenshotPng, newId, seedHistory, type SeedFile } from './history-fixtures';
 import { probeFile } from './media-fixtures';
+import { evidenceDirFor } from '../native/evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase07');
+const evidenceDir = evidenceDirFor(projectRoot, 'phase07');
 const THEMES = ['light', 'dark'] as const;
 
 let app: ElectronApplication;

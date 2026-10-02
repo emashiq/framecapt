@@ -78,6 +78,16 @@ import { ROLES, type Role } from './types';
 
 const ALL_ROLES: readonly Role[] = ROLES;
 
+/**
+ * Where the update adapter stands (src/main/updates.ts). `unconfigured` is the state of every
+ * build without a compiled-in update feed: no update code runs and nothing touches the network.
+ */
+export const UpdateStatusSchema = z.object({
+  state: z.enum(['unconfigured', 'idle', 'checking', 'available', 'downloading', 'ready', 'error']),
+  message: z.string().max(500).optional(),
+});
+export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;
+
 export const AppInfoSchema = z.object({
   version: z.string(),
   electron: z.string(),
@@ -93,6 +103,7 @@ export const AppInfoSchema = z.object({
       .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })
       .nullable(),
   }),
+  updates: UpdateStatusSchema,
 });
 export type AppInfo = z.infer<typeof AppInfoSchema>;
 

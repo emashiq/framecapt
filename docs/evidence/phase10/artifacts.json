@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-02T16:46:13.191Z",
+  "app": {
+    "name": "Framelet",
+    "version": "0.1.0"
+  },
+  "electron": "44.5.1",
+  "ffmpeg": {
+    "version": "9.0.2",
+    "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba"
+  },
+  "signing": "UNSIGNED: no certificate was configured; Windows SmartScreen will warn",
+  "artifacts": [
+    {
+      "path": "out/make/squirrel.windows/x64/Framelet-0.1.0-full.nupkg",
+      "bytes": 228392281,
+      "sha256": "ff3f4003e5a8cc20a6948db3d79b8f3fa899234b6e9045a84de7c4833ccb7e9a"
+    },
+    {
+      "path": "out/make/squirrel.windows/x64/Framelet-Setup-0.1.0.exe",
+      "bytes": 228981760,
+      "sha256": "5fab53a2efc93e5e6b17c7a880fdb6621d672963a1f8bce8b893ecb6c9eb246f",
+      "authenticode": "NotSigned"
+    },
+    {
+      "path": "out/make/squirrel.windows/x64/RELEASES",
+      "bytes": 79,
+      "sha256": "dc1c7e4f8f85daf96a955bd2d5431f87f7eeb5b36c333bab90c299a56163e4e3"
+    },
+    {
+      "path": "out/make/zip/win32/x64/Framelet-win32-x64-0.1.0.zip",
+      "bytes": 236122291,
+      "sha256": "36ddda97e71768e3b36db18ad2ec9db3565aaa0390e01205e8248046e6c06984"
+    }
+  ]
+}

@@ -46,7 +46,7 @@ Decision: `typescript ~6.0.x`. typescript-eslint 8.71 declares `typescript >=4.8
 
 ## ADR-006: Electron fuses
 
-Decision: `@electron-forge/plugin-fuses` with RunAsNode off, EnableCookieEncryption on, EnableNodeOptionsEnvironmentVariable off, EnableNodeCliInspectArguments off, EnableEmbeddedAsarIntegrityValidation on, OnlyLoadAppFromAsar on. `GrantFileProtocolExtraPrivileges` is left at its default (on) because the packaged app loads its own UI over `file://` and Vite's `type="module"` assets need it; the app never loads remote or user-supplied HTML, and navigation is locked down. Consequence: the packaged exe cannot be driven by Playwright (see ADR-008).
+Decision: `@electron-forge/plugin-fuses` with RunAsNode off, EnableCookieEncryption on, EnableNodeOptionsEnvironmentVariable off, EnableNodeCliInspectArguments off, EnableEmbeddedAsarIntegrityValidation on, OnlyLoadAppFromAsar on. `GrantFileProtocolExtraPrivileges` was left on in phases 01-09 because the UI was a `file://` page; **phase 10 turned it off** after serving the UI from `app://framelet` (ADR-033). Consequence: the packaged exe cannot be driven by Playwright (see ADR-008).
 
 ## ADR-007: CSP approach
 
@@ -54,7 +54,7 @@ Decision: enforce the policy in two layers. (1) Main sets `Content-Security-Poli
 
 ## ADR-008: End-to-end test strategy
 
-Decision: Playwright runs `electron .` against the Forge Vite output in `.vite/build` (produced by `electron-forge package`, which `npm run test:e2e` runs first), not the packaged exe, because the fuses disable `--inspect` arguments that Playwright needs. The build output loads the renderer over `file://` (no dev server URL is defined by `package`), so production CSP, sandbox and origin checks are exercised. A temporary `userData` directory is supplied through `FRAMELET_USER_DATA_DIR`, honored only when `!app.isPackaged`. The packaged exe is smoke-launched separately (process starts and stays alive) without Playwright.
+Decision: Playwright runs `electron .` against the Forge Vite output in `.vite/build` (produced by `electron-forge package`, which `npm run test:e2e` runs first), not the packaged exe, because the fuses disable `--inspect` arguments that Playwright needs. The build output loads the renderer from `app://framelet` (no dev server URL is defined by `package`; `file://` before phase 10), so production CSP, sandbox and origin checks are exercised. A temporary `userData` directory is supplied through `FRAMELET_USER_DATA_DIR`, honored only when `!app.isPackaged`. The packaged exe is smoke-launched separately (process starts and stays alive) without Playwright.
 
 ## ADR-009: Result-style IPC and no raw errors
 
@@ -66,7 +66,7 @@ Decision: `com.framelet.app` is used as `packagerConfig.appBundleId` and as the 
 
 ## ADR-011: Squirrel lifecycle handling without auto-update
 
-Decision: the Squirrel.Windows maker is configured and `src/main/squirrel.ts` handles the installer lifecycle launches (shortcut create/remove, `shell: false`). No update checks or feed URLs exist; update integration stays disabled until a real update source exists. The installer path has not been exercised on this host (`npm run make` was not run in phase 01).
+Decision: the Squirrel.Windows maker is configured and `src/main/squirrel.ts` handles the installer lifecycle launches (shortcut create/remove, `shell: false`). No update checks or feed URLs exist; update integration stays disabled until a real update source exists. Phase 10 exercised it on this host: silent install, shortcuts, uninstall (see ADR-034 and `docs/evidence/phase10/installed-smoke.json`).
 
 ## ADR-012: Styling
 
@@ -204,3 +204,28 @@ Investigation (80 synthetic recordings through the real pipeline, with and witho
 ## ADR-032: Toolbar and overlay: measure, do not guess; do not trust input before the window is shown (phase 08)
 
 The toolbar window width is the measured width of its content (ResizeObserver -> `toolbar:resize`), replacing a computed table that clipped the mic-only layout. The selection overlay ignores pointer events until main has shown it (`overlay:ready` answered) and keeps gesture state in refs. Together with a cancelled capture not re-showing a window that was hidden in the tray, this makes the shortcut-driven flow predictable.
+
+## ADR-033: The production UI is served from `app://framelet`, not `file://` (phase 10, closes R-02)
+
+- **Context.** With `GrantFileProtocolExtraPrivileges` off a `file://` page does not load in Electron 44 (tested in phase 09), so the fuse stayed on and gave file pages extra privileges.
+- **Decision.** Register `app` as a privileged scheme (`standard`, `secure`) before `ready`; `protocol.handle('app', ...)` serves only the built renderer directory. `resolveAppAsset` (pure, unit-tested) accepts only `app://framelet`, inspects the path as written (so a `..` that the URL parser would silently fold is still refused), decodes twice, refuses backslashes, NUL, `:`, empty and dot segments, requires a known extension (html, js, mjs, css, woff2, woff, png, svg, ico, json) and re-checks containment after `path.resolve`. Responses carry the MIME type, the production CSP, `nosniff` and `no-store`. Unknown or refused requests get a 404/400 without reading the disk. The scheme has no fetch API, CORS or CSP-bypass privilege. The dev server path is unchanged.
+- **Consequences.** `isAppUrl` is origin-based (`app://framelet`); CSP `'self'` now means that origin; the fuse is off in `forge.config.ts` and read back from the packaged and the installed exe. `registerSchemesAsPrivileged` may be called once, so both schemes are registered by `registerPrivilegedSchemes()`.
+- **Alternatives rejected.** Keeping the fuse on and documenting it (the residual risk the review asked to remove); `net.fetch(file://)` inside the handler (needless: the files are read with `fs`, which Electron makes asar-aware).
+
+## ADR-034: Squirrel.Windows installer, optional environment-only signing, no network at install (phase 10)
+
+- **Decision.** `maker-squirrel` with a per-user install and `noMsi`; `maker-zip` as the portable build. Setup file `Framelet-Setup-<version>.exe`. Identity strings are marked PROVISIONAL in `forge.config.ts`. Signing: `WINDOWS_CERTIFICATE_FILE` + `WINDOWS_CERTIFICATE_PASSWORD` (and optionally `WINDOWS_TIMESTAMP_SERVER`) enable `windowsSign` for both the packaged binaries and the Squirrel installer; half-configured is a hard error; absent means the build log prints "UNSIGNED". No certificate is ever committed. The signing path itself was NOT run (no certificate on this host).
+- **Measured defect fixed.** electron-winstaller's default nuspec carries an `<iconUrl>` that Squirrel downloads at install time (from raw.githubusercontent.com): on this host the silent install waited about 85 s for a connection timeout (5.9 s once fixed). An offline app should not make a request while installing, so `assets/app/framelet.nuspectemplate` drops it. Cost: a generic icon in Programs and Features until the owner hosts an https icon URL.
+- **User data on uninstall.** Squirrel removes only `%LOCALAPPDATA%\Framelet`. `%APPDATA%\Framelet` (settings, history, sessions, logs) and the capture folders are kept on purpose: captures are the user's files, and keeping settings makes a reinstall seamless. The uninstall hook removes the shortcuts and the launch-at-login entry only.
+- **Known Squirrel residue.** `Update.exe --uninstall` leaves its own stub (`Update.exe`, a `.dead` marker and `app-<version>\squirrel.exe`, about 3.8 MB) in the install folder and an empty publisher folder in the Start Menu; none of Framelet's files remain. This is Squirrel.Windows behavior (the running updater cannot delete itself), documented in docs/packaging.md.
+
+- **Found by running the installed app.** (1) `--squirrel-firstrun` was handled as a quit-early hook; it now starts the app normally. (2) Launch at login: the Electron docs' Squirrel form (`args: ['--processStart', '"Framelet.exe"', '--process-start-args', '"--hidden"']`) is escaped by Electron 44 when it writes the Run value, so Update.exe was asked to start a file called `"Framelet.exe"` (with quotes) and nothing started; plain arguments work and are used. (3) The uninstall hook now removes the launch-at-login entry (a registry write needs a ready app, so it runs after `ready`; Electron names the value after the AppUserModelID, `com.squirrel.Framelet.Framelet`). (4) The AppUserModelID of a Squirrel install is `com.squirrel.Framelet.Framelet`, so toast notifications match the Start Menu shortcut (verified with `Get-StartApps`).
+
+## ADR-035: Update adapter: unconfigured by default, no autoUpdater, no request (phase 10)
+
+- **Decision.** `UpdateService` wraps Electron's built-in `autoUpdater` (Squirrel.Windows feed). The feed URL is the build-time constant `__FRAMELET_UPDATE_URL__` (vite define from `FRAMELET_UPDATE_URL`, empty by default). Empty: state `unconfigured`, `autoUpdater` is never loaded, `setFeedURL`/`checkForUpdates` are never called, no network request. A non-https URL is an error state. Configured: `checkNow()` (the only entry point, not wired to any UI yet) sets the feed once and maps the autoUpdater events to the states. Feeds that would work: a static directory with `RELEASES` + `.nupkg` files, or `update.electronjs.org` for a public GitHub repository; neither is configured. Updates need a signed build in practice (owner action).
+- **Verification.** A unit test asserts that an unconfigured service never touches the updater, and a source scan that only `updates.ts` calls its API. A 60 s e2e run and a 60 s installed run record zero non-loopback TCP connections and zero requests (docs/packaging.md, "Network behavior").
+
+## ADR-036: Evidence files are only rewritten on request (phase 10)
+
+Every e2e/native run used to rewrite the committed screenshots and JSON of earlier phases. `evidenceDirFor()` (tests/native/evidence.ts) now points at a scratch directory under the OS temp folder unless `FRAMELET_WRITE_EVIDENCE=1`; the tests still write and assert on their evidence. See docs/testing.md.

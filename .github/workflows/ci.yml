@@ -1,0 +1,111 @@
+# Continuous integration. Runs on every push and pull request to main; it NEVER publishes anything
+# (no release, no tag, no package registry). Build output is kept as workflow artifacts for 14 days.
+#
+# Native capture tests (npm run test:native: real screen/audio capture, global shortcuts, the
+# 30-minute recording benchmark) and the installed-app smoke test (npm run smoke:installed) need a
+# real interactive desktop and run locally only: see docs/testing.md and docs/packaging.md. The
+# hosted runner runs the mock-provider e2e suite instead.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: the workflow can read the repository and nothing else.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      # Actions are pinned to a major version (tags move within the major). Hardening option for the
+      # owner: pin each to a full commit SHA (see docs/release-process.md).
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  e2e:
+    name: E2E (mock capture)
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # The pinned FFmpeg build (scripts/fetch-ffmpeg.mjs holds the URL and SHA-256). The key changes
+      # with that file, i.e. exactly when the pin changes; fetch-ffmpeg verifies the SHA either way.
+      - name: Cache FFmpeg
+        uses: actions/cache@v6
+        with:
+          path: vendor/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
+      # package:e2e builds the mock-provider app, then Playwright drives it. Windows open on the
+      # runner's desktop session; real capture is not attempted (mock provider).
+      - run: npm run test:e2e
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-test-results
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  package:
+    name: Package (Squirrel installer + zip, UNSIGNED)
+    needs: checks
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Cache FFmpeg
+        uses: actions/cache@v6
+        with:
+          path: vendor/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
+      # Fetches the pinned FFmpeg (premake hook), packages, and makes the Squirrel installer + zip.
+      # This workflow has no signing secrets: the artifacts are UNSIGNED (signing is release.yml).
+      - run: npm run make
+      # The packaged app.asar must not contain the mock capture provider or any test hook.
+      - run: npm run check:mocks
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem out/make -Recurse -File |
+            Where-Object { $_.Extension -in '.exe', '.zip', '.nupkg' -or $_.Name -eq 'RELEASES' } |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Tee-Object -FilePath out/make/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: framelet-windows-unsigned
+          path: out/make/
+          retention-days: 14
+          if-no-files-found: error

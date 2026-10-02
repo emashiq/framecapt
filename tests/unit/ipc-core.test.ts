@@ -1,14 +1,11 @@
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AppOriginConfig } from '../../src/main/app-origin';
 import { checkSender, fail, IpcError, ok, runChannel } from '../../src/main/ipc-core';
 import type { ChannelDef } from '../../src/shared/ipc-contract';
 
-const rendererDir = path.resolve('some', 'app', 'renderer');
-const origin: AppOriginConfig = { rendererDir };
-const goodUrl = pathToFileURL(path.join(rendererDir, 'index.html')).href;
+const origin: AppOriginConfig = {};
+const goodUrl = 'app://framelet/index.html';
 const trusted = { role: 'main', frameUrl: goodUrl, isTopFrame: true } as const;
 
 describe('checkSender', () => {
@@ -31,7 +28,8 @@ describe('checkSender', () => {
     for (const frameUrl of [
       'http://evil.example/',
       'about:blank',
-      pathToFileURL(path.resolve('other', 'index.html')).href,
+      'file:///C:/other/index.html',
+      'app://evil/index.html',
       undefined,
     ]) {
       expect(checkSender({ ...trusted, frameUrl }, ['main'], origin)?.ok).toBe(false);

@@ -21,7 +21,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 07 Export & history | VERIFIED | MP4 export (libx264/aac, faststart) with cancel; history with trash-delete, relink |
 | 08 Desktop polish | VERIFIED | settings/shortcuts/tray; axe 0 serious; idle CPU 0.04 %; flakes root-caused |
 | 09 Security/reliability/perf | VERIFIED | 13 findings fixed; 30-min 1080p30 bench PASS (29.72 fps, drift +10 ms); lead audit agreed |
-| 10 Packaging/CI/updates | NOT_STARTED | |
+| 10 Packaging/CI/updates | VERIFIED | Squirrel installer (UNSIGNED) installed/captured/uninstalled on host; app:// scheme, fuse off; CI files |
 | 11 Open source & sales prep | NOT_STARTED | |
 | 12 Final validation | NOT_STARTED | |
 
@@ -95,6 +95,15 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Lead fix: `@electron/get` re-fetched SHASUMS256.txt each package and GitHub's asset CDN timed out → pinned Electron zip SHA-256 (verified against official SHASUMS) in forge.config.ts `download.checksums`.
 - Results: lint/typecheck 0; unit 719/719 (lead); e2e 150/150 (lead re-ran after checksum pin); native 46/46 (implementer); npm audit 0.
 - Risks: R-01 GrantFileProtocolExtraPrivileges fuse on (→ phase 10 app:// scheme); ~0.9 % frames below exact 30 fps under motion; region/60 fps/mic not benchmarked at length.
+
+### Phase 10 — Packaging, CI & updates (VERIFIED 2026-10-02)
+- Files: forge.config.ts (identity PROVISIONAL, icon, win32metadata, env-only signing with UNSIGNED log, nuspec template w/o iconUrl, pinned Electron checksum, GrantFileProtocolExtraPrivileges fuse OFF), src/main/{app-asset,app-protocol,updates}.ts, assets/app/*, scripts/{smoke-installed,record-artifacts}.mjs, .github/workflows/{ci,release}.yml (draft-only, minimal permissions), docs/{packaging,release-process,testing}.md, tests (unit app-asset/app-protocol/squirrel/updates, e2e network.spec.ts).
+- R-01 closed: production UI served from app://framelet with strict resolver (lead reviewed); all suites pass with the fuse off.
+- Installed test (this host): silent install 6.0 s; installed exe fuse-verified, resources present, ffmpeg ok 9.0.2; real screenshot 3440x1440 PNG; real recording VP9 1920x804 7.5 s + MP4 auto-export h264; zero non-loopback TCP in 60 s; uninstall removes app/shortcuts/ARP/Run entry and keeps Pictures/Videos/AppData user files (sentinels verified). Squirrel leaves its ~3.8 MB stub (documented).
+- Defects found & fixed via installed run: Squirrel iconUrl fetch stalled offline install 85 s; --squirrel-firstrun quit the app; launch-at-login args over-quoted (never started).
+- Artifacts (UNSIGNED): Framelet-Setup-0.1.0.exe sha256 5fab53a2…246f (228,981,760 B); Framelet-0.1.0-full.nupkg ff3f4003…7e9a; zip 36ddda97…6984 — docs/evidence/phase10/artifacts.json.
+- Results: lint/typecheck 0; unit 762/762 (lead re-ran); e2e 151 pass + 1 pre-existing Playwright worker crash flake (0xC0000409, reproduced on phase 09 commit 1/6); native 46/46; make, check:mocks, smoke:packaged, smoke:installed OK; workflows validated locally only. Evidence writing now gated by FRAMELET_WRITE_EVIDENCE=1.
+- Risks: signing never exercised; workflows never run on GitHub; no update feed; Win10/arm64/upgrade/SmartScreen untested; e2e worker-crash flake (→ phase 12).
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

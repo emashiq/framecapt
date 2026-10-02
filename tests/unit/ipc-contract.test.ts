@@ -176,11 +176,18 @@ describe('ipc contract', () => {
         arch: 'x64',
         isPackaged: false,
         tray: { active: true, bounds: { x: 1, y: 2, width: 16, height: 16 } },
+        updates: { state: 'unconfigured' },
       };
       expect(AppInfoSchema.safeParse(info).success).toBe(true);
       expect(
         AppInfoSchema.safeParse({ ...info, tray: { active: false, bounds: null } }).success,
       ).toBe(true);
+      expect(
+        AppInfoSchema.safeParse({ ...info, updates: { state: 'error', message: 'offline' } })
+          .success,
+      ).toBe(true);
+      expect(AppInfoSchema.safeParse({ ...info, updates: { state: 'bogus' } }).success).toBe(false);
+      expect(AppInfoSchema.safeParse({ ...info, updates: undefined }).success).toBe(false);
       expect(response.safeParse({ ...info, isPackaged: 'no' }).success).toBe(false);
       expect(response.safeParse({ version: '0.1.0' }).success).toBe(false);
     });

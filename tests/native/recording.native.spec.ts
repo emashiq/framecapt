@@ -22,10 +22,10 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from '../e2e/app-exit';
-import { writeEvidenceJson } from './evidence';
+import { writeEvidenceJson, evidenceDirFor } from './evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase05');
+const evidenceDir = evidenceDirFor(projectRoot, 'phase05');
 
 let app: ElectronApplication;
 let page: Page;

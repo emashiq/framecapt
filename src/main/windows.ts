@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { app, BrowserWindow, nativeTheme, webContents, type WebContents } from 'electron';
+import { APP_ENTRY_URL } from './app-asset';
 import type { AppOriginConfig } from './app-origin';
 import type { Role } from '../shared/types';
 import { CloseGuard } from './close-guard';
@@ -102,8 +103,12 @@ export function getOriginConfig(): AppOriginConfig {
       typeof MAIN_WINDOW_VITE_DEV_SERVER_URL === 'string' && MAIN_WINDOW_VITE_DEV_SERVER_URL
         ? MAIN_WINDOW_VITE_DEV_SERVER_URL
         : undefined,
-    rendererDir: path.join(__dirname, '..', 'renderer', MAIN_WINDOW_VITE_NAME),
   };
+}
+
+/** The directory of the built renderer (inside app.asar when packaged); served by app-protocol.ts. */
+export function getRendererDir(): string {
+  return path.join(__dirname, '..', 'renderer', MAIN_WINDOW_VITE_NAME);
 }
 
 /** The secure renderer settings every Framelet window uses. */
@@ -122,10 +127,10 @@ export function securePreferences(): Electron.WebPreferences {
 }
 
 export function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
-  const { devServerUrl, rendererDir } = getOriginConfig();
+  const { devServerUrl } = getOriginConfig();
   const hash = ROLE_HASH[role];
-  if (devServerUrl) return win.loadURL(`${devServerUrl}#${hash}`);
-  return win.loadFile(path.join(rendererDir, 'index.html'), { hash });
+  // Development: the Vite server. Otherwise the built renderer from the app:// scheme (not file://).
+  return win.loadURL(`${devServerUrl ?? APP_ENTRY_URL}#${hash}`);
 }
 
 export function createMainWindow(options: { show?: boolean } = {}): BrowserWindow {

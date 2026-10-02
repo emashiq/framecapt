@@ -1,6 +1,6 @@
 /* global window, document */
 // Smoke test of the PACKAGED app (out/Framelet-win32-x64/Framelet.exe, fuses on): it starts, the
-// renderer loads from the asar, the CSP meta tag is there, the bridge exposes only invoke/on, and
+// renderer loads from the asar through the app://framelet scheme (not file://), the CSP meta tag is there, the bridge exposes only invoke/on, and
 // a payload with an extra key is refused. Usage: npm run smoke:packaged (after `npm run package`).
 // The app runs with a temporary --user-data-dir and a DevTools port that only listens on loopback.
 import { spawn, spawnSync } from 'node:child_process';
@@ -10,11 +10,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { FuseState, FuseV1Options, getCurrentFuseWire } from '@electron/fuses';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const exe = path.join(root, 'out', 'Framelet-win32-x64', 'Framelet.exe');
 if (!fs.existsSync(exe)) throw new Error(`${exe} not found. Run \`npm run package\` first.`);
 
+const wire = await getCurrentFuseWire(exe);
+const fuseOk = (option, state) => wire[option] === state;
 const port = await new Promise((resolve) => {
   const server = net.createServer();
   server.listen(0, '127.0.0.1', () => {
@@ -34,6 +37,10 @@ const check = (name, ok, detail = '') => {
 };
 
 try {
+  check(
+    'GrantFileProtocolExtraPrivileges fuse is off',
+    fuseOk(FuseV1Options.GrantFileProtocolExtraPrivileges, FuseState.DISABLE),
+  );
   let browser;
   for (let attempt = 0; attempt < 40 && !browser; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -45,10 +52,10 @@ try {
     page = browser
       .contexts()
       .flatMap((c) => c.pages())
-      .find((p) => p.url().includes('index.html'));
+      .find((p) => p.url().startsWith('app://framelet/index.html'));
     if (!page) await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  check('the renderer loads from the packaged app', page !== undefined);
+  check('the renderer loads from the packaged app via app://framelet', page !== undefined);
   if (page) {
     await page.waitForSelector('text=Capture', { timeout: 15_000 }).catch(() => undefined);
     const facts = await page.evaluate(() => ({
@@ -67,6 +74,10 @@ try {
     check('no Node globals in the page', facts.node === false);
     const info = await page.evaluate(() => window.framelet.invoke('app:getInfo'));
     check('app:getInfo answers, packaged', info.ok && info.data.isPackaged === true);
+    check(
+      'updates are unconfigured in this build',
+      info.ok && info.data.updates.state === 'unconfigured',
+    );
     const extra = await page.evaluate(() =>
       window.framelet.invoke('history:list', { path: 'C:/x' }),
     );

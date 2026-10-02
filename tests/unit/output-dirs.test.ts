@@ -73,7 +73,7 @@ describe('loginItemOptions', () => {
     expect(options).toEqual({
       openAtLogin: true,
       path: update,
-      args: ['--processStart', '"Framelet.exe"', '--process-start-args', `"${HIDDEN_ARG}"`],
+      args: ['--processStart', 'Framelet.exe', '--process-start-args', HIDDEN_ARG],
     });
   });
 });

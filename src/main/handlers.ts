@@ -27,6 +27,7 @@ import { registerDiagnosticsHandlers } from './capture/diagnostics';
 import type { CaptureProvider } from './capture/types';
 import type { IpcEventPayload } from '../shared/ipc-contract';
 import { sendEvent } from './events';
+import type { UpdateService } from './updates';
 import { getOriginConfig, setMainCloseInterceptor, webContentsWithRoles } from './windows';
 import { IpcError } from './ipc-core';
 import { handle } from './ipc';
@@ -96,6 +97,7 @@ export function registerHandlers(
   provider: CaptureProvider,
   settings: AppSettings,
   trayInfo: () => TrayInfo,
+  updates: UpdateService,
 ): AppServices {
   handle('app:getInfo', { roles: ['main'] }, () => ({
     version: app.getVersion(),
@@ -106,6 +108,7 @@ export function registerHandlers(
     arch: process.arch,
     isPackaged: app.isPackaged,
     tray: trayInfo(),
+    updates: updates.getStatus(),
   }));
 
   handle(

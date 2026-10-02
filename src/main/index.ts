@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { app, BrowserWindow, Menu, nativeTheme, session } from 'electron';
+import { app, autoUpdater, BrowserWindow, Menu, nativeTheme, session } from 'electron';
 import { createCaptureProvider } from './capture';
-import { registerMediaScheme } from './recording/media-protocol';
+import { registerAppProtocol, registerPrivilegedSchemes } from './app-protocol';
 import { setupDesktop, type Desktop } from './desktop';
 import { registerHandlers } from './handlers';
 import { initLogger, log } from './logger';
@@ -14,17 +14,16 @@ import {
 import { createAppSettings, watchSettings } from './settings';
 import { HIDDEN_ARG } from './settings/login-item';
 import { SettingsStore, SETTINGS_FILE } from './settings/store';
-import { handleSquirrelEvent } from './squirrel';
+import { appUserModelId, handleSquirrelEvent } from './squirrel';
+import { isSquirrelInstall, UpdateService } from './updates';
 import {
   createMainWindow,
   getMainWindow,
   getOriginConfig,
+  getRendererDir,
   setQuitting,
   showMainWindow,
 } from './windows';
-
-// PROVISIONAL app id - owner must confirm before publication (also set in forge.config.ts).
-const APP_USER_MODEL_ID = 'com.framelet.app';
 
 // Installer lifecycle launches are handled without starting the UI.
 if (!handleSquirrelEvent()) {
@@ -35,7 +34,7 @@ function start(): void {
   // Every renderer is sandboxed, including any window a future change forgets to configure.
   app.enableSandbox();
   // Privileged schemes must be registered before the app is ready.
-  registerMediaScheme();
+  registerPrivilegedSchemes();
 
   // Tests point userData at a temp dir. Never honored by packaged builds.
   const overrideDir = process.env.FRAMELET_USER_DATA_DIR;
@@ -90,7 +89,7 @@ function start(): void {
     process.on('uncaughtException', (error) => log.error('uncaughtException', error));
     process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason));
 
-    if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
+    if (process.platform === 'win32') app.setAppUserModelId(appUserModelId(process.execPath));
     const store = new SettingsStore(path.join(app.getPath('userData'), SETTINGS_FILE));
     settings = store;
     await store.load();
@@ -102,14 +101,23 @@ function start(): void {
     });
     if (app.isPackaged) Menu.setApplicationMenu(null);
 
+    // The production renderer is served from app://framelet (dev uses the Vite server).
+    registerAppProtocol(getRendererDir());
     installCsp(session.defaultSession, getOriginConfig());
     installPermissionHandlers(session.defaultSession, getOriginConfig);
     installNetworkBlocker(session.defaultSession, getOriginConfig);
+    // Unconfigured (empty feed URL) builds never touch autoUpdater: no update code, no network.
+    const updates = new UpdateService({
+      feedUrl: __FRAMELET_UPDATE_URL__,
+      getAutoUpdater: () => autoUpdater,
+      isSquirrelInstall: () => isSquirrelInstall(process.execPath),
+    });
     const appSettings = createAppSettings(store);
     const services = registerHandlers(
       await createCaptureProvider(),
       appSettings,
       () => desktop?.trayInfo() ?? { active: false, bounds: null },
+      updates,
     );
     desktop = setupDesktop(appSettings, services);
     // A start at login (--hidden) lives in the tray; without a tray the window is the only UI.

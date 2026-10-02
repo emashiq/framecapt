@@ -29,10 +29,10 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from '../e2e/app-exit';
-import { writeEvidenceJson } from './evidence';
+import { writeEvidenceJson, evidenceDirFor } from './evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase09');
+const evidenceDir = evidenceDirFor(projectRoot, 'phase09');
 const vendor = path.join(projectRoot, 'vendor', 'ffmpeg', 'win32-x64');
 const FFMPEG = path.join(vendor, 'ffmpeg.exe');
 const FFPROBE = path.join(vendor, 'ffprobe.exe');
