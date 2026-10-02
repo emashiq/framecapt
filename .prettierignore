@@ -1,0 +1,12 @@
+node_modules
+out
+dist
+.vite
+coverage
+test-results
+playwright-report
+package-lock.json
+capture-prompts
+.serena
+.claude
+docs/agent-progress.md

@@ -1,0 +1,148 @@
+@import '@fontsource-variable/inter/wght.css';
+@import 'tailwindcss';
+
+/*
+ * Design tokens. Light and dark values are paired with light-dark(), which follows the system
+ * (nativeTheme.themeSource = 'system') through `color-scheme`. A user override later only needs to
+ * set <html data-theme="light|dark">.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#f8fafc, #0b0f1a);
+  --surface: light-dark(#ffffff, #121829);
+  --surface-2: light-dark(#f1f5f9, #0f1424);
+  --surface-3: light-dark(#e8edf4, #1a2136);
+  --line: light-dark(#e2e8f0, #232b3e);
+  --line-strong: light-dark(#cbd5e1, #333d55);
+
+  --fg: light-dark(#0f172a, #e8ebf4);
+  --fg-muted: light-dark(#475569, #a1abc2);
+  --fg-subtle: light-dark(#64748b, #8591ab);
+
+  --accent: light-dark(#6366f1, #818cf8);
+  --accent-solid: light-dark(#4f46e5, #5a5df0);
+  --accent-solid-hover: light-dark(#4338ca, #6d70f5);
+  --accent-soft: light-dark(#eef2ff, rgb(99 102 241 / 0.16));
+  --accent-fg: light-dark(#4338ca, #a5b4fc);
+
+  --danger: light-dark(#dc2626, #f87171);
+  --danger-solid: light-dark(#dc2626, #dc2626);
+  --danger-solid-hover: light-dark(#b91c1c, #ef4444);
+  --danger-soft: light-dark(#fef2f2, rgb(248 113 113 / 0.14));
+
+  --shadow-card: light-dark(0 1px 2px rgb(15 23 42 / 0.05), 0 1px 2px rgb(0 0 0 / 0.4));
+  --shadow-raised: light-dark(
+    0 8px 24px -8px rgb(15 23 42 / 0.14),
+    0 8px 24px -8px rgb(0 0 0 / 0.55)
+  );
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-solid: var(--accent-solid);
+  --color-accent-solid-hover: var(--accent-solid-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-danger-solid: var(--danger-solid);
+  --color-danger-solid-hover: var(--danger-solid-hover);
+  --color-danger-soft: var(--danger-soft);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-raised: var(--shadow-raised);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    /* App chrome is not selectable; opt in with .selectable. */
+    user-select: none;
+    overflow: hidden;
+  }
+
+  .selectable {
+    user-select: text;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+  }
+}
+
+/* Thin, unobtrusive scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-in {
+  animation: view-in 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

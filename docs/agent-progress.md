@@ -12,7 +12,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | Phase | Status | Notes |
 |---|---|---|
 | 00 Setup | VERIFIED | branch renamed master→main; agent defs; .gitignore |
-| 01 Foundation | NOT_STARTED | |
+| 01 Foundation | VERIFIED | Forge 8 + Vite 8 + React 19 + TS 6; secure bridge; e2e 9/9 on host |
 | 02 Capture feasibility | NOT_STARTED | |
 | 03 Selection & screenshots | NOT_STARTED | |
 | 04 Screenshot editor | NOT_STARTED | |
@@ -27,6 +27,14 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 
 ## Phase log
 <!-- Each phase: files changed, decisions, commands + results, evidence, risks, next step. -->
+
+### Phase 01 — Foundation (VERIFIED 2026-10-02)
+- Files: package.json/lock, forge.config.ts, vite.*.config.ts, tsconfig.*, eslint/prettier/vitest/playwright configs, src/{main,preload,shared,renderer}, tests/unit (5 files), tests/e2e/launch.spec.ts, docs/{architecture,decisions,capability-matrix}.md.
+- Versions: electron 44.5.1 (Chromium 152, Node 24.21), forge 8.0.1, vite 8.3.2, react 19.3.0, typescript 6.0.3, tailwind 4.3.3, zod 4.6.5, vitest 5.0.3, playwright 1.63.0, eslint 10.11.
+- Decisions: single renderer entry with hash roles; role registry + origin + zod checks per IPC; CSP via header and build-injected meta; fuses enabled (e2e runs against .vite/build with node_modules electron because fuses disable inspect args); provisional app id com.framelet.app.
+- Commands (lead re-ran): `npm run lint` exit 0; `npm run typecheck` exit 0; `npm test` 31/31. Implementer: `npm ci` ok; `npm run test:e2e` 9/9; `npm run package` → out/Framelet-win32-x64/Framelet.exe launched (4 processes) and killed.
+- Risks: electron binary downloads lazily on first require after npm ci; `npm run make`/Squirrel not yet exercised (phase 10).
+- Next: phase 02.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.
