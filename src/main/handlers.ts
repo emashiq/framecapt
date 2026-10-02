@@ -1,4 +1,10 @@
+import path from 'node:path';
 import { app, session } from 'electron';
+import { CaptureFlow } from './capture-flow';
+import { isMockCaptureEnabled } from './capture';
+import { registerShotHandlers } from './shot-handlers';
+import { ShotSessionStore, SWEEP_MAX_AGE_MS } from './shots/session-store';
+import { registerWorkerHandlers } from './worker';
 import { installCaptureAuthorization } from './capture/authorization';
 import { registerDiagnosticsHandlers } from './capture/diagnostics';
 import type { CaptureProvider } from './capture/types';
@@ -38,4 +44,15 @@ export function registerHandlers(provider: CaptureProvider): void {
   );
   installCaptureAuthorization(session.defaultSession, provider, getOriginConfig);
   registerDiagnosticsHandlers();
+
+  const store = new ShotSessionStore(path.join(app.getPath('userData'), 'shots'));
+  const flow = new CaptureFlow({ provider, store, synthetic: isMockCaptureEnabled() });
+  registerWorkerHandlers();
+  registerShotHandlers(flow, store);
+  // Originals of abandoned sessions are removed after a week (a `keep` marker exempts one).
+  void store.sweep(SWEEP_MAX_AGE_MS).then((result) => {
+    log.info(
+      `Shot sweep: scanned ${result.scanned}, removed ${result.removed}, kept ${result.kept}`,
+    );
+  });
 }

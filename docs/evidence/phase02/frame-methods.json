@@ -4,45 +4,45 @@
     "auto": [
       {
         "ok": true,
-        "firstFrameMs": 37,
-        "totalMs": 79,
+        "firstFrameMs": 25,
+        "totalMs": 71,
         "size": "2560x1440",
         "settingsAfter": "2560x1440"
       },
       {
         "ok": true,
-        "firstFrameMs": 93,
-        "totalMs": 138,
+        "firstFrameMs": 92,
+        "totalMs": 149,
         "size": "2560x1440",
         "settingsAfter": "3440x1440"
       },
       {
         "ok": true,
-        "firstFrameMs": 8,
-        "totalMs": 66,
+        "firstFrameMs": 6,
+        "totalMs": 56,
         "size": "2560x1440",
-        "settingsAfter": "2560x1440"
+        "settingsAfter": "3440x1440"
       }
     ],
     "video-element": [
       {
         "ok": true,
-        "firstFrameMs": 117,
-        "totalMs": 182,
+        "firstFrameMs": 80,
+        "totalMs": 149,
         "size": "2560x1440",
         "settingsAfter": "2560x1440"
       },
       {
         "ok": true,
-        "firstFrameMs": 134,
-        "totalMs": 170,
+        "firstFrameMs": 1912,
+        "totalMs": 1952,
         "size": "2560x1440",
         "settingsAfter": "2560x1440"
       },
       {
         "ok": true,
-        "firstFrameMs": 136,
-        "totalMs": 174,
+        "firstFrameMs": 273,
+        "totalMs": 315,
         "size": "2560x1440",
         "settingsAfter": "2560x1440"
       }
@@ -50,45 +50,45 @@
     "track-processor": [
       {
         "ok": true,
-        "firstFrameMs": 84,
-        "totalMs": 122,
+        "firstFrameMs": 86,
+        "totalMs": 132,
         "size": "2560x1440",
         "settingsAfter": "3440x1440"
       },
       {
         "ok": true,
-        "firstFrameMs": 8,
-        "totalMs": 45,
+        "firstFrameMs": 7,
+        "totalMs": 56,
         "size": "2560x1440",
-        "settingsAfter": "3440x1440"
+        "settingsAfter": "2560x1440"
       },
       {
         "ok": true,
         "firstFrameMs": 6,
-        "totalMs": 48,
+        "totalMs": 47,
         "size": "2560x1440",
-        "settingsAfter": "2560x1440"
+        "settingsAfter": "3440x1440"
       }
     ],
     "image-capture": [
       {
         "ok": true,
-        "firstFrameMs": 8,
-        "totalMs": 57,
+        "firstFrameMs": 9,
+        "totalMs": 61,
         "size": "2560x1440",
         "settingsAfter": "2560x1440"
       },
       {
         "ok": true,
-        "firstFrameMs": 107,
-        "totalMs": 143,
+        "firstFrameMs": 87,
+        "totalMs": 137,
         "size": "2560x1440",
         "settingsAfter": "2560x1440"
       },
       {
         "ok": true,
-        "firstFrameMs": 97,
-        "totalMs": 135,
+        "firstFrameMs": 92,
+        "totalMs": 134,
         "size": "2560x1440",
         "settingsAfter": "2560x1440"
       }

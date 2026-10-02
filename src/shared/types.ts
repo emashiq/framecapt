@@ -11,7 +11,7 @@ export const ROLES = ['main', 'overlay', 'toolbar', 'recorder'] as const;
 export type Role = (typeof ROLES)[number];
 
 export type IpcErrorCode =
-  'FORBIDDEN' | 'INVALID_PAYLOAD' | 'UNKNOWN_CHANNEL' | 'NOT_FOUND' | 'INTERNAL';
+  'FORBIDDEN' | 'INVALID_PAYLOAD' | 'UNKNOWN_CHANNEL' | 'NOT_FOUND' | 'BUSY' | 'INTERNAL';
 
 export interface IpcFailure {
   ok: false;

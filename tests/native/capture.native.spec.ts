@@ -17,6 +17,7 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+import { writeEvidenceJson } from './evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase02');
@@ -33,9 +34,9 @@ interface DisplayRow {
   screenSourceId: string;
 }
 
+/** Evidence never contains window titles or absolute user paths (see evidence.ts). */
 function writeJson(name: string, value: unknown): void {
-  fs.mkdirSync(evidenceDir, { recursive: true });
-  fs.writeFileSync(path.join(evidenceDir, name), `${JSON.stringify(value, null, 2)}\n`);
+  writeEvidenceJson(evidenceDir, name, value);
 }
 
 /** Runs a command without a shell. Returns stdout and stderr (ffmpeg writes its report to stderr). */

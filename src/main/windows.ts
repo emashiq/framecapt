@@ -43,7 +43,22 @@ export function getOriginConfig(): AppOriginConfig {
   };
 }
 
-function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
+/** The secure renderer settings every Framelet window uses. */
+export function securePreferences(): Electron.WebPreferences {
+  return {
+    preload: path.join(__dirname, 'preload.cjs'),
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    webSecurity: true,
+    spellcheck: false,
+    webviewTag: false,
+    allowRunningInsecureContent: false,
+    devTools: !app.isPackaged,
+  };
+}
+
+export function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
   const { devServerUrl, rendererDir } = getOriginConfig();
   const hash = ROLE_HASH[role];
   if (devServerUrl) return win.loadURL(`${devServerUrl}#${hash}`);
@@ -59,17 +74,7 @@ export function createMainWindow(): BrowserWindow {
     minHeight: 560,
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? BACKGROUND.dark : BACKGROUND.light,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      spellcheck: false,
-      webviewTag: false,
-      allowRunningInsecureContent: false,
-      devTools: !app.isPackaged,
-    },
+    webPreferences: securePreferences(),
   });
 
   registerWebContents(win.webContents, 'main');
@@ -77,8 +82,43 @@ export function createMainWindow(): BrowserWindow {
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = undefined;
+    // The hidden worker would otherwise keep the app alive after the main window is closed.
+    closeWorkerWindow();
   });
 
   void loadRenderer(win, 'main');
   return win;
+}
+
+let workerWindow: BrowserWindow | undefined;
+
+/**
+ * The capture worker: one hidden 'recorder' window, created on first use. It runs the renderer's
+ * capture code (getDisplayMedia, frame grabs) without ever being shown. Phase 05 makes the same
+ * window own the recorder. `backgroundThrottling: false` keeps frame delivery and timers running
+ * while the window is hidden.
+ */
+export function getWorkerWindow(): BrowserWindow {
+  if (workerWindow && !workerWindow.isDestroyed()) return workerWindow;
+  const win = new BrowserWindow({
+    title: 'Framelet capture worker',
+    show: false,
+    width: 320,
+    height: 240,
+    skipTaskbar: true,
+    webPreferences: { ...securePreferences(), backgroundThrottling: false },
+  });
+  registerWebContents(win.webContents, 'recorder');
+  workerWindow = win;
+  win.on('closed', () => {
+    if (workerWindow === win) workerWindow = undefined;
+  });
+  void loadRenderer(win, 'recorder');
+  return win;
+}
+
+export function closeWorkerWindow(): void {
+  const win = workerWindow;
+  workerWindow = undefined;
+  if (win && !win.isDestroyed()) win.destroy();
 }

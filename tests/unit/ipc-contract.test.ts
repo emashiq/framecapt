@@ -18,10 +18,42 @@ describe('ipc contract', () => {
       'capture:grant',
       'capture:listDisplays',
       'capture:listSources',
+      'capture:startScreenshot',
       'diagnostics:revealFolder',
       'diagnostics:saveRecording',
+      'overlay:cancel',
+      'overlay:confirm',
+      'overlay:getInit',
+      'overlay:pickDisplay',
+      'overlay:ready',
+      'overlay:selectionStarted',
+      'shell:showItemInFolder',
+      'shot:copy',
+      'shot:discard',
+      'shot:export',
+      'shot:get',
+      'worker:frameError',
+      'worker:frameResult',
+      'worker:ready',
     ]);
-    expect(IPC_EVENTS).toEqual(['app:themeChanged']);
+    expect([...IPC_EVENTS].sort()).toEqual([
+      'app:themeChanged',
+      'capture:flowEnded',
+      'overlay:clearSelection',
+      'shot:ready',
+      'worker:grabFrames',
+    ]);
+  });
+
+  it('keeps each channel family to its window role', () => {
+    for (const channel of IPC_CHANNELS) {
+      const roles = [...ipcContract[channel].roles];
+      if (channel.startsWith('worker:')) expect(roles).toEqual(['recorder']);
+      if (channel.startsWith('overlay:')) expect(roles).toEqual(['overlay']);
+      if (channel.startsWith('shot:') || channel === 'shell:showItemInFolder') {
+        expect(roles).toEqual(['main']);
+      }
+    }
   });
 
   it('only allows known roles on every channel', () => {

@@ -31,6 +31,11 @@ function injectProdCsp(): Plugin {
 // https://vitejs.dev/config
 export default defineConfig(({ mode }) => ({
   root: path.resolve(import.meta.dirname, 'src/renderer'),
+  define: {
+    // True only for E2E builds (FRAMELET_E2E_BUILD=1); the literal `false` otherwise, which
+    // removes the synthetic frame generator from the bundle (scripts/check-no-mocks.mjs).
+    __FRAMELET_E2E__: JSON.stringify(process.env.FRAMELET_E2E_BUILD === '1'),
+  },
   // Forge's plugin sets outDir relative to root; pin it to the project's .vite directory.
   build: {
     outDir: path.resolve(import.meta.dirname, '.vite/renderer/main_window'),

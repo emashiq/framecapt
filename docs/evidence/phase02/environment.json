@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-02T07:20:43.013Z",
+  "date": "2026-10-02T08:01:44.787Z",
   "os": "Windows_NT 10.0.26300 x64",
   "cpu": "AMD Ryzen 7 7700 8-Core Processor              ",
   "logicalCores": 16,
@@ -48,23 +48,23 @@
       "kind": "window",
       "id": "window:12062870:0",
       "displayId": "",
-      "label": "window: [title redacted #1]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 220
     },
     {
       "kind": "window",
-      "id": "window:199736:0",
+      "id": "window:331524:0",
       "displayId": "",
-      "label": "window: [title redacted #2]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
     {
       "kind": "window",
-      "id": "window:331524:0",
+      "id": "window:199736:0",
       "displayId": "",
-      "label": "window: [title redacted #3]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -72,7 +72,7 @@
       "kind": "window",
       "id": "window:727316:0",
       "displayId": "",
-      "label": "window: [title redacted #4]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -80,7 +80,7 @@
       "kind": "window",
       "id": "window:196762:0",
       "displayId": "",
-      "label": "window: [title redacted #5]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -88,7 +88,7 @@
       "kind": "window",
       "id": "window:131740:0",
       "displayId": "",
-      "label": "window: [title redacted #6]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -96,7 +96,7 @@
       "kind": "window",
       "id": "window:133370:0",
       "displayId": "",
-      "label": "window: [title redacted #7]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -104,7 +104,7 @@
       "kind": "window",
       "id": "window:134986:0",
       "displayId": "",
-      "label": "window: [title redacted #8]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 295
     },
@@ -112,7 +112,7 @@
       "kind": "window",
       "id": "window:133054:0",
       "displayId": "",
-      "label": "window: [title redacted #9]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -120,7 +120,7 @@
       "kind": "window",
       "id": "window:1578546:0",
       "displayId": "",
-      "label": "window: [title redacted #10]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -128,7 +128,7 @@
       "kind": "window",
       "id": "window:136152:0",
       "displayId": "",
-      "label": "window: [title redacted #11]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -136,7 +136,7 @@
       "kind": "window",
       "id": "window:2561466:0",
       "displayId": "",
-      "label": "window: [title redacted #12]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -144,7 +144,7 @@
       "kind": "window",
       "id": "window:9443202:0",
       "displayId": "",
-      "label": "window: [title redacted #13]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 232
     },
@@ -152,7 +152,7 @@
       "kind": "window",
       "id": "window:3675772:0",
       "displayId": "",
-      "label": "window: [title redacted #14]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -160,7 +160,7 @@
       "kind": "window",
       "id": "window:5378676:0",
       "displayId": "",
-      "label": "window: [title redacted #15]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 295
     },
@@ -168,7 +168,7 @@
       "kind": "window",
       "id": "window:8918302:0",
       "displayId": "",
-      "label": "window: [title redacted #16]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -176,7 +176,7 @@
       "kind": "window",
       "id": "window:4199634:0",
       "displayId": "",
-      "label": "window: [title redacted #17]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -184,7 +184,7 @@
       "kind": "window",
       "id": "window:136166:0",
       "displayId": "",
-      "label": "window: [title redacted #18]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -192,7 +192,7 @@
       "kind": "window",
       "id": "window:1578232:0",
       "displayId": "",
-      "label": "window: [title redacted #19]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -200,7 +200,7 @@
       "kind": "window",
       "id": "window:398944:0",
       "displayId": "",
-      "label": "window: [title redacted #20]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -208,7 +208,7 @@
       "kind": "window",
       "id": "window:3475638:0",
       "displayId": "",
-      "label": "window: [title redacted #21]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -216,7 +216,7 @@
       "kind": "window",
       "id": "window:3084956:0",
       "displayId": "",
-      "label": "window: [title redacted #22]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -224,7 +224,7 @@
       "kind": "window",
       "id": "window:526488:0",
       "displayId": "",
-      "label": "window: [title redacted #23]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -232,7 +232,7 @@
       "kind": "window",
       "id": "window:132146:0",
       "displayId": "",
-      "label": "window: [title redacted #24]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -240,7 +240,7 @@
       "kind": "window",
       "id": "window:857160:0",
       "displayId": "",
-      "label": "window: [title redacted #25]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -248,7 +248,7 @@
       "kind": "window",
       "id": "window:1249020:0",
       "displayId": "",
-      "label": "window: [title redacted #26]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -256,7 +256,7 @@
       "kind": "window",
       "id": "window:1839022:0",
       "displayId": "",
-      "label": "window: [title redacted #27]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -264,7 +264,7 @@
       "kind": "window",
       "id": "window:725678:0",
       "displayId": "",
-      "label": "window: [title redacted #28]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -272,7 +272,7 @@
       "kind": "window",
       "id": "window:68796:0",
       "displayId": "",
-      "label": "window: [title redacted #29]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -280,7 +280,7 @@
       "kind": "window",
       "id": "window:68808:0",
       "displayId": "",
-      "label": "window: [title redacted #30]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -288,7 +288,7 @@
       "kind": "window",
       "id": "window:68778:0",
       "displayId": "",
-      "label": "window: [title redacted #31]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     },
@@ -296,7 +296,7 @@
       "kind": "window",
       "id": "window:67138:0",
       "displayId": "",
-      "label": "window: [title redacted #32]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 154
     },
@@ -304,7 +304,7 @@
       "kind": "window",
       "id": "window:67444:0",
       "displayId": "",
-      "label": "window: [title redacted #33]",
+      "label": "window: [title redacted]",
       "hasThumbnail": true,
       "thumbWidth": 320
     }

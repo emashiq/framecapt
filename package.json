@@ -9,6 +9,7 @@
   "author": "Framelet contributors",
   "scripts": {
     "start": "electron-forge start",
+    "prepackage": "node scripts/clean-build.mjs",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "lint": "eslint .",
@@ -16,8 +17,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:mocks": "node scripts/check-no-mocks.mjs",
-    "test:e2e": "electron-forge package && npm run check:mocks && playwright test",
-    "test:native": "electron-forge package && npm run check:mocks && playwright test -c playwright.native.config.ts",
+    "prepackage:e2e": "node scripts/clean-build.mjs",
+    "package:e2e": "node scripts/package-e2e.mjs",
+    "test:e2e": "npm run package:e2e && node scripts/check-no-mocks.mjs --expect-mock && playwright test",
+    "test:native": "npm run package && npm run check:mocks && playwright test -c playwright.native.config.ts",
     "format": "prettier --write ."
   },
   "devDependencies": {

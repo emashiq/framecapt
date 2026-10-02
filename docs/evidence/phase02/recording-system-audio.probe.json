@@ -1,11 +1,11 @@
 {
   "ui": {
     "mimeType": "video/webm;codecs=vp9,opus",
-    "bytes": 1093592,
-    "path": "C:\\Users\\USER\\AppData\\Local\\Temp\\framelet-native-r2PK8a\\diagnostics\\recording-2026-10-02T07-20-56-886Z-8a78c6.webm",
-    "wallMs": 4000.5999999940395,
-    "framesDelivered": 85,
-    "measuredFps": 21.245219825507604,
+    "bytes": 2122333,
+    "path": "~\\AppData\\Local\\Temp\\framelet-native-nVmsmA\\diagnostics\\recording-2026-10-02T08-02-01-578Z-277308.webm",
+    "wallMs": 4002.300000011921,
+    "framesDelivered": 116,
+    "measuredFps": 28.98188632104934,
     "requestedFps": 30,
     "videoWidth": 3440,
     "videoHeight": 1440,
@@ -14,7 +14,7 @@
       "system"
     ],
     "peakLevels": {
-      "system": 0.03400596163280338
+      "system": 0.03637813833611965
     },
     "tracksAtStop": [
       {
@@ -147,10 +147,10 @@
         "color_range": "tv",
         "color_space": "smpte170m",
         "r_frame_rate": "88/3",
-        "avg_frame_rate": "0/0",
+        "avg_frame_rate": "88/3",
         "time_base": "1/1000",
-        "start_pts": 18,
-        "start_time": "0.018000",
+        "start_pts": 3,
+        "start_time": "0.003000",
         "disposition": {
           "default": 1,
           "dub": 0,
@@ -179,14 +179,14 @@
       }
     ],
     "format": {
-      "filename": "C:\\Users\\USER\\AppData\\Local\\Temp\\framelet-native-r2PK8a\\diagnostics\\recording-2026-10-02T07-20-56-886Z-8a78c6.webm",
+      "filename": "~\\AppData\\Local\\Temp\\framelet-native-nVmsmA\\diagnostics\\recording-2026-10-02T08-02-01-578Z-277308.webm",
       "nb_streams": 2,
       "nb_programs": 0,
       "nb_stream_groups": 0,
       "format_name": "matroska,webm",
       "format_long_name": "Matroska / WebM",
       "start_time": "0.000000",
-      "size": "1093592",
+      "size": "2122333",
       "probe_score": 100,
       "tags": {
         "encoder": "Chrome"
@@ -194,11 +194,11 @@
     }
   },
   "durationSeconds": 3.95,
-  "videoPackets": 85,
+  "videoPackets": 116,
   "volume": {
     "mean": -38,
-    "max": -24.9,
-    "raw": "Output #0, null, to 'pipe:':\r\n  Metadata:\r\n    encoder         : Lavf62.12.101\r\n  Stream #0:0(eng): Audio: pcm_s16le, 48000 Hz, stereo, s16, 1536 kb/s (default)\r\n    Metadata:\r\n      encoder         : Lavc62.28.101 pcm_s16le\r\n[Parsed_volumedetect_0 @ 0000020ca52f8d40] n_samples: 380160\r\n[Parsed_volumedetect_0 @ 0000020ca52f8d40] mean_volume: -38.0 dB\r\n[Parsed_volumedetect_0 @ 0000020ca52f8d40] max_volume: -24.9 dB\r\n[Parsed_volumedetect_0 @ 0000020ca52f8d40] histogram_24db: 24\r\n[Parsed_volumedetect_0 @ 0000020ca52f8d40] histogram_25db: 1070\r\n[out#0/null @ 0000020ca4ca3d40] video:0KiB audio:742KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\r\nsize=N/A time=00:00:03.95 bitrate=N/A speed= 592x elapsed=0:00:00.00    \r\n"
+    "max": -25,
+    "raw": "Output #0, null, to 'pipe:':\r\n  Metadata:\r\n    encoder         : Lavf62.12.101\r\n  Stream #0:0(eng): Audio: pcm_s16le, 48000 Hz, stereo, s16, 1536 kb/s (default)\r\n    Metadata:\r\n      encoder         : Lavc62.28.101 pcm_s16le\r\n[Parsed_volumedetect_0 @ 000002b1318e9140] n_samples: 380160\r\n[Parsed_volumedetect_0 @ 000002b1318e9140] mean_volume: -38.0 dB\r\n[Parsed_volumedetect_0 @ 000002b1318e9140] max_volume: -25.0 dB\r\n[Parsed_volumedetect_0 @ 000002b1318e9140] histogram_24db: 4\r\n[Parsed_volumedetect_0 @ 000002b1318e9140] histogram_25db: 1030\r\n[out#0/null @ 000002b131826700] video:0KiB audio:742KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\r\nsize=N/A time=00:00:03.95 bitrate=N/A speed= 557x elapsed=0:00:00.00    \r\n"
   },
   "evidence": "docs/evidence/phase02/recording-system-audio.webm"
 }

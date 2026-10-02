@@ -132,6 +132,18 @@
   }
 }
 
+/* Transparency backdrop for the screenshot preview. */
+.checkerboard {
+  background-color: var(--surface-2);
+  background-image: conic-gradient(
+    color-mix(in srgb, var(--fg) 6%, transparent) 25%,
+    transparent 0 50%,
+    color-mix(in srgb, var(--fg) 6%, transparent) 0 75%,
+    transparent 0
+  );
+  background-size: 20px 20px;
+}
+
 .view-in {
   animation: view-in 180ms ease-out both;
 }
@@ -145,4 +157,12 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Selection overlay windows draw their own background (frozen frame or the live desktop). */
+html.overlay-root,
+html.overlay-root body,
+html.overlay-root #root {
+  background: transparent;
+  overflow: hidden;
 }

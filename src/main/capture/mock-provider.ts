@@ -30,6 +30,15 @@ const SOURCES: SourceInfo[] = [
   { id: 'screen:1:0', name: 'Screen 1', kind: 'screen', displayId: '1001' },
   { id: 'screen:2:0', name: 'Screen 2', kind: 'screen', displayId: '1002' },
   { id: 'window:1001:0', name: 'Mock window', kind: 'window' },
+  { id: 'window:1002:0', name: 'Mock browser - Documentation', kind: 'window' },
+  {
+    id: 'window:1003:0',
+    name: 'Mock editor - a rather long file name that must be truncated.ts',
+    kind: 'window',
+  },
+  { id: 'window:1004:0', name: 'Mock terminal', kind: 'window' },
+  // The synthetic worker fails this one, like a minimized window (see synthetic-frame.ts).
+  { id: 'window:1005:0', name: 'Mock minimized window', kind: 'window' },
 ];
 
 /**
@@ -38,16 +47,20 @@ const SOURCES: SourceInfo[] = [
  * fails if this class name appears in the production bundle.
  */
 export class MockCaptureProvider implements CaptureProvider {
+  /** FRAMELET_E2E_MOCK_DISPLAYS=1 limits the mock to the first display (single-monitor flow). */
+  private readonly single = process.env.FRAMELET_E2E_MOCK_DISPLAYS === '1';
+
   listDisplays(): DisplayInfo[] {
-    return structuredClone(DISPLAYS);
+    return structuredClone(this.single ? DISPLAYS.slice(0, 1) : DISPLAYS);
   }
 
   listSources(options: ListSourcesOptions): Promise<SourceInfo[]> {
     const withThumbs = (options.thumbnailWidth ?? 0) > 0;
     return Promise.resolve(
-      SOURCES.filter((source) => options.types.includes(source.kind)).map((source) =>
-        withThumbs ? { ...source, thumbnail: PIXEL } : { ...source },
-      ),
+      SOURCES.filter(
+        (source) =>
+          options.types.includes(source.kind) && !(this.single && source.id === 'screen:2:0'),
+      ).map((source) => (withThumbs ? { ...source, thumbnail: PIXEL } : { ...source })),
     );
   }
 }

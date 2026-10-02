@@ -8,6 +8,23 @@ import {
   SaveDiagnosticsResponseSchema,
   SourceInfoSchema,
 } from './capture-schemas';
+import {
+  FlowEndedEventSchema,
+  GrabFramesEventSchema,
+  OverlayConfirmRequestSchema,
+  OverlayInitSchema,
+  OverlayPickDisplayRequestSchema,
+  ShotCopyRequestSchema,
+  ShotExportRequestSchema,
+  ShotExportResponseSchema,
+  ShotGetRequestSchema,
+  ShotGetResponseSchema,
+  ShotReadyEventSchema,
+  ShowItemInFolderRequestSchema,
+  StartScreenshotRequestSchema,
+  WorkerFrameErrorSchema,
+  WorkerFrameResultSchema,
+} from './shot-ipc';
 import { ROLES, type Role } from './types';
 
 const ALL_ROLES: readonly Role[] = ROLES;
@@ -78,6 +95,81 @@ export const ipcContract = {
     response: SaveDiagnosticsResponseSchema,
     roles: ['main'],
   },
+  'capture:startScreenshot': {
+    request: StartScreenshotRequestSchema,
+    response: z.object({ started: z.literal(true) }),
+    roles: ['main'],
+  },
+  'shot:get': {
+    request: ShotGetRequestSchema,
+    response: ShotGetResponseSchema,
+    roles: ['main'],
+  },
+  'shot:export': {
+    request: ShotExportRequestSchema,
+    response: ShotExportResponseSchema,
+    roles: ['main'],
+  },
+  'shot:copy': {
+    request: ShotCopyRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  'shot:discard': {
+    request: ShotGetRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  'shell:showItemInFolder': {
+    request: ShowItemInFolderRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  'overlay:getInit': {
+    request: z.undefined(),
+    response: OverlayInitSchema,
+    roles: ['overlay'],
+  },
+  'overlay:ready': {
+    request: z.undefined(),
+    response: z.void(),
+    roles: ['overlay'],
+  },
+  'overlay:selectionStarted': {
+    request: z.undefined(),
+    response: z.void(),
+    roles: ['overlay'],
+  },
+  'overlay:confirm': {
+    request: OverlayConfirmRequestSchema,
+    response: z.void(),
+    roles: ['overlay'],
+  },
+  'overlay:cancel': {
+    request: z.undefined(),
+    response: z.void(),
+    roles: ['overlay'],
+  },
+  'overlay:pickDisplay': {
+    request: OverlayPickDisplayRequestSchema,
+    response: z.void(),
+    roles: ['overlay'],
+  },
+  'worker:ready': {
+    request: z.undefined(),
+    response: z.void(),
+    roles: ['recorder'],
+  },
+  'worker:frameResult': {
+    request: WorkerFrameResultSchema,
+    response: z.void(),
+    roles: ['recorder'],
+  },
+  'worker:frameError': {
+    request: WorkerFrameErrorSchema,
+    response: z.void(),
+    roles: ['recorder'],
+  },
   'diagnostics:revealFolder': {
     request: z.undefined(),
     response: z.void(),
@@ -94,6 +186,10 @@ export type IpcResponse<C extends IpcChannel> = z.output<IpcContract[C]['respons
 /** Main -> renderer events. The preload only allows subscribing to these. */
 export const ipcEvents = {
   'app:themeChanged': z.object({ dark: z.boolean() }),
+  'shot:ready': ShotReadyEventSchema,
+  'capture:flowEnded': FlowEndedEventSchema,
+  'overlay:clearSelection': z.object({}),
+  'worker:grabFrames': GrabFramesEventSchema,
 } as const satisfies Record<string, z.ZodType>;
 
 export type IpcEvent = keyof typeof ipcEvents;

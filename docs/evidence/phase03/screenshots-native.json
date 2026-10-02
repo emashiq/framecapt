@@ -1,0 +1,383 @@
+{
+  "date": "2026-10-02T08:03:10.455Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300 x64",
+    "cpu": "AMD Ryzen 7 7700 8-Core Processor",
+    "electron": "44.5.1"
+  },
+  "displays": [
+    {
+      "id": "3590684614",
+      "bounds": {
+        "x": 3440,
+        "y": 0,
+        "width": 2560,
+        "height": 1440
+      },
+      "scaleFactor": 1,
+      "physicalSize": {
+        "width": 2560,
+        "height": 1440
+      },
+      "isPrimary": false
+    },
+    {
+      "id": "111732923",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      },
+      "scaleFactor": 1,
+      "physicalSize": {
+        "width": 3440,
+        "height": 1440
+      },
+      "isPrimary": true
+    }
+  ],
+  "timingsMs": {
+    "screenPickOverlaysMs_3590684614": 449,
+    "screenPickToResultMs_3590684614": 1427,
+    "screenPickOverlaysMs_111732923": 443,
+    "screenPickToResultMs_111732923": 1113,
+    "regionOverlaysMs_3590684614": 951,
+    "regionConfirmToResultMs_3590684614": 120,
+    "regionOverlaysMs_111732923": 1961,
+    "regionConfirmToResultMs_111732923": 95,
+    "windowCaptureMs": 1048
+  },
+  "overlayBoundsPickDisplay": [
+    {
+      "display": {
+        "x": 3440,
+        "y": 0,
+        "width": 2560,
+        "height": 1440
+      },
+      "overlay": {
+        "x": 3440,
+        "y": 0,
+        "width": 2560,
+        "height": 1440
+      }
+    },
+    {
+      "display": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      },
+      "overlay": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      }
+    }
+  ],
+  "clipboardSize": {
+    "width": 2560,
+    "height": 1440
+  },
+  "screenPick": [
+    {
+      "displayId": "3590684614",
+      "physical": {
+        "width": 2560,
+        "height": 1440
+      },
+      "exported": {
+        "width": 2560,
+        "height": 1440
+      },
+      "equal": true,
+      "colorWindowBounds": {
+        "x": 3640,
+        "y": 150,
+        "width": 400,
+        "height": 300
+      },
+      "magentaFractionInWindowRect": 0.9884,
+      "evidence": "docs/evidence/phase03/screen-3590684614.png"
+    },
+    {
+      "displayId": "111732923",
+      "physical": {
+        "width": 3440,
+        "height": 1440
+      },
+      "exported": {
+        "width": 3440,
+        "height": 1440
+      },
+      "equal": true,
+      "colorWindowBounds": {
+        "x": 200,
+        "y": 150,
+        "width": 400,
+        "height": 300
+      },
+      "magentaFractionInWindowRect": 0.9884,
+      "evidence": "docs/evidence/phase03/screen-111732923.png"
+    }
+  ],
+  "overlayBoundsRegion": [
+    {
+      "display": {
+        "x": 3440,
+        "y": 0,
+        "width": 2560,
+        "height": 1440
+      },
+      "matched": true
+    },
+    {
+      "display": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      },
+      "matched": true
+    }
+  ],
+  "regionFidelity": [
+    {
+      "displayId": "3590684614",
+      "scaleFactor": 1,
+      "colorWindowBounds": {
+        "x": 3640,
+        "y": 150,
+        "width": 400,
+        "height": 300
+      },
+      "exact": {
+        "dragLocalDip": [
+          200,
+          150,
+          400,
+          300
+        ],
+        "exportedSize": {
+          "width": 400,
+          "height": 300
+        },
+        "magentaFraction": 0.9884
+      },
+      "expanded": {
+        "dragLocalDip": [
+          180,
+          130,
+          440,
+          340
+        ],
+        "exportedSize": {
+          "width": 440,
+          "height": 340
+        },
+        "insetExactly20px": true,
+        "innerMagentaFraction": 0.9884
+      },
+      "evidence": [
+        "docs/evidence/phase03/region-exact-3590684614.png",
+        "docs/evidence/phase03/region-expanded-3590684614.png"
+      ],
+      "pixelRatio": 1
+    },
+    {
+      "displayId": "111732923",
+      "scaleFactor": 1,
+      "colorWindowBounds": {
+        "x": 200,
+        "y": 150,
+        "width": 400,
+        "height": 300
+      },
+      "exact": {
+        "dragLocalDip": [
+          200,
+          150,
+          400,
+          300
+        ],
+        "exportedSize": {
+          "width": 400,
+          "height": 300
+        },
+        "magentaFraction": 0.9884
+      },
+      "expanded": {
+        "dragLocalDip": [
+          180,
+          130,
+          440,
+          340
+        ],
+        "exportedSize": {
+          "width": 440,
+          "height": 340
+        },
+        "insetExactly20px": true,
+        "innerMagentaFraction": 0.9884
+      },
+      "evidence": [
+        "docs/evidence/phase03/region-exact-111732923.png",
+        "docs/evidence/phase03/region-expanded-111732923.png"
+      ],
+      "pixelRatio": 1
+    }
+  ],
+  "edgeSharpness": [
+    {
+      "displayId": "3590684614",
+      "magentaTrue": [
+        255,
+        0,
+        255
+      ],
+      "getDisplayMediaFrame": {
+        "outside": [
+          79,
+          16,
+          79
+        ],
+        "edge": [
+          217,
+          28,
+          216
+        ]
+      },
+      "desktopCapturerThumbnail": {
+        "size": {
+          "width": 2560,
+          "height": 1440
+        },
+        "outside": [
+          42,
+          42,
+          42
+        ],
+        "edge": [
+          255,
+          0,
+          255
+        ]
+      }
+    },
+    {
+      "displayId": "111732923",
+      "magentaTrue": [
+        255,
+        0,
+        255
+      ],
+      "getDisplayMediaFrame": {
+        "outside": [
+          79,
+          16,
+          79
+        ],
+        "edge": [
+          217,
+          28,
+          216
+        ]
+      },
+      "desktopCapturerThumbnail": {
+        "size": {
+          "width": 3440,
+          "height": 1440
+        },
+        "outside": [
+          42,
+          42,
+          42
+        ],
+        "edge": [
+          255,
+          0,
+          255
+        ]
+      }
+    }
+  ],
+  "overlayExclusion": {
+    "displayId": "111732923",
+    "hintPillBox": {
+      "x": 1533.1875,
+      "y": 24,
+      "width": 373.625,
+      "height": 35.328125
+    },
+    "selection": {
+      "from": [
+        1420,
+        8
+      ],
+      "to": [
+        2020,
+        160
+      ]
+    },
+    "exportedSize": {
+      "width": 600,
+      "height": 152
+    },
+    "magentaFraction": 1,
+    "note": "The output is the frozen frame crop; the 45% dim, selection border, handles, pill and action bar are DOM drawn over it and never part of it."
+  },
+  "regionClampedToDisplay": {
+    "displayId": "3590684614",
+    "size": {
+      "width": 2560,
+      "height": 1440
+    }
+  },
+  "windowCapture": {
+    "requestedContentSize": {
+      "width": 640,
+      "height": 400
+    },
+    "windowBoundsOuterDip": {
+      "width": 656,
+      "height": 439
+    },
+    "windowContentBoundsDip": {
+      "width": 640,
+      "height": 400
+    },
+    "capturedSize": {
+      "width": 642,
+      "height": 432
+    },
+    "capturedEqualsContentSize": false,
+    "capturedEqualsOuterBounds": false,
+    "frameAndTitleBarIncluded": true,
+    "centerMagentaFraction": 1,
+    "captureMs": 1048,
+    "evidence": "docs/evidence/phase03/window-fixture.png"
+  },
+  "minimizedWindow": {
+    "listedWhileMinimized": false,
+    "outcome": "not listed by desktopCapturer while minimized, so it cannot be picked"
+  },
+  "vanishedWindow": {
+    "code": "NOT_FOUND"
+  },
+  "cancel": {
+    "baselineWindows": 2,
+    "afterEachCancel": 2,
+    "shotsDirectoriesBefore": 0,
+    "shotsDirectoriesAfter": 0,
+    "paths": [
+      "Escape",
+      "Cancel button",
+      "right click",
+      "Escape in screen picker"
+    ]
+  },
+  "logLines": 0
+}

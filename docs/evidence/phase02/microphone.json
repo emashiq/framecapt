@@ -10,21 +10,21 @@
       "label": "Communications - Microphone (Brio 100) (046d:094c)"
     },
     {
-      "id": "6ef59437d78023b9fc0fb825a83b66f2b35088a544872a0e340e6b4037679716",
+      "id": "4ca8279915973ae0b964bb0d0c6c9daf4a2845ff5f9f3d177a6e5a7099c510ec",
       "label": "Microphone (Jabra Evolve 10) (0b0e:2e5f)"
     },
     {
-      "id": "28f241322cfaac1dcd6d5b3699614fbd2f528faff19eb490803eed680d004830",
+      "id": "dfbda0af1134b70936c5ade44d0f4b9b53248a4da75763046f6356d76139e8dd",
       "label": "Microphone (Brio 100) (046d:094c)"
     }
   ],
   "ui": {
     "mimeType": "video/webm;codecs=vp9,opus",
-    "bytes": 1048500,
-    "path": "C:\\Users\\USER\\AppData\\Local\\Temp\\framelet-native-r2PK8a\\diagnostics\\recording-2026-10-02T07-21-18-502Z-461dac.webm",
-    "wallMs": 3000.5,
+    "bytes": 1297492,
+    "path": "~\\AppData\\Local\\Temp\\framelet-native-nVmsmA\\diagnostics\\recording-2026-10-02T08-02-23-093Z-b79eb6.webm",
+    "wallMs": 3003.5,
     "framesDelivered": 87,
-    "measuredFps": 28.994201159825643,
+    "measuredFps": 28.96620609289163,
     "requestedFps": 30,
     "videoWidth": 3440,
     "videoHeight": 1440,
@@ -33,7 +33,7 @@
       "mic"
     ],
     "peakLevels": {
-      "mic": 0.010717785760651393
+      "mic": 0.010259962315821264
     },
     "tracksAtStop": [
       {
@@ -99,9 +99,9 @@
     "cropMethod": "none"
   },
   "volume": {
-    "mean": -49.6,
-    "max": -23.3,
-    "raw": "    Metadata:\r\n      encoder         : Lavc62.28.101 pcm_s16le\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] n_samples: 288000\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] mean_volume: -49.6 dB\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] max_volume: -23.3 dB\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_23db: 6\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_24db: 12\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_25db: 62\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_26db: 70\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_27db: 114\r\n[Parsed_volumedetect_0 @ 000001bfe8ca1c80] histogram_28db: 200\r\n[out#0/null @ 000001bfe8ca0300] video:0KiB audio:562KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\r\nsize=N/A time=00:00:03.00 bitrate=N/A speed= 440x elapsed=0:00:00.00    \r\n"
+    "mean": -56.1,
+    "max": -39,
+    "raw": "Output #0, null, to 'pipe:':\r\n  Metadata:\r\n    encoder         : Lavf62.12.101\r\n  Stream #0:0(eng): Audio: pcm_s16le, 48000 Hz, stereo, s16, 1536 kb/s (default)\r\n    Metadata:\r\n      encoder         : Lavc62.28.101 pcm_s16le\r\n[Parsed_volumedetect_0 @ 0000020bd8bfbdc0] n_samples: 282240\r\n[Parsed_volumedetect_0 @ 0000020bd8bfbdc0] mean_volume: -56.1 dB\r\n[Parsed_volumedetect_0 @ 0000020bd8bfbdc0] max_volume: -39.0 dB\r\n[Parsed_volumedetect_0 @ 0000020bd8bfbdc0] histogram_39db: 144\r\n[Parsed_volumedetect_0 @ 0000020bd8bfbdc0] histogram_40db: 460\r\n[out#0/null @ 0000020bd8b31800] video:0KiB audio:551KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\r\nsize=N/A time=00:00:02.94 bitrate=N/A speed= 471x elapsed=0:00:00.00    \r\n"
   },
   "evidence": "docs/evidence/phase02/recording-microphone.webm"
 }

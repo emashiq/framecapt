@@ -12,6 +12,8 @@ const markers = [
   'mock-provider',
   'Mock display',
   'FRAMELET_E2E_MOCK_CAPTURE',
+  'drawSyntheticFrame',
+  'synthetic-frame',
 ];
 const expectMock = process.argv.includes('--expect-mock');
 
@@ -22,21 +24,36 @@ if (!fs.existsSync(buildDir)) {
   process.exit(2);
 }
 
-const files = fs.readdirSync(buildDir).filter((name) => /\.(c|m)?js$/.test(name));
-if (!files.includes('main.cjs')) {
+const rendererDir = path.join(root, '.vite', 'renderer');
+const jsFilesIn = (dir) =>
+  fs.existsSync(dir)
+    ? fs
+        .readdirSync(dir, { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile() && /\.(c|m)?js$/.test(entry.name))
+        .map((entry) => path.join(entry.parentPath, entry.name))
+    : [];
+
+const files = [...jsFilesIn(buildDir), ...jsFilesIn(rendererDir)];
+if (!files.some((file) => path.basename(file) === 'main.cjs')) {
   console.error('check-no-mocks: .vite/build/main.cjs not found.');
   process.exit(2);
 }
 
 const hits = [];
-for (const name of files) {
-  const text = fs.readFileSync(path.join(buildDir, name), 'utf8');
-  for (const marker of markers) if (text.includes(marker)) hits.push(`${name}: ${marker}`);
+for (const file of files) {
+  const text = fs.readFileSync(file, 'utf8');
+  for (const marker of markers) {
+    if (text.includes(marker)) hits.push(`${path.relative(root, file)}: ${marker}`);
+  }
 }
 
 if (expectMock) {
-  if (hits.length === 0) {
-    console.error('check-no-mocks: expected the mock in an E2E build but found none.');
+  const inMain = hits.some((hit) => hit.startsWith('.vite' + path.sep + 'build'));
+  const inRenderer = hits.some((hit) => hit.startsWith('.vite' + path.sep + 'renderer'));
+  if (!inMain || !inRenderer) {
+    console.error(
+      `check-no-mocks: expected mock code in both the main bundle and the renderer of an E2E build (main: ${inMain}, renderer: ${inRenderer}).`,
+    );
     process.exit(1);
   }
   console.log(`check-no-mocks: mock present as expected (${hits.length} marker hits).`);

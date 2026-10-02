@@ -15,9 +15,11 @@ export interface AppShellProps {
   view: ViewId;
   onNavigate: (view: ViewId) => void;
   children: ReactNode;
+  /** Full-width content area (the screenshot result), instead of the centered reading column. */
+  wide?: boolean;
 }
 
-export function AppShell({ view, onNavigate, children }: AppShellProps) {
+export function AppShell({ view, onNavigate, children, wide = false }: AppShellProps) {
   const mainRef = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
 
@@ -66,7 +68,10 @@ export function AppShell({ view, onNavigate, children }: AppShellProps) {
         tabIndex={-1}
         className="min-w-0 flex-1 overflow-y-auto bg-bg outline-none focus-visible:outline-none"
       >
-        <div key={view} className="view-in mx-auto max-w-4xl px-8 py-8">
+        <div
+          key={view}
+          className={cn('view-in', wide ? 'h-full px-6 py-5' : 'mx-auto max-w-4xl px-8 py-8')}
+        >
           {children}
         </div>
       </main>

@@ -6,7 +6,9 @@
  * and Playwright needs the inspect arguments to drive the app. The renderer is loaded the same way
  * as in a packaged build (file://, because MAIN_WINDOW_VITE_DEV_SERVER_URL is undefined in
  * `electron-forge package` output), so the production CSP and sandbox settings are exercised.
- * `npm run test:e2e` runs `electron-forge package` first to produce that output.
+ * `npm run test:e2e` runs `scripts/package-e2e.mjs` (electron-forge package with the mock capture
+ * provider compiled in) first to produce that output. This file does not set
+ * FRAMELET_E2E_MOCK_CAPTURE, so it still uses the real provider.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -68,10 +70,12 @@ test('opens a Framelet window loaded from file:// with the sidebar nav', async (
   expect(size[1]).toBeGreaterThanOrEqual(560);
 });
 
-test('capture buttons are present but unavailable in this build', async () => {
-  const card = page.getByTestId('mode-screenshot');
+test('screenshot buttons are enabled and record buttons are unavailable in this build', async () => {
+  const shots = page.getByTestId('mode-screenshot');
+  const record = page.getByTestId('mode-record');
   for (const name of ['Screen', 'Window', 'Region']) {
-    await expect(card.getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true');
+    await expect(shots.getByRole('button', { name })).toBeEnabled();
+    await expect(record.getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true');
   }
 });
 

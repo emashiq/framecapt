@@ -8,8 +8,14 @@ import type { CaptureProvider } from './types';
  */
 declare const __FRAMELET_E2E__: boolean;
 
+/** True only in an E2E build started with FRAMELET_E2E_MOCK_CAPTURE=1 (never in a normal build). */
+export function isMockCaptureEnabled(): boolean {
+  return __FRAMELET_E2E__ && process.env.FRAMELET_E2E_MOCK_CAPTURE === '1';
+}
+
 export async function createCaptureProvider(): Promise<CaptureProvider> {
-  if (__FRAMELET_E2E__ && process.env.FRAMELET_E2E_MOCK_CAPTURE === '1') {
+  // The literal build-time constant is repeated here so the bundler can drop the dynamic import.
+  if (__FRAMELET_E2E__ && isMockCaptureEnabled()) {
     const { MockCaptureProvider } = await import('./mock-provider');
     return new MockCaptureProvider();
   }

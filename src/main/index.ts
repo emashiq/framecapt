@@ -20,6 +20,8 @@ function start(): void {
   const overrideDir = process.env.FRAMELET_USER_DATA_DIR;
   if (!app.isPackaged && overrideDir) {
     app.setPath('userData', path.resolve(overrideDir));
+    // Keep the default save location inside the test directory as well.
+    app.setPath('pictures', path.join(path.resolve(overrideDir), 'pictures'));
   }
 
   if (!app.requestSingleInstanceLock()) {

@@ -128,13 +128,17 @@ Observations across the three runs of this test (same machine):
 ## Limitations (stated, not all tested)
 
 - Protected content (DRM video such as Netflix in a browser) appears black in the captured frame. Observed on this host in the full-screen screenshot: the Netflix window area is black while everything around it is captured.
-- Minimized windows cannot be captured as window sources; hidden windows are not listed or captured. Not tested for window frame grabs.
+- Minimized windows: measured in phase 03 on this host, a minimized window is NOT listed by `desktopCapturer` at all, so it cannot be picked; if a window vanishes or returns an empty (0-size or entirely black) frame between listing and capture, Framelet shows "That window is minimized or can't be captured. Restore it and try again." Hidden windows are not listed either.
 - The UAC secure desktop, the lock screen and some elevated windows are not capturable by a normal process. Not tested.
-- Window capture was enumerated (thumbnails, app icons, own windows excluded) but a window recording was not exercised.
+- Window capture (phase 03, measured with a framed external Electron window, 640x400 content, outer bounds 656x439): the captured image was 642x432, i.e. the visible window frame, title bar and 1 px border ARE included and the invisible resize/shadow border is NOT (outer bounds minus about 7-8 px per side). The content area was captured sharply. Other themes or DPI settings may change the frame size. A window recording was still not exercised.
 - Static screens deliver fewer frames than the requested rate; the recorded frame rate then depends on the method (see above). A constant-frame-rate output needs a timer-backed redraw or an FFmpeg pass.
 - Mixed-DPI, rotated displays and fractional scaling were not available.
 - Windows loopback audio captures everything the default output plays, including other apps, and the loopback stream follows the default device; device changes during recording were not tested.
 - The microphone is a pass only on a host with a device and Windows privacy access; otherwise the test records `skipped`/`error` and does not fail on silence.
+
+### Screenshot fidelity of the getDisplayMedia path (phase 03, measured)
+
+A saturated hard edge (a pure #FF00FF window on a #2A2A2A backdrop) comes out of the worker's frame with about one pixel of color bleed: the pixel just outside the window is (79, 16, 79) instead of (42, 42, 42) and the first pixel inside is (217, 28, 216) instead of (255, 0, 255). Positions and sizes are exact (the edge is at the right pixel), but colors on 1 px edges are not. This is the signature of 4:2:0 chroma subsampling in the video capture pipeline; gray text on a white background is not affected, colored text and thin colored lines are. For comparison, a full-size `desktopCapturer.getSources({ thumbnailSize: <physical size> })` thumbnail of the same display returned the edge exactly ((42, 42, 42) then (255, 0, 255)), took about 400 ms for 3440x1440 and needs no renderer. Both numbers are recorded in docs/evidence/phase03/screenshots-native.json (`edgeSharpness`). Open question for the lead: switch screen screenshots (and the region freeze-frame) to a full-size `desktopCapturer` thumbnail, keeping `getDisplayMedia` for window sources and recording; not changed in phase 03 because the brief fixed the worker + `getDisplayMedia` architecture.
 
 ## Limits of this evidence
 
