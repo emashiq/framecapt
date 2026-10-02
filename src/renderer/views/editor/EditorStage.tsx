@@ -65,6 +65,8 @@ export interface StageHandle {
   cancel(): boolean;
   /** Commits an open text edit (used before saving or copying). */
   commitText(): void;
+  /** Puts keyboard focus on the canvas (after a capture opens in the editor). */
+  focus(): void;
 }
 
 /** What new annotations are made with. */
@@ -442,6 +444,7 @@ export function EditorStage(props: EditorStageProps) {
         return false;
       },
       commitText: () => commitEdit(),
+      focus: () => canvasRef.current?.focus({ preventScroll: true }),
     }),
     [zoomAround, requestDraw, setEditing, commitEdit],
   );
@@ -835,7 +838,7 @@ export function EditorStage(props: EditorStageProps) {
         width={Math.max(1, Math.round(stageSize.width * dpr))}
         height={Math.max(1, Math.round(stageSize.height * dpr))}
         style={{ width: stageSize.width, height: stageSize.height, touchAction: 'none' }}
-        className="absolute inset-0 block"
+        className="absolute inset-0 block focus-visible:outline-offset-[-3px]"
         data-testid="editor-canvas"
         data-zoom={view.zoom.toFixed(4)}
         data-pan-x={view.panX.toFixed(2)}
@@ -849,6 +852,7 @@ export function EditorStage(props: EditorStageProps) {
         data-crop={doc.crop ? JSON.stringify(doc.crop) : ''}
         data-crop-draft={cropDraft ? JSON.stringify(cropDraft) : ''}
         role="img"
+        tabIndex={0}
         aria-label={`Screenshot editor canvas, ${doc.width} by ${doc.height} pixels`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

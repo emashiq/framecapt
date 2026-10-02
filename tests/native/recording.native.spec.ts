@@ -91,6 +91,28 @@ function decodedSeconds(file: string, only: 'video' | 'audio' | 'both' = 'both')
   return Number(last[1]) * 3600 + Number(last[2]) * 60 + Number(last[3]);
 }
 
+/** Packet timestamps of every stream strictly increase (a property of the file itself). */
+function timestampsStrictlyIncrease(file: string): { ok: boolean; first: string } {
+  const out = execFileSync(
+    'ffprobe',
+    ['-v', 'error', '-show_entries', 'packet=stream_index,pts,dts', '-of', 'csv=p=0', file],
+    { shell: false, encoding: 'utf8', maxBuffer: 64 << 20 },
+  );
+  const last = new Map<string, { pts: number; dts: number }>();
+  for (const line of out.trim().split(/\r?\n/)) {
+    const [stream = '', pts = '', dts = ''] = line.split(',');
+    const before = last.get(stream);
+    if (before && (Number(pts) <= before.pts || Number(dts) <= before.dts)) {
+      return {
+        ok: false,
+        first: `stream ${stream}: ${before.pts}/${before.dts} then ${pts}/${dts}`,
+      };
+    }
+    last.set(stream, { pts: Number(pts), dts: Number(dts) });
+  }
+  return { ok: true, first: '' };
+}
+
 /** The EBML Cues element id (1C 53 BB 6B): a seek index exists. */
 function hasCues(file: string): boolean {
   return fs.readFileSync(file).indexOf(Buffer.from([0x1c, 0x53, 0xbb, 0x6b])) !== -1;
@@ -108,6 +130,10 @@ function seekDecode(file: string, at: number): { status: number; errors: string;
     file,
     '-t',
     '1',
+    // A recording is variable frame rate; without this ffmpeg re-times frames onto a 30 fps grid
+    // and reports "non monotonically increasing dts" whenever two land in one slot (ADR-031).
+    '-fps_mode',
+    'vfr',
     '-f',
     'null',
     '-',
@@ -486,6 +512,9 @@ function assertCommon(
   const seek = seekDecode(outcome.file, 3);
   expect(seek.status).toBe(0);
   expect(seek.errors).toBe('');
+  const stamps = timestampsStrictlyIncrease(outcome.file);
+  expect(stamps.first, 'packet timestamps strictly increase').toBe('');
+  expect(stamps.ok).toBe(true);
   expect(seek.seconds).toBeGreaterThan(0.9);
   expect(fs.existsSync(path.join(userDataDir, 'recordings', outcome.sessionId))).toBe(false);
 }
@@ -834,7 +863,8 @@ test('region 1280x720 on the second display records exactly 1280x720, toolbar pl
               const root = candidate.locator('[data-testid="overlay-region"]');
               if (
                 (await root.count()) &&
-                (await root.getAttribute('data-display-id')) === target.id
+                (await root.getAttribute('data-display-id')) === target.id &&
+                (await root.getAttribute('data-ready')) === 'true'
               ) {
                 overlay = candidate;
                 return true;

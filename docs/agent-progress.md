@@ -19,7 +19,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 05 Recording & audio | VERIFIED | native 29/29; ~30 fps all modes; toolbar excluded from capture |
 | 06 Storage & recovery | VERIFIED | FFmpeg 9.0.2 bundled (SHA-pinned); remux finalize; forced-kill recovery verified natively |
 | 07 Export & history | VERIFIED | MP4 export (libx264/aac, faststart) with cancel; history with trash-delete, relink |
-| 08 Desktop polish | NOT_STARTED | |
+| 08 Desktop polish | VERIFIED | settings/shortcuts/tray; axe 0 serious; idle CPU 0.04 %; flakes root-caused |
 | 09 Security/reliability/perf | NOT_STARTED | |
 | 10 Packaging/CI/updates | NOT_STARTED | |
 | 11 Open source & sales prep | NOT_STARTED | |
@@ -78,6 +78,14 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - History: zod JSON store with corruption set-aside, 1000 cap, 200 MB thumb cap, thumbnails from flattened editor output only, existence checks + relink, delete via shell.trashItem, undo remove, framelet-media thumb/file routes with nonce.
 - Results: lint/typecheck 0; unit 491/491 (lead re-ran); e2e 101/101; native 33/33 (final run).
 - Risks: native flakes seen once each (region drag 107x139; ffmpeg non-monotonic dts on seek decode) → phase 08; real Recycle Bin/shell windows stubbed; quit-during-export untested; H.264/AAC patent review = owner.
+
+### Phase 08 — Desktop polish (VERIFIED 2026-10-02)
+- Files: src/main/{desktop,shortcuts,actions,tray}.ts, src/main/settings/*, src/shared/{settings,shortcuts,error-messages}.ts, scripts/generate-tray-icons.mjs, settings/home/help UI, tests (e2e desktop/a11y/recording-timestamps, native desktop), docs/keyboard-shortcuts.md.
+- Settings v1 (zod, atomic debounced, corruption set-aside, migration scaffold); global shortcuts with conflict status (native RegisterHotKey conflict detected); tray singleton; close-to-tray; quit-while-recording confirm; home rebalanced; toolbar sized to content (±1 px); focus/aria/skip link/contrast; help dialog.
+- Root causes fixed: (1) region drag flake = buttonless synthetic pointermove from real mouse movement → ignored mid-gesture (4/4 fail → 8/8 pass); (2) 2/30 recordings had duplicate first timestamps → remux now uses setts bsf for strictly increasing timestamps; checks assert monotonic packets.
+- Native: real SendInput Ctrl+Shift+3 → overlays → Esc OK; idle CPU total 0.041 % of one core over 30 s; affected native tests 5/5 stable.
+- Results: lint/typecheck 0; unit 596/596 (lead re-ran); e2e 150/150 incl. axe (0 serious/critical, both themes); native 38/38.
+- Risks: launch-at-login untested until installer (phase 10); screen reader untested; Ctrl+Shift+0 may collide with IME hotkeys on some systems.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

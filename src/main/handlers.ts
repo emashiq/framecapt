@@ -3,6 +3,10 @@ import path from 'node:path';
 import { app, session, shell } from 'electron';
 import { ExportService } from './history/export-service';
 import { registerHistoryHandlers, mp4SaveDialog } from './history/handlers';
+import { createAfterCapture } from './shots/after-capture';
+import type { AppSettings } from './settings';
+import { probeWritable } from './settings/output-dirs';
+import type { TrayInfo } from './tray-info';
 import { HistoryService } from './history/service';
 import { detectMp4Capability, MP4_UNAVAILABLE_MESSAGE, type Mp4Capability } from './media/export';
 import { createMediaTools, FfmpegError, resolveFfmpeg, type MediaTools } from './media/ffmpeg';
@@ -24,6 +28,7 @@ import type { CaptureProvider } from './capture/types';
 import type { IpcEventPayload } from '../shared/ipc-contract';
 import { sendEvent } from './events';
 import { getOriginConfig, setMainCloseInterceptor, webContentsWithRoles } from './windows';
+import { IpcError } from './ipc-core';
 import { handle } from './ipc';
 import { log } from './logger';
 
@@ -76,8 +81,22 @@ function emitToMain<E extends 'export:progress' | 'export:done' | 'export:failed
   for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
 }
 
+/** What the desktop layer (tray, shortcuts) drives: the same objects the IPC handlers use. */
+export interface AppServices {
+  flow: CaptureFlow;
+  recorder: RecorderController;
+  exports: ExportService;
+  history: HistoryService;
+  sessions: SessionService;
+  store: ShotSessionStore;
+}
+
 /** Registers every IPC channel. Feature modules own their channels (capture/, diagnostics). */
-export function registerHandlers(provider: CaptureProvider): void {
+export function registerHandlers(
+  provider: CaptureProvider,
+  settings: AppSettings,
+  trayInfo: () => TrayInfo,
+): AppServices {
   handle('app:getInfo', { roles: ['main'] }, () => ({
     version: app.getVersion(),
     electron: process.versions.electron ?? '',
@@ -86,6 +105,7 @@ export function registerHandlers(provider: CaptureProvider): void {
     platform: process.platform,
     arch: process.arch,
     isPackaged: app.isPackaged,
+    tray: trayInfo(),
   }));
 
   handle(
@@ -112,7 +132,7 @@ export function registerHandlers(provider: CaptureProvider): void {
   const store = new ShotSessionStore(path.join(app.getPath('userData'), 'shots'));
   const synthetic = isMockCaptureEnabled();
   const recordingsDir = path.join(app.getPath('userData'), 'recordings');
-  const outputDir = (): string => path.join(app.getPath('videos'), 'Framelet');
+  const outputDir = (): string => settings.dirs().recordingsDir;
   const tools = withE2eRemuxDelay(
     createMediaTools(() =>
       resolveFfmpeg({
@@ -150,7 +170,17 @@ export function registerHandlers(provider: CaptureProvider): void {
     history,
     tools,
     capability: () => mp4Capability,
-    pickDestination: mp4SaveDialog,
+    pickDestination: (source) => mp4SaveDialog(source, outputDir()),
+    autoDestination: async (source) => {
+      const dir = path.dirname(source.path);
+      const base = path.basename(source.path, path.extname(source.path));
+      for (let attempt = 1; attempt < 1000; attempt += 1) {
+        const name = attempt === 1 ? `${base}.mp4` : `${base} (${attempt}).mp4`;
+        const candidate = path.join(dir, name);
+        if (!fs.existsSync(candidate)) return candidate;
+      }
+      throw new Error('No free MP4 name.');
+    },
     emit: {
       progress: (event) => emitToMain('export:progress', event),
       done: (event) => emitToMain('export:done', event),
@@ -177,6 +207,19 @@ export function registerHandlers(provider: CaptureProvider): void {
     outputDir,
     tools,
     history,
+    ensureOutputDir: async () => {
+      if (!(await probeWritable(outputDir()))) {
+        throw new IpcError(
+          'OUTPUT_DIR_UNWRITABLE',
+          "Framelet can't save recordings to the chosen folder. Choose another one in Settings → Storage.",
+        );
+      }
+    },
+    onSaved: (historyId) => {
+      if (historyId && settings.store.get().recording.autoExportMp4) {
+        void exports.startAuto(historyId);
+      }
+    },
     // E2E builds only: a short cap to test quitting while finalizing takes too long.
     ...(__FRAMELET_E2E__ &&
       Number(process.env.FRAMELET_E2E_QUIT_CAP_MS) > 0 && {
@@ -188,10 +231,18 @@ export function registerHandlers(provider: CaptureProvider): void {
     store,
     synthetic,
     isBlocked: () => recorder.busy,
+    afterCapture: createAfterCapture({
+      settings: () => settings.store.get(),
+      screenshotsDir: () => settings.dirs().screenshotsDir,
+      history,
+    }),
   });
   registerWorkerHandlers();
-  registerShotHandlers(flow, store, recorder, history);
-  registerHistoryHandlers(history, exports, () => mp4Capability);
+  registerShotHandlers(flow, store, recorder, history, {
+    get: () => settings.store.get(),
+    screenshotsDir: () => settings.dirs().screenshotsDir,
+  });
+  registerHistoryHandlers(history, exports, () => mp4Capability, outputDir);
   registerRecorderHandlers(recorder, sessions, media);
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.
@@ -233,4 +284,5 @@ export function registerHandlers(provider: CaptureProvider): void {
       `Shot sweep: scanned ${result.scanned}, removed ${result.removed}, kept ${result.kept}`,
     );
   });
+  return { flow, recorder, exports, history, sessions, store };
 }

@@ -1,0 +1,120 @@
+{
+  "shortcutRegion": {
+    "shortcut": "Ctrl+Shift+3 (OS-level SendInput)",
+    "displays": 2,
+    "runsWithMainMinimized": [
+      {
+        "overlayMs": 1690,
+        "overlaysAfterEsc": 0,
+        "stayedMinimized": true
+      },
+      {
+        "overlayMs": 1587,
+        "overlaysAfterEsc": 0,
+        "stayedMinimized": true
+      },
+      {
+        "overlayMs": 1580,
+        "overlaysAfterEsc": 0,
+        "stayedMinimized": true
+      }
+    ],
+    "overlayVisibleMsMainFocused": 1211,
+    "mainFocusedAfterEsc": true,
+    "focusedControlAfterEsc": "shot-region",
+    "note": "overlayMs includes starting PowerShell for SendInput (about 0.3-0.6 s)"
+  },
+  "keyboardRegionCapture": {
+    "selectionLabel": "1719 × 720",
+    "editorDimensions": "1719 × 720"
+  },
+  "conflict": {
+    "heldByOtherProcess": "Ctrl+Alt+Shift+F12",
+    "framelet": {
+      "accelerator": "Ctrl+Alt+Shift+F12",
+      "status": "conflict",
+      "message": "Ctrl+Alt+Shift+F12 is used by another app — choose a different shortcut."
+    },
+    "others": {
+      "screenshotRegion": "ok"
+    }
+  },
+  "tray": {
+    "active": true,
+    "bounds": {
+      "x": 3233,
+      "y": 1392,
+      "width": 32,
+      "height": 48
+    },
+    "boundsNonEmpty": true,
+    "createdLogLines": 1,
+    "hiddenOnClose": true,
+    "shownBySecondLaunch": true,
+    "stillActiveAfter": true
+  },
+  "idleCpu": {
+    "seconds": 30,
+    "windowsOpen": 2,
+    "processes": [
+      {
+        "pid": 63076,
+        "type": "Browser",
+        "averagePercent": 0.014,
+        "maxPercent": 0.1,
+        "samples": 30,
+        "workingSetKB": 132932
+      },
+      {
+        "pid": 63864,
+        "type": "GPU",
+        "averagePercent": 0.004,
+        "maxPercent": 0.01,
+        "samples": 30,
+        "workingSetKB": 229756
+      },
+      {
+        "pid": 62228,
+        "type": "Utility",
+        "averagePercent": 0,
+        "maxPercent": 0,
+        "samples": 30,
+        "workingSetKB": 51680
+      },
+      {
+        "pid": 37652,
+        "type": "Tab",
+        "averagePercent": 0.008,
+        "maxPercent": 0.12,
+        "samples": 30,
+        "workingSetKB": 117564
+      },
+      {
+        "pid": 22992,
+        "type": "Utility",
+        "averagePercent": 0,
+        "maxPercent": 0,
+        "samples": 30,
+        "workingSetKB": 73676
+      },
+      {
+        "pid": 45812,
+        "type": "Utility",
+        "averagePercent": 0,
+        "maxPercent": 0,
+        "samples": 30,
+        "workingSetKB": 84024
+      },
+      {
+        "pid": 14732,
+        "type": "Tab",
+        "averagePercent": 0.015,
+        "maxPercent": 0.09,
+        "samples": 30,
+        "workingSetKB": 115740
+      }
+    ],
+    "totalAveragePercentOfOneCore": 0.041,
+    "note": "percentCPUUsage per process, averaged over 30 one-second samples (Electron app.getAppMetrics)"
+  }
+}

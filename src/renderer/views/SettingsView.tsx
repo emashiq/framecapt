@@ -1,114 +1,150 @@
-import { Copy, Info, RotateCw } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState } from 'react';
+import {
+  Camera,
+  HardDrive,
+  Info,
+  Keyboard,
+  SlidersHorizontal,
+  Stethoscope,
+  Video,
+} from 'lucide-react';
+import type { ResetSection } from '../../shared/settings';
+import type { SettingsSectionId } from '../../shared/settings-ipc';
 import { PageHeader } from '../components/PageHeader';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { IconButton } from '../components/ui/IconButton';
-import type { AppInfo } from '../../shared/ipc-contract';
-import { useAppInfo } from '../lib/use-app-info';
-import { CaptureDiagnostics } from './diagnostics/CaptureDiagnostics';
+import { AlertConfirm } from '../components/ui/AlertConfirm';
+import { cn } from '../lib/cn';
+import { resetSettings } from '../settings/store';
+import { SavedIndicator } from './settings/SettingRow';
+import {
+  AboutSection,
+  AdvancedSection,
+  GeneralSection,
+  RecordingSection,
+  ScreenshotsSection,
+  ShortcutsSection,
+  StorageSection,
+} from './settings/sections';
 
-function infoRows(info: AppInfo): { id: string; label: string; value: string }[] {
-  return [
-    { id: 'version', label: 'Framelet', value: info.version },
-    { id: 'electron', label: 'Electron', value: info.electron },
-    { id: 'chrome', label: 'Chromium', value: info.chrome },
-    { id: 'node', label: 'Node.js', value: info.node },
-    { id: 'platform', label: 'Platform', value: `${info.platform} (${info.arch})` },
-    { id: 'build', label: 'Build', value: info.isPackaged ? 'Packaged' : 'Development' },
-  ];
+const NAV: {
+  id: SettingsSectionId;
+  label: string;
+  icon: typeof Camera;
+  /** What a reset puts back (sections without settings cannot be reset). */
+  reset?: ResetSection;
+  resetName?: string;
+}[] = [
+  {
+    id: 'general',
+    label: 'General',
+    icon: SlidersHorizontal,
+    reset: 'general',
+    resetName: 'General',
+  },
+  {
+    id: 'screenshots',
+    label: 'Screenshots',
+    icon: Camera,
+    reset: 'screenshots',
+    resetName: 'Screenshot',
+  },
+  { id: 'recording', label: 'Recording', icon: Video, reset: 'recording', resetName: 'Recording' },
+  {
+    id: 'shortcuts',
+    label: 'Shortcuts',
+    icon: Keyboard,
+    reset: 'shortcuts',
+    resetName: 'Shortcut',
+  },
+  { id: 'storage', label: 'Storage', icon: HardDrive, reset: 'storage', resetName: 'Storage' },
+  { id: 'advanced', label: 'Advanced', icon: Stethoscope },
+  { id: 'about', label: 'About', icon: Info },
+];
+
+export interface SettingsViewProps {
+  section?: SettingsSectionId;
+  onSectionChange?: (section: SettingsSectionId) => void;
 }
 
-function About() {
-  const { state, reload } = useAppInfo();
+/**
+ * Settings in sections (General, Screenshots, Recording, Shortcuts, Storage, Advanced, About), one
+ * at a time. Every change is applied and saved at once ("Saved" shows briefly); each section can go
+ * back to its defaults after a confirmation.
+ */
+export function SettingsView({ section, onSectionChange }: SettingsViewProps) {
+  // The section lives in the app (the tray menu and the home screen can ask for one).
+  const current: SettingsSectionId = section ?? 'general';
+  const [resetting, setResetting] = useState<ResetSection | null>(null);
+  const select = (next: SettingsSectionId): void => onSectionChange?.(next);
+  const resetEntry = NAV.find((item) => item.reset === resetting);
 
-  async function copyDetails(info: AppInfo) {
-    const text = infoRows(info)
-      .map((row) => `${row.label}: ${row.value}`)
-      .join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success('Copied app details');
-    } catch {
-      toast.error('Could not copy to the clipboard');
-    }
-  }
+  const ask = (reset: ResetSection) => () => setResetting(reset);
 
   return (
-    <section aria-labelledby="about-heading" data-testid="about-section">
-      <Card padding="lg">
-        <div className="mb-4 flex items-center gap-3">
-          <div
-            className="flex size-9 items-center justify-center rounded-lg bg-accent-soft text-accent-fg"
-            aria-hidden="true"
-          >
-            <Info className="size-[18px]" />
-          </div>
-          <h2 id="about-heading" className="flex-1 text-lg font-semibold text-fg">
-            About
-          </h2>
-          {state.status === 'ready' ? (
-            <IconButton
-              aria-label="Copy app details"
-              icon={<Copy className="size-4" aria-hidden="true" />}
-              onClick={() => void copyDetails(state.info)}
-            />
-          ) : null}
+    <div data-testid="settings-view">
+      <div className="mb-7 flex items-start justify-between gap-4">
+        <PageHeader
+          title="Settings"
+          description="Changes are saved as you make them."
+          className="mb-0"
+        />
+        <div className="pt-2">
+          <SavedIndicator />
         </div>
-
-        {state.status === 'loading' ? (
-          <div className="space-y-2" aria-busy="true" aria-label="Loading app details">
-            {[0, 1, 2, 3].map((n) => (
-              <div key={n} className="h-5 w-full animate-pulse rounded-md bg-surface-3" />
-            ))}
-          </div>
-        ) : null}
-
-        {state.status === 'error' ? (
-          <div role="alert" className="flex items-center justify-between gap-4 text-sm">
-            <p className="text-danger">{state.message}</p>
-            <Button
-              size="sm"
-              icon={<RotateCw className="size-3.5" aria-hidden="true" />}
-              onClick={reload}
-            >
-              Try again
-            </Button>
-          </div>
-        ) : null}
-
-        {state.status === 'ready' ? (
-          <dl className="selectable divide-y divide-line text-sm">
-            {infoRows(state.info).map((row) => (
-              <div key={row.id} className="flex items-center justify-between py-2.5">
-                <dt className="text-fg-muted">{row.label}</dt>
-                <dd className="font-medium text-fg tabular-nums" data-testid={`about-${row.id}`}>
-                  {row.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-
-        <p className="mt-5 text-xs text-fg-subtle">
-          Framelet works fully offline and sends no telemetry. Licensed under GPL-3.0-only.
-        </p>
-      </Card>
-    </section>
-  );
-}
-
-export function SettingsView() {
-  return (
-    <>
-      <PageHeader
-        title="Settings"
-        description="Shortcuts, appearance and save locations will live here. For now, here is what you are running."
-      />
-      <div className="space-y-6">
-        <About />
-        <CaptureDiagnostics />
       </div>
-    </>
+
+      <div className="flex flex-col gap-6 md:flex-row">
+        <nav aria-label="Settings sections" className="md:w-48 md:shrink-0">
+          <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+            {NAV.map(({ id, label, icon: Icon }) => (
+              <li key={id}>
+                <button
+                  type="button"
+                  aria-current={id === current ? 'page' : undefined}
+                  data-testid={`settings-nav-${id}`}
+                  onClick={() => select(id)}
+                  className={cn(
+                    'flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium whitespace-nowrap transition-colors duration-150',
+                    id === current
+                      ? 'bg-accent-soft text-accent-fg'
+                      : 'text-fg-muted hover:bg-surface-3 hover:text-fg',
+                  )}
+                >
+                  <Icon className="size-[18px]" aria-hidden="true" />
+                  {label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="min-w-0 flex-1">
+          {current === 'general' ? <GeneralSection onReset={ask('general')} /> : null}
+          {current === 'screenshots' ? <ScreenshotsSection onReset={ask('screenshots')} /> : null}
+          {current === 'recording' ? <RecordingSection onReset={ask('recording')} /> : null}
+          {current === 'shortcuts' ? <ShortcutsSection onReset={ask('shortcuts')} /> : null}
+          {current === 'storage' ? <StorageSection onReset={ask('storage')} /> : null}
+          {current === 'advanced' ? <AdvancedSection /> : null}
+          {current === 'about' ? <AboutSection /> : null}
+        </div>
+      </div>
+
+      <AlertConfirm
+        open={resetting !== null}
+        title={`Reset ${resetEntry?.resetName?.toLowerCase() ?? ''} settings?`}
+        description={
+          resetting === 'storage'
+            ? 'Both folders go back to Pictures\\Framelet and Videos\\Framelet. Files you already saved stay where they are.'
+            : 'These settings go back to their defaults. Your captures and folders are not touched.'
+        }
+        cancelLabel="Keep my settings"
+        confirmLabel="Reset"
+        onConfirm={() => {
+          const section = resetting;
+          setResetting(null);
+          if (section) void resetSettings(section);
+        }}
+        onCancel={() => setResetting(null)}
+      />
+    </div>
   );
 }

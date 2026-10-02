@@ -28,6 +28,13 @@ export interface CaptureFlowDeps {
   synthetic: boolean;
   /** True while something else (a recording) must keep a screenshot from starting. */
   isBlocked?: () => boolean;
+  /** The "after a capture" setting: copy or save before the editor opens (a failure is ignored). */
+  afterCapture?: (shot: {
+    kind: ShotKind;
+    width: number;
+    height: number;
+    png: Buffer;
+  }) => Promise<{ savedPath?: string }>;
 }
 
 class FlowFailure extends Error {
@@ -53,6 +60,8 @@ export class CaptureFlow {
   /** performance.now() when the current flow was requested, for the "click to overlay" timing. */
   private requestedAt = 0;
   private removeDisplayListeners: (() => void) | undefined;
+  /** The main window was on screen when the flow began (a shortcut may start it from the tray). */
+  private mainWasShown = true;
 
   constructor(private readonly deps: CaptureFlowDeps) {}
 
@@ -67,6 +76,8 @@ export class CaptureFlow {
     const flowId = claim.flowId;
     this.flowId = flowId;
     this.requestedAt = performance.now();
+    const main = getMainWindow();
+    this.mainWasShown = main !== undefined && main.isVisible() && !main.isMinimized();
     try {
       if (request.target === 'window' && request.sourceId) {
         const windows = await this.deps.provider.listSources({
@@ -410,10 +421,15 @@ export class CaptureFlow {
       return;
     }
     log.info(`Screenshot captured: ${shot.kind} ${shot.width}x${shot.height}`);
+    const after = await this.deps.afterCapture?.(shot).catch(() => ({}) as { savedPath?: string });
+    if (!this.state.isCurrent(flowId)) return;
     this.finish(flowId, { outcome: 'completed' }, () => {
       const main = getMainWindow();
       if (main) {
-        sendEvent(main.webContents, 'shot:ready', { session: this.deps.store.meta(session) });
+        sendEvent(main.webContents, 'shot:ready', {
+          session: this.deps.store.meta(session),
+          ...(after?.savedPath && { savedPath: after.savedPath }),
+        });
       }
     });
   }
@@ -439,7 +455,8 @@ export class CaptureFlow {
     this.overlays = undefined;
 
     const main = getMainWindow();
-    if (main) {
+    // A capture that was cancelled leaves the window as it was (hidden in the tray stays hidden).
+    if (main && (ended.outcome !== 'cancelled' || this.mainWasShown)) {
       if (main.isMinimized()) main.restore();
       main.show();
       main.focus();

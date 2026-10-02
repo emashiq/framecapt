@@ -135,14 +135,18 @@ describe.skipIf(paths === null)('real ffmpeg: finalization and recovery', () => 
 
   /** Decoding the whole file must produce no errors, and a seek in the middle must work. */
   function decodes(file: string): { clean: boolean; seekClean: boolean } {
-    const all = spawnSync(paths?.ffmpeg ?? '', ['-v', 'error', '-i', file, '-f', 'null', '-'], {
-      shell: false,
-      encoding: 'utf8',
-      windowsHide: true,
-    });
+    const all = spawnSync(
+      paths?.ffmpeg ?? '',
+      ['-v', 'error', '-i', file, '-fps_mode', 'vfr', '-f', 'null', '-'],
+      {
+        shell: false,
+        encoding: 'utf8',
+        windowsHide: true,
+      },
+    );
     const seek = spawnSync(
       paths?.ffmpeg ?? '',
-      ['-v', 'error', '-ss', '2', '-i', file, '-t', '1', '-f', 'null', '-'],
+      ['-v', 'error', '-ss', '2', '-i', file, '-t', '1', '-fps_mode', 'vfr', '-f', 'null', '-'],
       { shell: false, encoding: 'utf8', windowsHide: true },
     );
     return {
@@ -201,6 +205,82 @@ describe.skipIf(paths === null)('real ffmpeg: finalization and recovery', () => 
       decodeClean: true,
       seekClean: true,
     };
+  }, 60_000);
+
+  /** Packet timestamps (ms) per stream, in file order. */
+  function packetTimes(file: string): Map<number, number[]> {
+    const out = spawnSync(
+      paths?.ffprobe ?? '',
+      ['-v', 'error', '-show_entries', 'packet=stream_index,pts', '-of', 'csv=p=0', file],
+      { shell: false, encoding: 'utf8', windowsHide: true },
+    ).stdout;
+    const byStream = new Map<number, number[]>();
+    for (const line of out.trim().split(/\r?\n/)) {
+      const [stream, pts] = line.split(',').map(Number);
+      if (stream === undefined || pts === undefined || Number.isNaN(pts)) continue;
+      byStream.set(stream, [...(byStream.get(stream) ?? []), pts]);
+    }
+    return byStream;
+  }
+
+  it('MediaRecorder-style duplicate first timestamps (0, 0, 32...) leave the file with strictly increasing ones', async () => {
+    // Two frames stamped within the same millisecond, as the browser produces them now and then.
+    const generated = spawnSync(
+      paths?.ffmpeg ?? '',
+      [
+        '-hide_banner',
+        '-v',
+        'error',
+        '-f',
+        'lavfi',
+        '-i',
+        'testsrc=size=640x360:rate=30',
+        '-f',
+        'lavfi',
+        '-i',
+        'sine=frequency=440:sample_rate=48000',
+        '-t',
+        '3',
+        '-c:v',
+        'libvpx-vp9',
+        '-deadline',
+        'realtime',
+        '-cpu-used',
+        '8',
+        '-c:a',
+        'libopus',
+        '-bsf:v',
+        'setts=pts=if(eq(N\\,1)\\,0\\,PTS):dts=if(eq(N\\,1)\\,0\\,DTS)',
+        '-f',
+        'webm',
+        '-live',
+        '1',
+        'pipe:1',
+      ],
+      { shell: false, maxBuffer: 64 << 20, windowsHide: true },
+    );
+    expect(generated.status, String(generated.stderr)).toBe(0);
+    const rawFile = path.join(work, 'dup-first.webm');
+    fs.writeFileSync(rawFile, generated.stdout);
+    const rawVideo = packetTimes(rawFile).get(0) ?? []; // stream 0 is the video
+    expect(rawVideo.slice(0, 2)).toEqual([0, 0]); // the input really has the defect
+
+    const { out, service } = fresh();
+    await feed(service, generated.stdout, true);
+    const done = await service.finalize(ID, { outputDir: out, tools });
+    for (const [stream, times] of packetTimes(done.outputPath)) {
+      for (let i = 1; i < times.length; i += 1) {
+        expect(times[i] ?? 0, `stream ${stream} packet ${i}`).toBeGreaterThan(times[i - 1] ?? 0);
+      }
+    }
+    const probe = await tools.probe(done.outputPath);
+    expect(probe.durationSec).toBeGreaterThan(2.9);
+    expect(probe.durationSec).toBeLessThan(3.3);
+    expect(probe.hasVideo && probe.hasAudio).toBe(true);
+    // No frame was added or dropped: the packet count is the same as in the input.
+    const count = (file: string) =>
+      [...packetTimes(file).values()].reduce((sum, times) => sum + times.length, 0);
+    expect(count(done.outputPath)).toBe(count(rawFile));
   }, 60_000);
 
   it('a stop that overlaps in-flight chunk writes still produces the complete recording', async () => {

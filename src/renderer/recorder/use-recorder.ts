@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 import type { RecorderSnapshot } from '../../shared/recorder-ipc';
+import { announce } from '../lib/announce';
 
 export const IDLE_SNAPSHOT: RecorderSnapshot = {
   status: 'idle',
@@ -18,6 +19,7 @@ export const IDLE_SNAPSHOT: RecorderSnapshot = {
   choiceCanUseDefault: false,
   quitting: false,
   countdown: null,
+  progress: null,
   width: null,
   height: null,
   result: null,
@@ -46,6 +48,16 @@ export function useRecorderState(): RecorderSnapshot {
   return snapshot;
 }
 
+const STATUS_ANNOUNCEMENT: Partial<Record<RecorderSnapshot['status'], string>> = {
+  selecting: 'Choose what to record',
+  countdown: 'Recording starts soon',
+  recording: 'Recording',
+  paused: 'Recording paused',
+  stopping: 'Saving the recording',
+  completed: 'Recording saved',
+  error: 'The recording could not be saved',
+};
+
 /** Active recording time in ms, ticking while the recording runs (paused time is excluded). */
 export function useActiveMs(snapshot: RecorderSnapshot): number {
   const [now, setNow] = useState(() => Date.now());
@@ -64,12 +76,20 @@ export function useActiveMs(snapshot: RecorderSnapshot): number {
 /** Raises a toast when a microphone or system audio source is lost during a recording. */
 export function useRecorderToasts(snapshot: RecorderSnapshot): void {
   const previous = useRef(snapshot.lost);
+  const previousStatus = useRef(snapshot.status);
+  // Recording state changes are spoken (screen readers) as well as shown.
+  useEffect(() => {
+    const from = previousStatus.current;
+    previousStatus.current = snapshot.status;
+    const text = STATUS_ANNOUNCEMENT[snapshot.status];
+    if (from !== snapshot.status && text) announce(text);
+  }, [snapshot.status]);
   useEffect(() => {
     if (snapshot.lost.mic && !previous.current.mic) {
-      toast.warning('Microphone disconnected. The recording continues without it.');
+      notify.warning('Microphone disconnected. The recording continues without it.');
     }
     if (snapshot.lost.system && !previous.current.system) {
-      toast.warning('System audio ended. The recording continues without it.');
+      notify.warning('System audio ended. The recording continues without it.');
     }
     previous.current = snapshot.lost;
   }, [snapshot.lost]);

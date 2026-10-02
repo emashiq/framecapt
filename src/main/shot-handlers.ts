@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { app, clipboard, ClipboardItem, dialog, nativeImage, shell } from 'electron';
+import { clipboard, ClipboardItem, dialog, nativeImage, shell } from 'electron';
 import { MAX_THUMBNAIL_BYTES } from '../shared/history-ipc';
 import {
   defaultShotFileName,
@@ -18,7 +18,16 @@ import { IpcError } from './ipc-core';
 import { log } from './logger';
 import { writeFileAtomic } from './shots/atomic-write';
 import type { ShotSessionStore } from './shots/session-store';
-import { closeGuard, getMainWindow, onMainWindowClosed } from './windows';
+import type { Settings } from '../shared/settings';
+import { rememberExported, wasExported } from './shots/exported-paths';
+import { writePngToClipboard } from './shots/after-capture';
+import {
+  closeGuard,
+  getMainWindow,
+  onMainWindowClosed,
+  setEditorState,
+  setQuitting,
+} from './windows';
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(
@@ -50,11 +59,10 @@ export function registerShotHandlers(
   store: ShotSessionStore,
   recorder: RecorderController,
   history: Pick<HistoryService, 'addScreenshot'>,
+  settings: { get(): Settings; screenshotsDir(): string },
 ): void {
   /** The overlays belong to the recorder (record-region, pick a screen) or to the screenshot flow. */
   const host = (): SelectionHost => (recorder.selecting ? recorder : flow);
-  /** Paths written by `shot:export` in this run; the only ones `shell:showItemInFolder` accepts. */
-  const exportedPaths = new Set<string>();
   /** The session the editor has open. Its original is deleted when the app window closes. */
   let editorSessionId: string | undefined;
   onMainWindowClosed(() => {
@@ -94,7 +102,7 @@ export function registerShotHandlers(
       );
     }
 
-    const folder = path.join(app.getPath('pictures'), 'Framelet');
+    const folder = settings.screenshotsDir();
     await fs.promises.mkdir(folder, { recursive: true });
     const options: Electron.SaveDialogOptions = {
       title: 'Save screenshot',
@@ -110,8 +118,18 @@ export function registerShotHandlers(
 
     const target = withExtension(result.filePath, request.format);
     await writeFileAtomic(target, bytes);
-    exportedPaths.add(path.resolve(target));
+    rememberExported(target);
     log.info(`Screenshot exported (${request.format}, ${bytes.byteLength} bytes)`);
+    if (settings.get().screenshots.copyToClipboardOnSave) {
+      // The clipboard takes PNG; a JPEG is decoded and re-encoded like history:copyImage does.
+      const png =
+        request.format === 'png'
+          ? bytes
+          : nativeImage.createFromBuffer(bytes, { scaleFactor: 1 }).toPNG();
+      await writePngToClipboard(png).catch((error: unknown) =>
+        log.warn(`Copy on save failed: ${String(error)}`),
+      );
+    }
     const size = readImageSize(bytes) ?? { width: session.width, height: session.height };
     await history
       .addScreenshot({
@@ -149,14 +167,17 @@ export function registerShotHandlers(
 
   handle('editor:setDirty', { roles: ['main'] }, (request) => {
     closeGuard.setDirty(request.dirty);
+    setEditorState({ open: request.open ?? request.dirty, dirty: request.dirty });
   });
   handle('editor:resolveClose', { roles: ['main'] }, (request) => {
+    // "Keep editing" also withdraws a quit that was waiting on this answer.
+    if (!request.discard) setQuitting(false);
     if (closeGuard.resolve(request.discard)) getMainWindow()?.close();
   });
 
   handle('shell:showItemInFolder', { roles: ['main'] }, (request) => {
     const resolved = path.resolve(request.path);
-    if (!exportedPaths.has(resolved)) {
+    if (!wasExported(resolved)) {
       throw new IpcError('FORBIDDEN', 'Only files saved by Framelet can be shown.');
     }
     shell.showItemInFolder(resolved);

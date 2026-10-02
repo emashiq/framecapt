@@ -10,6 +10,7 @@ import {
   probeArgs,
   ProgressParser,
   remuxArgs,
+  STRICTLY_INCREASING_TIMESTAMPS,
   resolveFfmpeg,
   runProcess,
   STDERR_TAIL_BYTES,
@@ -71,10 +72,16 @@ describe('argument building', () => {
       'copy',
       '-map',
       '0',
+      '-bsf',
+      STRICTLY_INCREASING_TIMESTAMPS,
       '-f',
       'webm',
       'out.partial.webm',
     ]);
+    // The commas inside the expression are escaped for the filter-chain parser.
+    expect(STRICTLY_INCREASING_TIMESTAMPS).toContain('\\,');
+    expect(STRICTLY_INCREASING_TIMESTAMPS.replaceAll('\\,', '')).not.toContain(',');
+    expect(STRICTLY_INCREASING_TIMESTAMPS.startsWith('setts=')).toBe(true);
   });
 
   it('a path with spaces or shell characters stays ONE argument (no shell is involved)', () => {

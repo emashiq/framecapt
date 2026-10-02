@@ -59,6 +59,21 @@ import {
   RecoveryListResponseSchema,
   RecoverySessionIdSchema,
 } from './recovery-ipc';
+import {
+  ChooseOutputDirResponseSchema,
+  OutputTargetRequestSchema,
+  ResolveQuitRequestSchema,
+  SettingsResetRequestSchema,
+  SettingsStateSchema,
+  SettingsUpdateRequestSchema,
+  ShortcutPauseRequestSchema,
+  ShortcutStatesSchema,
+  ShortcutValidateRequestSchema,
+  ShortcutValidateResponseSchema,
+  NavigateEventSchema,
+  StartRequestEventSchema,
+  ToastEventSchema,
+} from './settings-ipc';
 import { ROLES, type Role } from './types';
 
 const ALL_ROLES: readonly Role[] = ROLES;
@@ -71,6 +86,13 @@ export const AppInfoSchema = z.object({
   platform: z.string(),
   arch: z.string(),
   isPackaged: z.boolean(),
+  /** The system tray icon: absent (active false) when Windows has no tray to show it in. */
+  tray: z.object({
+    active: z.boolean(),
+    bounds: z
+      .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() })
+      .nullable(),
+  }),
 });
 export type AppInfo = z.infer<typeof AppInfoSchema>;
 
@@ -234,6 +256,12 @@ export const ipcContract = {
     response: z.void(),
     roles: ['main', 'toolbar'],
   },
+  /** The toolbar reports the width its content needs; main sizes the window to it (no clipping). */
+  'toolbar:resize': {
+    request: z.object({ width: z.number().min(120).max(900) }),
+    response: z.void(),
+    roles: ['toolbar'],
+  },
   'recorder:getState': {
     request: z.undefined(),
     response: RecorderSnapshotSchema,
@@ -325,6 +353,53 @@ export const ipcContract = {
     roles: ['main'],
   },
   'export:cancel': { request: ExportCancelRequestSchema, response: z.void(), roles: ['main'] },
+  // --- settings, shortcuts and the app lifecycle (phase 08) ---
+  'settings:get': { request: z.undefined(), response: SettingsStateSchema, roles: ['main'] },
+  'settings:update': {
+    request: SettingsUpdateRequestSchema,
+    response: SettingsStateSchema,
+    roles: ['main'],
+  },
+  'settings:reset': {
+    request: SettingsResetRequestSchema,
+    response: SettingsStateSchema,
+    roles: ['main'],
+  },
+  /** A folder dialog in main; the chosen folder must be writable (a probe file is written). */
+  'settings:chooseOutputDir': {
+    request: OutputTargetRequestSchema,
+    response: ChooseOutputDirResponseSchema,
+    roles: ['main'],
+  },
+  'settings:useDefaultOutputDir': {
+    request: OutputTargetRequestSchema,
+    response: SettingsStateSchema,
+    roles: ['main'],
+  },
+  'settings:openOutputDir': {
+    request: OutputTargetRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** True once after a damaged settings file was set aside at startup. */
+  'settings:consumeNotice': {
+    request: z.undefined(),
+    response: z.object({ reset: z.boolean() }),
+    roles: ['main'],
+  },
+  'shortcuts:status': { request: z.undefined(), response: ShortcutStatesSchema, roles: ['main'] },
+  'shortcuts:validate': {
+    request: ShortcutValidateRequestSchema,
+    response: ShortcutValidateResponseSchema,
+    roles: ['main'],
+  },
+  /** The shortcut recorder asks for the global shortcuts to be released while it listens. */
+  'shortcuts:setPaused': {
+    request: ShortcutPauseRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  'app:resolveQuit': { request: ResolveQuitRequestSchema, response: z.void(), roles: ['main'] },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;
@@ -353,6 +428,16 @@ export const ipcEvents = {
   'export:progress': ExportProgressEventSchema,
   'export:done': ExportDoneEventSchema,
   'export:failed': ExportFailedEventSchema,
+  /** Settings changed (any window's change, a reset, a repaired file). */
+  'settings:changed': SettingsStateSchema,
+  'shortcuts:changed': ShortcutStatesSchema,
+  /** Quit was requested during a recording: ask whether to stop it and quit. */
+  'app:confirmQuit': z.object({}),
+  /** A tray or shortcut action that needs the main window (a window picker, an unsaved editor). */
+  'app:startRequest': StartRequestEventSchema,
+  'app:toast': ToastEventSchema,
+  /** The tray menu asks the main window to show a view. */
+  'app:navigate': NavigateEventSchema,
   /** Main -> the hidden recorder window: what the engine should do. */
   'recorder:engineCommand': EngineCommandSchema,
 } as const satisfies Record<string, z.ZodType>;

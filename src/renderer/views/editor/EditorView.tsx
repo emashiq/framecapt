@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 import type { ImageFormat, ShotSessionMeta } from '../../../shared/shots';
 import { MAX_THUMBNAIL_BYTES } from '../../../shared/history-ipc';
+import { shortPath } from '../../lib/short-path';
+import { getSettings, useSettings } from '../../settings/store';
 import { flattenThumbnail, flattenToBlob } from '../../editor/export';
 import type { Command } from '../../editor/model/commands';
 import {
@@ -30,6 +32,8 @@ import { TOOLS, toolForKey, type ToolId } from './tools';
 import { Button } from '../../components/ui/Button';
 
 export interface EditorShot {
+  /** Set when "save after capture" already saved the capture: nothing is unsaved yet. */
+  savedPath?: string;
   session: ShotSessionMeta;
   /** The original capture (PNG). It stays in memory only as the decoded base image. */
   png: ArrayBuffer;
@@ -62,12 +66,6 @@ function historyReducer(state: History, action: HistoryAction): History {
     case 'redo':
       return redo(state);
   }
-}
-
-/** "…\Framelet\file.png" for a toast: the last two path segments. */
-function shortPath(file: string): string {
-  const parts = file.split(/[\\/]/).filter(Boolean);
-  return parts.length > 2 ? `…\\${parts.slice(-2).join('\\')}` : file;
 }
 
 /** Decodes the original once; everything else draws from this bitmap. */
@@ -132,8 +130,16 @@ function EditorWorkspace({
   const [busy, setBusy] = useState<'copy' | ImageFormat | null>(null);
   const [announcement, setAnnouncement] = useState({ text: '', n: 0 });
   /** The document as of the last save or copy; null until the first one. */
-  const [savedDoc, setSavedDoc] = useState<typeof doc | null>(null);
+  const [savedDoc, setSavedDoc] = useState<typeof doc | null>(() =>
+    shot.savedPath ? history.present : null,
+  );
   const stageRef = useRef<StageHandle>(null);
+  const saveFormat = useSettings().screenshots.format;
+
+  // A capture that was just opened: the keyboard works on the canvas straight away.
+  useEffect(() => {
+    stageRef.current?.focus();
+  }, []);
 
   const dirty = doc !== savedDoc;
   useEffect(() => {
@@ -301,11 +307,11 @@ function EditorWorkspace({
       });
       if (result.ok) {
         setSavedDoc(exporting);
-        toast.success('Copied to clipboard');
+        notify.success('Copied to clipboard');
         announce('Image copied');
-      } else toast.error(result.error.message);
+      } else notify.error(result.error);
     } catch {
-      toast.error('Could not copy the image.');
+      notify.error('Could not copy the image.');
     } finally {
       setBusy(null);
     }
@@ -317,7 +323,9 @@ function EditorWorkspace({
       const exporting = doc;
       setBusy(format);
       try {
-        const bytes = await (await flattenToBlob(bitmap, exporting, format)).arrayBuffer();
+        const bytes = await (
+          await flattenToBlob(bitmap, exporting, format, getSettings().screenshots.jpegQuality)
+        ).arrayBuffer();
         // History shows a thumbnail of the FLATTENED result (redactions applied), never of the
         // original capture. Without one the entry just has no thumbnail; saving still works.
         const thumbnail = await flattenThumbnail(bitmap, exporting)
@@ -330,11 +338,11 @@ function EditorWorkspace({
           ...(thumbnail && { thumbnail }),
         });
         if (!result.ok) {
-          toast.error(result.error.message);
+          notify.error(result.error);
         } else if ('path' in result.data) {
           const saved = result.data.path;
           setSavedDoc(exporting);
-          toast.success(`Saved to ${shortPath(saved)}`, {
+          notify.success(`Saved to ${shortPath(saved)}`, {
             action: {
               label: 'Show in folder',
               onClick: () => void window.framelet.invoke('shell:showItemInFolder', { path: saved }),
@@ -343,7 +351,7 @@ function EditorWorkspace({
           announce('Image saved');
         }
       } catch {
-        toast.error('Could not save the image.');
+        notify.error('Could not save the image.');
       } finally {
         setBusy(null);
       }
@@ -419,7 +427,7 @@ function EditorWorkspace({
           k.doRedo();
         } else if (lower === 's' && !event.shiftKey) {
           event.preventDefault();
-          void k.save('png');
+          void k.save(getSettings().screenshots.format);
         } else if (lower === 'c' && !event.shiftKey && !window.getSelection()?.toString()) {
           event.preventDefault();
           void k.copy();
@@ -514,6 +522,7 @@ function EditorWorkspace({
         onActualSize={() => stageRef.current?.actualSize()}
         busy={busy}
         onCopy={() => void copy()}
+        saveFormat={saveFormat}
         onSave={(format) => void save(format)}
         onDone={onRequestLeave}
         onDiscard={onRequestLeave}

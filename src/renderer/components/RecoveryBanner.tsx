@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 import { CircleCheck, FolderOpen, LifeBuoy, TriangleAlert } from 'lucide-react';
+import { friendlyError } from '../../shared/error-messages';
 import { formatBytes, formatDuration } from '../../shared/recording';
 import type { RecoveryCandidate, RecoverResponse } from '../../shared/recovery-ipc';
 import { Button } from './ui/Button';
@@ -34,7 +35,9 @@ function Details({ candidate }: { candidate: RecoveryCandidate }) {
     ['Source', SOURCE_TEXT[candidate.sourceKind]],
     ['Pieces written', String(candidate.chunks)],
     ['Last state', STATE_TEXT[candidate.state]],
-    ...(candidate.errorCode ? [['Reason', candidate.errorCode] as [string, string]] : []),
+    ...(candidate.errorCode
+      ? [['Reason', friendlyError(candidate.errorCode)] as [string, string]]
+      : []),
   ];
   return (
     <details className="mt-3 text-[13px] text-fg-muted" data-testid="recovery-details">
@@ -92,7 +95,7 @@ export function RecoveryBanner({ busy }: { busy: boolean }) {
     const result = await window.framelet.invoke('recovery:recover', { sessionId });
     if (!result.ok) {
       setOutcome(sessionId, null);
-      toast.error(result.error.message);
+      notify.error(result.error);
       return;
     }
     if (result.data.outcome === 'recovered')
@@ -104,7 +107,7 @@ export function RecoveryBanner({ busy }: { busy: boolean }) {
     setConfirming(null);
     const result = await window.framelet.invoke('recovery:discard', { sessionId });
     if (!result.ok) {
-      toast.error(result.error.message);
+      notify.error(result.error);
       return;
     }
     setOutcome(sessionId, null);

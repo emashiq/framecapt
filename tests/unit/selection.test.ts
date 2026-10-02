@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampPoint,
+  defaultSelection,
+  growRect,
   nudgeRect,
   placeActionBar,
   pointInRect,
@@ -94,5 +96,26 @@ describe('placeActionBar', () => {
   it('stays horizontally on screen for narrow selections near the left edge', () => {
     const pos = placeActionBar({ x: 0, y: 100, width: 50, height: 50 }, bar, size);
     expect(pos.x).toBe(8);
+  });
+});
+
+describe('keyboard selection', () => {
+  const display = { width: 1000, height: 600 };
+
+  it('starts from a centered half-size selection', () => {
+    expect(defaultSelection(display)).toEqual({ x: 250, y: 150, width: 500, height: 300 });
+    expect(defaultSelection({ width: 3, height: 3 })).toMatchObject({ width: 2, height: 2 });
+  });
+
+  it('grows and shrinks from the bottom-right, clamped to the display', () => {
+    const rect = { x: 100, y: 100, width: 200, height: 100 };
+    expect(growRect(rect, 1, -1, display)).toEqual({ x: 100, y: 100, width: 201, height: 99 });
+    expect(growRect(rect, -500, -500, display)).toEqual({ x: 100, y: 100, width: 1, height: 1 });
+    expect(growRect(rect, 5000, 5000, display)).toEqual({
+      x: 100,
+      y: 100,
+      width: 900,
+      height: 500,
+    });
   });
 });

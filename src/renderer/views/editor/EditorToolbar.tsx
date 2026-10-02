@@ -163,6 +163,8 @@ export interface EditorToolbarProps {
   onActualSize: () => void;
   busy: 'copy' | ImageFormat | null;
   onCopy: () => void;
+  /** The format the Save button and Ctrl+S use (a setting). */
+  saveFormat: ImageFormat;
   onSave: (format: ImageFormat) => void;
   onDone: () => void;
   onDiscard: () => void;
@@ -173,6 +175,7 @@ export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarPro
   useRovingToolbar(ref);
   const { tool, busy } = props;
   const percent = `${Math.round(props.zoom * 100)}%`;
+  const saveLabel = `Save as ${props.saveFormat === 'png' ? 'PNG' : 'JPEG'}`;
 
   return (
     <div
@@ -271,7 +274,7 @@ export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarPro
           <Tooltip
             content={
               <span className="flex items-center gap-2">
-                Save as PNG <Kbd keys={['Ctrl', 'S']} />
+                {saveLabel} <Kbd keys={['Ctrl', 'S']} />
               </span>
             }
             side="bottom"
@@ -280,9 +283,9 @@ export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarPro
               type="button"
               data-roving=""
               data-testid="editor-save"
-              aria-label="Save as PNG"
+              aria-label={saveLabel}
               disabled={busy !== null}
-              onClick={() => props.onSave('png')}
+              onClick={() => props.onSave(props.saveFormat)}
               className="inline-flex h-9 items-center gap-2 rounded-l-lg border border-line bg-surface px-3 text-[13px] font-medium text-fg shadow-card transition-colors duration-150 not-disabled:hover:border-line-strong not-disabled:hover:bg-surface-2 disabled:opacity-40"
             >
               <Save className="size-4 text-fg-subtle" aria-hidden="true" />
@@ -315,7 +318,7 @@ export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarPro
                 >
                   <FileImage className="size-4 text-fg-subtle" aria-hidden="true" />
                   <span className="flex-1">Save as PNG</span>
-                  <Kbd keys={['Ctrl', 'S']} />
+                  {props.saveFormat === 'png' ? <Kbd keys={['Ctrl', 'S']} /> : null}
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   data-testid="editor-save-jpeg"
@@ -324,6 +327,7 @@ export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarPro
                 >
                   <FileImage className="size-4 text-fg-subtle" aria-hidden="true" />
                   <span className="flex-1">Save as JPEG</span>
+                  {props.saveFormat === 'jpeg' ? <Kbd keys={['Ctrl', 'S']} /> : null}
                 </DropdownMenu.Item>
                 <p className="px-2.5 pt-1.5 pb-1 text-xs text-fg-subtle">
                   JPEG pads redactions to its 16 px blocks so they stay solid black.

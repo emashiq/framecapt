@@ -784,9 +784,18 @@ test('unsaved changes: the discard dialog on Done, Discard and a tab change; sav
   await expect(dialog).toBeHidden();
 });
 
+/** Close-to-tray is on by default (closing hides the window); these tests are about really closing it. */
+async function closeInsteadOfHiding(target: Page): Promise<void> {
+  const result = await target.evaluate(() =>
+    window.framelet.invoke('settings:update', { patch: { general: { closeToTray: false } } }),
+  );
+  expect(result.ok).toBe(true);
+}
+
 test('closing the window with unsaved work asks; a second close always goes through', async () => {
   const second = await launch();
   try {
+    await closeInsteadOfHiding(second.page);
     await openShot(second.page);
     await chooseTool('rect', second.page);
     await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 }, second.page);
@@ -812,6 +821,7 @@ test('closing the window with unsaved work asks; a second close always goes thro
   }
   const third = await launch();
   try {
+    await closeInsteadOfHiding(third.page);
     // Answering "Discard" closes the window and deletes the session.
     await openShot(third.page);
     await chooseTool('rect', third.page);

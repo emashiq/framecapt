@@ -18,3 +18,4 @@ docs/evidence/**/*.png
 !docs/evidence/phase05/ui-*.png
 !docs/evidence/phase04/export-*-sample.png
 !docs/evidence/phase06/ui-*.png
+!docs/evidence/phase08/ui-*.png

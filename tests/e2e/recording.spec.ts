@@ -99,7 +99,11 @@ async function overlayFor(displayId: string, testId: string): Promise<Page> {
       async () => {
         for (const candidate of pagesOf('#/overlay')) {
           const root = candidate.locator(`[data-testid="${testId}"]`);
-          if ((await root.count()) && (await root.getAttribute('data-display-id')) === displayId) {
+          if (
+            (await root.count()) &&
+            (await root.getAttribute('data-display-id')) === displayId &&
+            (await root.getAttribute('data-ready')) === 'true'
+          ) {
             found = candidate;
             return true;
           }

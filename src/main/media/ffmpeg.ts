@@ -223,7 +223,22 @@ export function runProcess(
 
 // --- arguments --------------------------------------------------------------------------------
 
-/** MediaRecorder WebM -> WebM with Duration and Cues, streams copied untouched. */
+/**
+ * Makes every packet's timestamps strictly increase (a packet that would not move up by at least one
+ * timebase tick, 1 ms in WebM, is put one tick after its predecessor). MediaRecorder stamps frames
+ * with the time they were captured at millisecond resolution; the very first frames of a recording
+ * can arrive less than a millisecond apart and then carry the same timestamp (observed in about one
+ * in ten recordings: "0, 0, 32, 65 ..."). Every other tool expects strictly increasing timestamps,
+ * ffmpeg's muxers refuse the file ("non monotonically increasing dts"). The payload is untouched; the
+ * comma is escaped because the option value is a chain of bitstream filters.
+ */
+export const STRICTLY_INCREASING_TIMESTAMPS =
+  'setts=dts=if(gt(DTS\\,PREV_OUTDTS)\\,DTS\\,PREV_OUTDTS+1):pts=if(gt(PTS\\,PREV_OUTPTS)\\,PTS\\,PREV_OUTPTS+1)';
+
+/**
+ * MediaRecorder WebM -> WebM with Duration and Cues, streams copied (only timestamps that do not
+ * increase are nudged by one tick, see STRICTLY_INCREASING_TIMESTAMPS).
+ */
 export function remuxArgs(input: string, output: string): string[] {
   return [
     '-hide_banner',
@@ -237,6 +252,8 @@ export function remuxArgs(input: string, output: string): string[] {
     'copy',
     '-map',
     '0',
+    '-bsf',
+    STRICTLY_INCREASING_TIMESTAMPS,
     '-f',
     'webm',
     output,

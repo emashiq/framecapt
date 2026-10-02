@@ -21,7 +21,7 @@ interface Props {
 }
 
 export function RecordingTest({ displays, sources, busy, setBusy, onFinished }: Props) {
-  const microphones = useMicrophones();
+  const microphones = useMicrophones().devices;
   const [sourceId, setSourceId] = useState('');
   const [useRegion, setUseRegion] = useState(false);
   const [region, setRegion] = useState({ x: 100, y: 100, width: 1280, height: 720 });

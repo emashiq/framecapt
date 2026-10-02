@@ -203,7 +203,7 @@ export function SourcePicker({ open, purpose = 'capture', onClose, onPick }: Sou
             placeholder="Search windows"
             autoFocus
             data-testid="window-search"
-            className="selectable h-10 w-full rounded-lg border border-line bg-surface-2 pr-3 pl-9 text-sm text-fg placeholder:text-fg-subtle focus-visible:border-accent"
+            className="selectable h-10 w-full rounded-lg border border-control bg-surface-2 pr-3 pl-9 text-sm text-fg placeholder:text-fg-subtle focus-visible:border-accent"
           />
         </label>
         <Button

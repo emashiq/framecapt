@@ -64,7 +64,11 @@ export const ShotCopyRequestSchema = z.object({
 });
 
 /** The editor reports whether closing the window would lose work (see main/close-guard.ts). */
-export const EditorSetDirtyRequestSchema = z.object({ dirty: z.boolean() });
+export const EditorSetDirtyRequestSchema = z.object({
+  dirty: z.boolean(),
+  /** A screenshot is open in the editor (saved or not). */
+  open: z.boolean().optional(),
+});
 
 /** The user's answer to `app:confirmClose`: discard (close now) or keep editing. */
 export const EditorResolveCloseRequestSchema = z.object({ discard: z.boolean() });
@@ -148,4 +152,8 @@ export const FlowEndedEventSchema = z.object({
 });
 export type FlowEndedEvent = z.infer<typeof FlowEndedEventSchema>;
 
-export const ShotReadyEventSchema = z.object({ session: ShotSessionMetaSchema });
+export const ShotReadyEventSchema = z.object({
+  session: ShotSessionMetaSchema,
+  /** Set when the "save and open the editor" setting already saved the capture: nothing is unsaved yet. */
+  savedPath: z.string().optional(),
+});

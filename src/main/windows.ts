@@ -52,6 +52,36 @@ export function webContentsWithRoles(wanted: readonly Role[]): WebContents[] {
 }
 
 let closeInterceptor: (() => boolean) | undefined;
+let hideOnClose: (() => boolean) | undefined;
+let onHiddenToTray: (() => void) | undefined;
+let quitting = false;
+
+/**
+ * Close-to-tray: while `policy()` is true (the setting is on and the tray icon exists) closing the
+ * main window only hides it. `hidden` runs after each such hide (the one-time "still running" hint).
+ */
+export function setCloseToTrayPolicy(policy: () => boolean, hidden: () => void): void {
+  hideOnClose = policy;
+  onHiddenToTray = hidden;
+}
+
+/** The app is really quitting (Quit in the tray or menu, the OS ending the session): windows may close. */
+export function setQuitting(value: boolean): void {
+  quitting = value;
+}
+
+export function isQuitting(): boolean {
+  return quitting;
+}
+
+/** What the editor holds, reported by the renderer: used to decide how a shortcut must start. */
+let editorState = { open: false, dirty: false };
+export function setEditorState(state: { open: boolean; dirty: boolean }): void {
+  editorState = state;
+}
+export function getEditorState(): { open: boolean; dirty: boolean } {
+  return editorState;
+}
 
 /**
  * While `interceptor()` is true (a recording is running) closing the main window only minimizes
@@ -98,7 +128,8 @@ export function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
   return win.loadFile(path.join(rendererDir, 'index.html'), { hash });
 }
 
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow(options: { show?: boolean } = {}): BrowserWindow {
+  const showOnReady = options.show ?? true;
   const win = new BrowserWindow({
     title: 'Framelet',
     width: 1100,
@@ -112,8 +143,16 @@ export function createMainWindow(): BrowserWindow {
 
   registerWebContents(win.webContents, 'main');
   mainWindow = win;
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (showOnReady) win.show();
+  });
   win.on('close', (event) => {
+    if (!quitting && hideOnClose?.()) {
+      event.preventDefault();
+      win.hide();
+      onHiddenToTray?.();
+      return;
+    }
     if (closeInterceptor?.()) {
       event.preventDefault();
       win.minimize();
@@ -136,6 +175,15 @@ export function createMainWindow(): BrowserWindow {
   });
 
   void loadRenderer(win, 'main');
+  return win;
+}
+
+/** Brings the main window to the front, making it first when there is none (tray, shortcuts, second launch). */
+export function showMainWindow(): BrowserWindow {
+  const win = getMainWindow() ?? createMainWindow();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
   return win;
 }
 

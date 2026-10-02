@@ -60,10 +60,14 @@ function ffprobe(file: string): Probe {
 
 /** Decodes the whole file: exit code 0 and nothing on stderr at -v error. */
 function decodeAll(file: string): { status: number; stderr: string } {
-  const run = spawnSync(FFMPEG, ['-v', 'error', '-i', file, '-f', 'null', '-'], {
-    shell: false,
-    encoding: 'utf8',
-  });
+  const run = spawnSync(
+    FFMPEG,
+    ['-v', 'error', '-i', file, '-fps_mode', 'vfr', '-f', 'null', '-'],
+    {
+      shell: false,
+      encoding: 'utf8',
+    },
+  );
   return { status: run.status ?? -1, stderr: run.stderr.trim() };
 }
 
@@ -84,7 +88,21 @@ function hasCues(file: string): boolean {
 function seekDecodes(file: string, at: number): boolean {
   const run = spawnSync(
     FFMPEG,
-    ['-v', 'error', '-ss', String(at), '-i', file, '-t', '1', '-f', 'null', '-'],
+    [
+      '-v',
+      'error',
+      '-ss',
+      String(at),
+      '-i',
+      file,
+      '-t',
+      '1',
+      '-fps_mode',
+      'vfr',
+      '-f',
+      'null',
+      '-',
+    ],
     { shell: false, encoding: 'utf8' },
   );
   return run.status === 0 && run.stderr.trim() === '';

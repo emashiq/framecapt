@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 
 export type ExportState =
   | { status: 'starting' }
@@ -48,7 +48,7 @@ export function listenToExports(): () => void {
     }),
     window.framelet.on('export:done', (event) => {
       set(event.historyId, { status: 'done', path: event.path, itemId: event.itemId });
-      toast.success('MP4 saved', {
+      notify.success('MP4 saved', {
         action: event.itemId
           ? {
               label: 'Show in folder',
@@ -60,11 +60,11 @@ export function listenToExports(): () => void {
     window.framelet.on('export:failed', (event) => {
       if (event.cancelled) {
         set(event.historyId, null);
-        toast('Export cancelled. Your recording was not changed.');
+        notify.info('Export cancelled. Your recording was not changed.');
         return;
       }
       set(event.historyId, { status: 'failed', message: event.message });
-      toast.error(`MP4 export failed. ${event.message}`);
+      notify.error(`MP4 export failed. ${event.message}`);
     }),
   ];
   return () => offs.forEach((off) => off());
@@ -76,7 +76,7 @@ export async function startMp4Export(historyId: string): Promise<void> {
   const response = await window.framelet.invoke('export:mp4', { historyId });
   if (!response.ok) {
     set(historyId, null);
-    toast.error(response.error.message);
+    notify.error(response.error);
   } else if ('cancelled' in response.data) {
     set(historyId, null);
   } else {
@@ -91,7 +91,7 @@ export async function cancelMp4Export(historyId: string): Promise<void> {
   const state = states.get(historyId);
   if (state?.status !== 'running') return;
   const response = await window.framelet.invoke('export:cancel', { jobId: state.jobId });
-  if (!response.ok) toast.error(response.error.message);
+  if (!response.ok) notify.error(response.error);
 }
 
 export function dismissExport(historyId: string): void {

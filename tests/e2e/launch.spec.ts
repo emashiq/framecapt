@@ -84,6 +84,7 @@ test('navigating to Settings shows About with the Electron version from app:getI
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('button', { name: 'Settings' })
     .click();
+  await page.getByTestId('settings-nav-about').click();
   await expect(page.getByRole('heading', { name: 'About' })).toBeVisible();
 
   const electronVersion = await app.evaluate(() => process.versions.electron);
@@ -101,6 +102,7 @@ test('Settings has a Capture diagnostics section with the recorder format probe'
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('button', { name: 'Settings' })
     .click();
+  await page.getByTestId('settings-nav-advanced').click();
   await expect(page.getByRole('heading', { name: 'Capture diagnostics' })).toBeVisible();
   await expect(page.getByTestId('diag-displays')).toBeAttached();
   await expect(page.getByTestId('rec-start')).toBeAttached();

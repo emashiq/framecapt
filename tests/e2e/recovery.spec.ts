@@ -229,7 +229,9 @@ test('unfinished recordings from an earlier run: banner, details, Recover, Disca
   expect(duration).toBeGreaterThanOrEqual(2.5);
   expect(duration).toBeLessThanOrEqual(3.2);
   expect(hasCues(recoveredFile)).toBe(true);
-  expect(decodesClean(recoveredFile).clean).toBe(true);
+  const recoveredDecode = decodesClean(recoveredFile);
+  expect(recoveredDecode.errors).toBe('');
+  expect(recoveredDecode.clean && recoveredDecode.monotonic).toBe(true);
   expect(fs.existsSync(path.join(recordingsDir(), ID_TRUNCATED))).toBe(false);
   await shoot('recovery-done');
   await result.getByTestId('recovery-dismiss').click();
@@ -345,7 +347,9 @@ test('quit while finalizing takes too long: the cap kills the remux, the session
   const file = path.join(videosDir(), outputFiles()[0] ?? '');
   expect(Number(probeFile(file).format?.duration)).toBeGreaterThan(1);
   expect(hasCues(file)).toBe(true);
-  expect(decodesClean(file).clean).toBe(true);
+  const decoded = decodesClean(file);
+  expect(decoded.errors).toBe('');
+  expect(decoded.clean && decoded.monotonic).toBe(true);
   await expect.poll(() => liveSessionDirs().length).toBe(0);
   expect(fs.readdirSync(videosDir()).filter((name) => name.includes('.partial'))).toEqual([]);
   await expect(page.getByTestId('recovery-banner')).toHaveCount(0);
@@ -361,7 +365,11 @@ test.describe('disk pressure', () => {
     fs.writeFileSync(freeFile, String(GB - 1));
     await launch(dir, { FRAMELET_E2E_FREE_BYTES_FILE: freeFile });
     await startScreen();
-    await expect(page.getByText('enough free disk space')).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByText(
+        'Your disk is almost full. Free up space or choose another folder in Settings',
+      ),
+    ).toBeVisible({ timeout: 10_000 });
     expect((await recorderState()).status).toBe('idle');
     expect(liveSessionDirs()).toHaveLength(0);
     // With exactly 1 GB it starts.

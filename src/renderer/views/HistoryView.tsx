@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 import { Camera, Clock, Search, SearchX, Video, X } from 'lucide-react';
 import type { HistoryItemView, HistoryType } from '../../shared/history-ipc';
 import { AlertConfirm } from '../components/ui/AlertConfirm';
@@ -8,7 +8,8 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Segmented } from '../components/ui/Segmented';
 import { useExportCapabilities } from '../history/use-export-capabilities';
 import { useHistory } from '../history/use-history';
-import { loadRecordOptions } from '../recorder/options-store';
+import { recordOptionsFromSettings } from '../../shared/settings';
+import { getSettings } from '../settings/store';
 import { createItemActions, deleteItemFile } from './history/actions';
 import { HistoryCard } from './history/HistoryCard';
 import { HistoryDetails } from './history/HistoryDetails';
@@ -153,14 +154,17 @@ export function HistoryView({ focusId = null, onFocusConsumed }: HistoryViewProp
     void window.framelet
       .invoke('capture:startScreenshot', { target: 'region' })
       .then((response) => {
-        if (!response.ok) toast.error(response.error.message);
+        if (!response.ok) notify.error(response.error);
       });
   };
   const startRecording = (): void => {
     void window.framelet
-      .invoke('recorder:start', { target: 'screen', options: loadRecordOptions() })
+      .invoke('recorder:start', {
+        target: 'screen',
+        options: recordOptionsFromSettings(getSettings().recording),
+      })
       .then((response) => {
-        if (!response.ok) toast.error(response.error.message);
+        if (!response.ok) notify.error(response.error);
       });
   };
 
@@ -247,7 +251,7 @@ export function HistoryView({ focusId = null, onFocusConsumed }: HistoryViewProp
                 value={queryInput}
                 onChange={(event) => setQueryInput(event.target.value)}
                 placeholder="Search name, date or type"
-                className="selectable h-9 w-60 rounded-lg border border-line bg-surface pr-8 pl-8 text-[13px] text-fg shadow-card outline-none placeholder:text-fg-subtle focus-visible:border-accent [&::-webkit-search-cancel-button]:hidden"
+                className="selectable h-9 w-60 rounded-lg border border-control bg-surface pr-8 pl-8 text-[13px] text-fg shadow-card placeholder:text-fg-subtle focus-visible:border-accent [&::-webkit-search-cancel-button]:hidden"
               />
               {queryInput ? (
                 <button
@@ -267,9 +271,9 @@ export function HistoryView({ focusId = null, onFocusConsumed }: HistoryViewProp
                 data-testid="history-clear-missing"
                 onClick={() =>
                   void window.framelet.invoke('history:clearMissing').then((response) => {
-                    if (!response.ok) toast.error(response.error.message);
+                    if (!response.ok) notify.error(response.error);
                     else {
-                      toast(
+                      notify.info(
                         `Removed ${response.data.removed} missing ${response.data.removed === 1 ? 'item' : 'items'} from history`,
                       );
                       reload();

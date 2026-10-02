@@ -67,3 +67,25 @@ export function placeActionBar(
   if (above >= 8) return { x, y: above };
   return { x, y: Math.max(8, rect.y + rect.height - bar.height - gap) };
 }
+
+/** The selection a keyboard user starts from: half the display, centered. */
+export function defaultSelection(size: Size): Rect {
+  const width = Math.max(1, Math.round(size.width / 2));
+  const height = Math.max(1, Math.round(size.height / 2));
+  return {
+    x: Math.round((size.width - width) / 2),
+    y: Math.round((size.height - height) / 2),
+    width,
+    height,
+  };
+}
+
+/**
+ * Resizes by moving the right and bottom edges by (dw, dh), never below 1 and never past the
+ * overlay. The top-left corner stays where it is.
+ */
+export function growRect(rect: Rect, dw: number, dh: number, size: Size): Rect {
+  const width = Math.min(Math.max(rect.width + dw, 1), Math.max(1, size.width - rect.x));
+  const height = Math.min(Math.max(rect.height + dh, 1), Math.max(1, size.height - rect.y));
+  return { ...rect, width, height };
+}

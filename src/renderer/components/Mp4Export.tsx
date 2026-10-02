@@ -1,4 +1,4 @@
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 import { Film, FolderOpen, RotateCcw, X } from 'lucide-react';
 import {
   cancelMp4Export,
@@ -109,7 +109,7 @@ export function Mp4Export({ historyId, className }: Mp4ExportProps) {
                 const id = state.itemId;
                 if (!id) return;
                 void window.framelet.invoke('history:reveal', { id }).then((response) => {
-                  if (!response.ok) toast.error(response.error.message);
+                  if (!response.ok) notify.error(response.error);
                 });
               }}
             >

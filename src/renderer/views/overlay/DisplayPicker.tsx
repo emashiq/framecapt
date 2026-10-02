@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Monitor } from 'lucide-react';
 import { Kbd } from '../../components/ui/Kbd';
 import { cn } from '../../lib/cn';
@@ -13,6 +13,8 @@ export function DisplayPicker({ init }: { init: OverlayInit }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(() => document.hasFocus());
   const [picking, setPicking] = useState(false);
+  const [ready, setReady] = useState(false);
+  const readyRef = useRef(false);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -37,15 +39,27 @@ export function DisplayPicker({ init }: { init: OverlayInit }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pick() reads only stable values
   }, []);
 
-  // Tell main the window is painted so it can show it.
+  // Tell main the window is painted so it can show it. Picking waits for the answer: before that
+  // the overlay is not on screen, and a click cannot be meant for it.
   useEffect(() => {
+    let active = true;
     requestAnimationFrame(() =>
-      requestAnimationFrame(() => void window.framelet.invoke('overlay:ready')),
+      requestAnimationFrame(
+        () =>
+          void window.framelet.invoke('overlay:ready').then(() => {
+            if (!active) return;
+            readyRef.current = true;
+            setReady(true);
+          }),
+      ),
     );
+    return () => {
+      active = false;
+    };
   }, []);
 
   function pick(): void {
-    if (picking) return;
+    if (picking || !readyRef.current) return;
     setPicking(true);
     void window.framelet.invoke('overlay:pickDisplay', { displayId: init.displayId });
   }
@@ -57,6 +71,7 @@ export function DisplayPicker({ init }: { init: OverlayInit }) {
       data-testid="overlay-pick"
       data-display-id={init.displayId}
       data-active={active}
+      data-ready={ready}
       className={cn(
         'fixed inset-0 flex items-center justify-center transition-colors duration-150 select-none',
         active ? 'bg-accent-solid/20' : 'bg-black/40',

@@ -2,11 +2,21 @@ import path from 'node:path';
 import { app, BrowserWindow, Menu, nativeTheme, session } from 'electron';
 import { createCaptureProvider } from './capture';
 import { registerMediaScheme } from './recording/media-protocol';
+import { setupDesktop, type Desktop } from './desktop';
 import { registerHandlers } from './handlers';
 import { initLogger, log } from './logger';
 import { installCsp, installNavigationLockdown, installPermissionHandlers } from './security';
+import { createAppSettings, watchSettings } from './settings';
+import { HIDDEN_ARG } from './settings/login-item';
+import { SettingsStore, SETTINGS_FILE } from './settings/store';
 import { handleSquirrelEvent } from './squirrel';
-import { createMainWindow, getMainWindow, getOriginConfig } from './windows';
+import {
+  createMainWindow,
+  getMainWindow,
+  getOriginConfig,
+  setQuitting,
+  showMainWindow,
+} from './windows';
 
 // PROVISIONAL app id - owner must confirm before publication (also set in forge.config.ts).
 const APP_USER_MODEL_ID = 'com.framelet.app';
@@ -34,21 +44,36 @@ function start(): void {
     return;
   }
 
+  // A second launch brings the first one forward (also out of the tray).
   app.on('second-instance', () => {
-    const win = getMainWindow();
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.focus();
+    showMainWindow();
   });
 
   installNavigationLockdown(getOriginConfig);
 
+  let desktop: Desktop | undefined;
+  let settings: SettingsStore | undefined;
+
+  // From here on closing windows really closes them (close-to-tray stands down).
+  app.on('before-quit', () => setQuitting(true));
+
+  // With close-to-tray the app lives on in the tray after its last window is gone.
   app.on('window-all-closed', () => {
-    app.quit();
+    const keepAlive = settings?.get().general.closeToTray === true && desktop?.tray.active === true;
+    if (!keepAlive) app.quit();
   });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+  });
+
+  // Pending settings are written before the process ends; shortcuts and the tray are released.
+  app.on('will-quit', (event) => {
+    desktop?.dispose();
+    if (settings?.hasPendingWrite) {
+      event.preventDefault();
+      void settings.flush().finally(() => app.quit());
+    }
   });
 
   void app.whenReady().then(async () => {
@@ -59,7 +84,10 @@ function start(): void {
     process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason));
 
     if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
-    nativeTheme.themeSource = 'system';
+    const store = new SettingsStore(path.join(app.getPath('userData'), SETTINGS_FILE));
+    settings = store;
+    await store.load();
+    watchSettings(store);
     nativeTheme.on('updated', () => {
       getMainWindow()?.webContents.send('app:themeChanged', {
         dark: nativeTheme.shouldUseDarkColors,
@@ -69,7 +97,15 @@ function start(): void {
 
     installCsp(session.defaultSession, getOriginConfig());
     installPermissionHandlers(session.defaultSession, getOriginConfig);
-    registerHandlers(await createCaptureProvider());
-    createMainWindow();
+    const appSettings = createAppSettings(store);
+    const services = registerHandlers(
+      await createCaptureProvider(),
+      appSettings,
+      () => desktop?.trayInfo() ?? { active: false, bounds: null },
+    );
+    desktop = setupDesktop(appSettings, services);
+    // A start at login (--hidden) lives in the tray; without a tray the window is the only UI.
+    const hidden = process.argv.includes(HIDDEN_ARG) && desktop.tray.active;
+    createMainWindow({ show: !hidden });
   });
 }

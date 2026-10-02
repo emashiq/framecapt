@@ -17,6 +17,8 @@ export interface ExportDeps {
   capability: () => Promise<Mp4Capability>;
   /** The save dialog (main process). Null when the user cancels. */
   pickDestination: (source: { path: string }) => Promise<string | null>;
+  /** "Export MP4 automatically": a free `<name>.mp4` next to the recording, no dialog. */
+  autoDestination?: (source: { path: string }) => Promise<string>;
   emit: {
     progress: (event: ExportProgressEvent) => void;
     done: (event: ExportDoneEvent) => void;
@@ -50,6 +52,28 @@ export class ExportService {
   }
 
   async start(historyId: string): Promise<{ jobId: string } | { cancelled: true }> {
+    return this.begin(historyId, (source) => this.deps.pickDestination(source));
+  }
+
+  /**
+   * The automatic export after a recording (settings): starts quietly, or does nothing when an
+   * export is already running, MP4 is unavailable or anything else is wrong (the WebM is the
+   * deliverable and is already saved).
+   */
+  async startAuto(historyId: string): Promise<void> {
+    const { autoDestination } = this.deps;
+    if (!autoDestination) return;
+    try {
+      await this.begin(historyId, (source) => autoDestination(source));
+    } catch (error) {
+      log.info(`Automatic MP4 export skipped: ${(error as Error).message}`);
+    }
+  }
+
+  private async begin(
+    historyId: string,
+    pick: (source: { path: string }) => Promise<string | null>,
+  ): Promise<{ jobId: string } | { cancelled: true }> {
     if (this.active) throw new IpcError('BUSY', 'An export is already running.');
     const item = this.deps.history.get(historyId);
     if (!item) throw new IpcError('NOT_FOUND', 'That recording is not in history.');
@@ -69,7 +93,7 @@ export class ExportService {
     this.choosing = true;
     let destPath: string | null;
     try {
-      destPath = await this.deps.pickDestination({ path: item.path });
+      destPath = await pick({ path: item.path });
     } finally {
       this.choosing = false;
     }

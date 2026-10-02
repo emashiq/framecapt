@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, clipboard, ClipboardItem, dialog, nativeImage, shell } from 'electron';
+import { clipboard, ClipboardItem, dialog, nativeImage, shell } from 'electron';
 import { MAX_COPY_IMAGE_BYTES } from '../../shared/history-ipc';
 import { detectImageFormat } from '../../shared/shots';
 import { defaultRecordingFileName } from '../../shared/recording';
@@ -39,9 +39,12 @@ async function showSave(options: Electron.SaveDialogOptions): Promise<string | n
   return result.canceled || !result.filePath ? null : result.filePath;
 }
 
-/** `Videos/Framelet` (made on demand) and a name next to the source's, with the extension swapped. */
-export async function mp4SaveDialog(source: { path: string }): Promise<string | null> {
-  const folder = path.join(app.getPath('videos'), 'Framelet');
+/** The recordings folder (made on demand) and a name next to the source's, with the extension swapped. */
+export async function mp4SaveDialog(
+  source: { path: string },
+  recordingsDir: string,
+): Promise<string | null> {
+  const folder = recordingsDir;
   await fs.promises.mkdir(folder, { recursive: true });
   const base = path.basename(source.path, path.extname(source.path));
   const chosen = await showSave({
@@ -61,6 +64,7 @@ export function registerHistoryHandlers(
   history: HistoryService,
   exports: ExportService,
   capability: () => Promise<Mp4Capability>,
+  recordingsDir: () => string,
 ): void {
   handle('history:list', { roles: ['main'] }, (request) => history.list(request));
   handle('history:consumeNotice', { roles: ['main'] }, async () => ({
@@ -148,7 +152,7 @@ export function registerHistoryHandlers(
     }
     await requireFile(item.path);
     const extension = path.extname(item.path).toLowerCase();
-    const folder = path.join(app.getPath('videos'), 'Framelet');
+    const folder = recordingsDir();
     await fs.promises.mkdir(folder, { recursive: true });
     const chosen = await showSave({
       title: 'Save a copy',

@@ -1,11 +1,12 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 import {
   AudioLines,
   Clock,
   Copy,
   FolderOpen,
   HardDrive,
+  History,
   Maximize2,
   Plus,
   TriangleAlert,
@@ -57,6 +58,8 @@ export interface RecordingResultViewProps {
   snapshot: RecorderSnapshot;
   result: RecordingResult;
   onNewRecording: () => void;
+  /** Opens History: the recording is listed there with every action. */
+  onOpenHistory: () => void;
 }
 
 /**
@@ -67,6 +70,7 @@ export function RecordingResultView({
   snapshot,
   result,
   onNewRecording,
+  onOpenHistory,
 }: RecordingResultViewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const headingRef = useRef<HTMLDivElement>(null);
@@ -84,8 +88,8 @@ export function RecordingResultView({
     done?: string,
   ): void => {
     void promise.then((response) => {
-      if (!response.ok) toast.error(response.error?.message ?? 'That did not work.');
-      else if (done) toast.success(done);
+      if (!response.ok) notify.error(response.error ?? 'That did not work.');
+      else if (done) notify.success(done);
     });
   };
 
@@ -191,7 +195,16 @@ export function RecordingResultView({
           Copy path
         </Button>
         <Button
+          variant="ghost"
+          icon={<History className="size-4" aria-hidden="true" />}
+          data-testid="result-history"
+          onClick={onOpenHistory}
+        >
+          Open history
+        </Button>
+        <Button
           variant="primary"
+          className="ml-auto"
           icon={<Plus className="size-4" aria-hidden="true" />}
           data-testid="result-new"
           onClick={onNewRecording}

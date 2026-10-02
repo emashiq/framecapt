@@ -1,0 +1,14 @@
+{
+  "recording": {
+    "window": 326,
+    "pill": 326
+  },
+  "paused": {
+    "window": 384,
+    "pill": 384
+  },
+  "micLost": {
+    "window": 446,
+    "pill": 446
+  }
+}

@@ -1,0 +1,76 @@
+import { z } from 'zod';
+import {
+  OutputTargetSchema,
+  ResetSectionSchema,
+  SettingsPatchSchema,
+  SettingsStateSchema,
+} from './settings';
+import { SHORTCUT_ACTIONS, type ShortcutStates } from './shortcuts';
+
+export { SettingsStateSchema };
+
+export const SettingsUpdateRequestSchema = z.object({ patch: SettingsPatchSchema });
+export const SettingsResetRequestSchema = z.object({ section: ResetSectionSchema.optional() });
+export const OutputTargetRequestSchema = z.object({ target: OutputTargetSchema });
+
+export const ChooseOutputDirResponseSchema = z.object({
+  /** False when the user closed the dialog without choosing. */
+  changed: z.boolean(),
+  state: SettingsStateSchema,
+});
+
+const ShortcutStateSchema = z.object({
+  accelerator: z.string().nullable(),
+  status: z.enum(['ok', 'conflict', 'invalid', 'disabled']),
+  message: z.string().optional(),
+});
+export const ShortcutStatesSchema = z.object(
+  Object.fromEntries(SHORTCUT_ACTIONS.map((action) => [action, ShortcutStateSchema])),
+) as unknown as z.ZodType<ShortcutStates>;
+
+const ShortcutActionSchema = z.enum(SHORTCUT_ACTIONS);
+
+export const ShortcutValidateRequestSchema = z.object({
+  action: ShortcutActionSchema,
+  accelerator: z.string().max(64).nullable(),
+});
+export const ShortcutValidateResponseSchema = z.union([
+  z.object({ ok: z.literal(true), accelerator: z.string().nullable() }),
+  z.object({ ok: z.literal(false), reason: z.string() }),
+]);
+
+export const ShortcutPauseRequestSchema = z.object({ paused: z.boolean() });
+
+/** Answer to `app:confirmQuit`: stop the recording and quit, or keep recording. */
+export const ResolveQuitRequestSchema = z.object({ stop: z.boolean() });
+
+/** A tray or shortcut action that needs the main window (a window picker, or an unsaved editor). */
+export const StartRequestEventSchema = z.object({
+  kind: z.enum(['screenshot', 'record']),
+  target: z.enum(['screen', 'window', 'region']),
+});
+export type StartRequestEvent = z.infer<typeof StartRequestEventSchema>;
+
+export const ToastEventSchema = z.object({
+  level: z.enum(['info', 'error']),
+  message: z.string().max(400),
+});
+export type ToastEvent = z.infer<typeof ToastEventSchema>;
+
+export const NAV_VIEWS = ['capture', 'history', 'settings'] as const;
+export const SETTINGS_SECTIONS = [
+  'general',
+  'screenshots',
+  'recording',
+  'shortcuts',
+  'storage',
+  'advanced',
+  'about',
+] as const;
+export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number];
+
+export const NavigateEventSchema = z.object({
+  view: z.enum(NAV_VIEWS),
+  section: z.enum(SETTINGS_SECTIONS).optional(),
+});
+export type NavigateEvent = z.infer<typeof NavigateEventSchema>;

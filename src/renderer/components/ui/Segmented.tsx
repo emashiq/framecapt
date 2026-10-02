@@ -12,6 +12,7 @@ export interface SegmentedProps<T extends string | number> {
   /** Accessible name of the group. */
   label: string;
   disabled?: boolean;
+  className?: string;
   'data-testid'?: string;
 }
 
@@ -28,6 +29,7 @@ export function Segmented<T extends string | number>({
   onChange,
   label,
   disabled,
+  className,
   ...rest
 }: SegmentedProps<T>) {
   return (
@@ -35,7 +37,10 @@ export function Segmented<T extends string | number>({
       role="radiogroup"
       aria-label={label}
       data-testid={rest['data-testid']}
-      className="inline-flex rounded-lg border border-line bg-surface-2 p-0.5"
+      className={cn(
+        'inline-flex self-start rounded-lg border border-line bg-surface-2 p-0.5',
+        className,
+      )}
     >
       {options.map((option, index) => {
         const selected = option.value === value;
@@ -61,7 +66,7 @@ export function Segmented<T extends string | number>({
                 ?.focus();
             }}
             className={cn(
-              'h-7 min-w-11 rounded-md px-2.5 text-[13px] font-medium transition-colors duration-150 disabled:opacity-50',
+              'h-8 min-w-11 rounded-md px-3 text-[13px] font-medium transition-colors duration-150 disabled:opacity-50',
               selected ? 'bg-surface text-fg shadow-card' : 'text-fg-muted hover:text-fg',
             )}
           >

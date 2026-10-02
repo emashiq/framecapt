@@ -92,6 +92,8 @@ interface SessionContext {
   audio: AudioFlags;
   canUseDefaultMic: boolean;
   countdown: number | null;
+  /** 0..1 while the file is being finished (remux progress against the active time). */
+  progress: number | null;
   result: RecordingResult | null;
   sessionCreated: boolean;
 }
@@ -110,12 +112,16 @@ export interface RecorderDeps {
   synthetic: boolean;
   /** True while a screenshot flow runs (the two never overlap). */
   isScreenshotBusy: () => boolean;
-  /** Folder of the finished recordings (`Videos/Framelet`). */
+  /** Folder of the finished recordings (the setting, else `Videos/Framelet`). */
   outputDir: () => string;
+  /** Throws (OUTPUT_DIR_UNWRITABLE) when finished recordings could not be saved there. */
+  ensureOutputDir?: () => Promise<void>;
   /** The bundled ffmpeg/ffprobe (remux on finalize). */
   tools: MediaTools;
   /** Finished recordings are added here (a failure never fails the recording). */
   history?: HistorySink;
+  /** A recording was saved (its history id, or null): the automatic MP4 export hooks in here. */
+  onSaved?: (historyId: string | null) => void;
   /** Overrides the 15 s quit cap (E2E builds only). */
   quitCapMs?: number;
 }
@@ -155,6 +161,9 @@ export class RecorderController implements SelectionHost {
   private removeDisplayListeners: (() => void) | undefined;
   private watchedWorker: BrowserWindow | undefined;
   private levelsOn = false;
+  /** The main window was on screen when this recording was requested (a shortcut may start it from the tray). */
+  private mainWasShown = true;
+  private readonly changeListeners = new Set<() => void>();
   private readonly waiters = new Map<
     string,
     { types: ReadonlySet<string>; resolve: (event: EngineEvent) => void }
@@ -210,6 +219,7 @@ export class RecorderController implements SelectionHost {
       choiceCanUseDefault: ctx?.canUseDefaultMic ?? false,
       quitting: this.quitting,
       countdown: ctx?.countdown ?? null,
+      progress: ctx?.progress ?? null,
       width: ctx?.width ?? null,
       height: ctx?.height ?? null,
       result: state.status === 'completed' ? (ctx?.result ?? null) : null,
@@ -231,12 +241,18 @@ export class RecorderController implements SelectionHost {
     return true;
   }
 
+  /** Runs after every state change (the tray follows the recording state). */
+  onChange(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
+
   private broadcast(): void {
+    for (const listener of this.changeListeners) listener();
     const snapshot = this.snapshot();
     for (const contents of webContentsWithRoles(['main', 'toolbar', 'recorder', 'countdown'])) {
       sendEvent(contents, 'recorder:state', snapshot);
     }
-    this.syncToolbarWidth();
   }
 
   // --- commands ----------------------------------------------------------------------------
@@ -258,6 +274,8 @@ export class RecorderController implements SelectionHost {
       }
     }
     await this.ensureCanRecord();
+    const main = getMainWindow();
+    this.mainWasShown = main !== undefined && main.isVisible() && !main.isMinimized();
     // A second start while this one awaited the listing is refused above on re-entry.
     if (!isFinished(this.machine.status))
       throw new IpcError('BUSY', 'A recording is already in progress.');
@@ -281,6 +299,7 @@ export class RecorderController implements SelectionHost {
       audio: { mic: false, system: false },
       canUseDefaultMic: false,
       countdown: null,
+      progress: null,
       result: null,
       sessionCreated: false,
     };
@@ -300,6 +319,7 @@ export class RecorderController implements SelectionHost {
         'Framelet cannot finish recordings because its video tools are missing. Reinstall Framelet.',
       );
     }
+    await this.deps.ensureOutputDir?.();
     await this.deps.sessions.ensureSpaceToStart();
   }
 
@@ -757,10 +777,9 @@ export class RecorderController implements SelectionHost {
     this.toolbar = undefined;
   }
 
-  private syncToolbarWidth(): void {
-    const ctx = this.ctx;
-    if (!this.toolbar || !ctx) return;
-    this.toolbar.setWidth(toolbarWidth(ctx.audio, this.machine.lost));
+  /** The toolbar measured its content: the window takes exactly that width (centered on itself). */
+  resizeToolbar(width: number): void {
+    this.toolbar?.setWidth(Math.ceil(width));
   }
 
   private setLevels(enabled: boolean): void {
@@ -816,11 +835,24 @@ export class RecorderController implements SelectionHost {
 
       const abort = new AbortController();
       this.finalizeAbort = abort;
+      // Determinate progress: the remux position against the active recording time.
+      const totalMs = activeDurationAt(this.machine, performance.now());
+      let lastShown = -1;
       const published = await sessions.finalize(sessionId, {
         outputDir: this.deps.outputDir(),
         tools: this.deps.tools,
         signal: abort.signal,
+        onProgress: (progress) => {
+          if (totalMs <= 0) return;
+          const fraction = Math.min(0.99, Math.max(0, progress.outTimeUs / 1000 / totalMs));
+          const percent = Math.round(fraction * 100);
+          if (percent === lastShown) return;
+          lastShown = percent;
+          ctx.progress = fraction;
+          this.broadcast();
+        },
       });
+      ctx.progress = null;
       // The file's own duration (probed after the remux); the active time only for a raw copy.
       const durationMs =
         published.durationMs ?? Math.round(activeDurationAt(this.machine, performance.now()));
@@ -845,6 +877,7 @@ export class RecorderController implements SelectionHost {
         hasAudio: ctx.audio.mic || ctx.audio.system,
       };
       this.dispatch({ type: 'FINALIZED' });
+      this.deps.onSaved?.(historyId);
       log.info(
         `Recording saved: ${Math.round(durationMs)} ms, ${published.bytes} bytes` +
           (published.unindexed ? ' (no seeking index)' : ''),
@@ -1041,7 +1074,8 @@ export class RecorderController implements SelectionHost {
     this.closeToolbar();
     if (ctx?.sessionCreated) void this.deps.sessions.abort(ctx.sessionId);
     if (this.machine.status === 'idle') this.ctx = null;
-    this.restoreMain();
+    // A cancelled start leaves the window as it was; a failure shows it (the error is there).
+    if (this.machine.status !== 'idle' || this.mainWasShown) this.restoreMain();
   }
 
   private failStart(token: number, error: unknown): void {
@@ -1061,7 +1095,8 @@ export class RecorderController implements SelectionHost {
 
   private async hideMain(): Promise<void> {
     const main = getMainWindow();
-    if (main && !main.isMinimized()) {
+    // Only a window that is on screen needs to get out of the way (a hidden one must stay hidden).
+    if (main && main.isVisible() && !main.isMinimized()) {
       await new Promise<void>((resolve) => {
         const done = setTimeout(resolve, 600);
         main.once('minimize', () => {

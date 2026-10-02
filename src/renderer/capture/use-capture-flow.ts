@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { notify } from '../lib/notify';
 import type { ShotKind } from '../../shared/shots';
 
 export interface CaptureFlow {
@@ -22,7 +22,9 @@ export function useCaptureFlow(): CaptureFlow {
     () =>
       window.framelet.on('capture:flowEnded', (event) => {
         setRunning(null);
-        if (event.outcome === 'error') toast.error(event.message ?? 'The capture failed.');
+        if (event.outcome === 'error') {
+          notify.error({ code: event.code, message: event.message ?? 'The capture failed.' });
+        }
         // The main window was just shown again: put focus back where the user started (after
         // the buttons are enabled again, see the effect below).
         refocus.current = event.outcome !== 'completed';
@@ -46,9 +48,7 @@ export function useCaptureFlow(): CaptureFlow {
     });
     if (!result.ok) {
       setRunning(null);
-      toast.error(
-        result.error.code === 'BUSY' ? 'A capture is already in progress.' : result.error.message,
-      );
+      notify.error(result.error);
       trigger?.focus();
     }
   }, []);

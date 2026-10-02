@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   GripVertical,
   Loader2,
@@ -116,30 +116,54 @@ export function ToolbarView() {
   const snapshot = useRecorderState();
   const activeMs = useActiveMs(snapshot);
   const levels = useLevels(snapshot.status === 'recording');
+  const pillRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     document.documentElement.classList.add('overlay-root');
+  }, []);
+
+  // The window is exactly as wide as the controls need: the pill reports its measured width
+  // (its content decides it, so a new button or a longer label can never be cut off).
+  useEffect(() => {
+    const pill = pillRef.current;
+    if (!pill) return;
+    let reported = 0;
+    const report = (): void => {
+      const width = Math.ceil(pill.getBoundingClientRect().width);
+      if (width > 0 && width !== reported) {
+        reported = width;
+        void window.framelet.invoke('toolbar:resize', { width });
+      }
+    };
+    const observer = new ResizeObserver(report);
+    observer.observe(pill);
+    report();
+    return () => observer.disconnect();
   }, []);
 
   const { status } = snapshot;
   const paused = status === 'paused';
   const recording = status === 'recording';
   const saving = status === 'stopping' || status === 'processing';
+  const percent = snapshot.progress === null ? null : Math.round(snapshot.progress * 100);
   const label = saving
     ? snapshot.quitting
       ? 'Finishing recording…'
-      : 'Saving…'
+      : percent === null
+        ? 'Saving…'
+        : `Saving… ${percent}%`
     : paused
       ? 'Paused'
       : 'Recording';
 
   return (
     <div
+      ref={pillRef}
       role="toolbar"
       aria-label="Recording controls"
       data-testid="toolbar"
       data-status={status}
-      className="flex h-12 w-full items-center gap-2 overflow-hidden rounded-full border border-line-strong bg-surface pr-2.5 pl-1.5 text-fg select-none"
+      className="app-toolbar flex h-12 w-max items-center gap-2 overflow-hidden rounded-full border border-line-strong bg-surface pr-3 pl-2 text-fg select-none"
     >
       <span
         className="app-drag flex h-full w-4 shrink-0 cursor-grab items-center justify-center text-fg-subtle"
@@ -154,9 +178,25 @@ export function ToolbarView() {
         <div
           role="status"
           data-testid="toolbar-saving"
-          className="flex min-w-0 flex-1 items-center gap-2.5 text-sm font-medium"
+          className="flex min-w-44 items-center gap-2.5 text-sm font-medium tabular-nums"
         >
-          <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden="true" />
+          {percent === null ? (
+            <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden="true" />
+          ) : (
+            <span
+              role="progressbar"
+              aria-label="Saving the recording"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent}
+              className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-3"
+            >
+              <span
+                className="block h-full rounded-full bg-accent-solid"
+                style={{ width: `${percent}%` }}
+              />
+            </span>
+          )}
           {label}
         </div>
       ) : (

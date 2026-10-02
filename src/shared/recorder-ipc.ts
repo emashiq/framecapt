@@ -107,6 +107,8 @@ export const RecorderSnapshotSchema = z.object({
   quitting: z.boolean(),
   /** The number on the countdown right now (3, 2, 1), else null. */
   countdown: z.number().nullable(),
+  /** How far finishing the file has come (0..1), while it is being saved; null when unknown. */
+  progress: z.number().min(0).max(1).nullable(),
   /** Output size of the video once it is known (from preflight). */
   width: z.number().nullable(),
   height: z.number().nullable(),

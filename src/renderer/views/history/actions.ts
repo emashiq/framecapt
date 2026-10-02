@@ -1,4 +1,4 @@
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { startMp4Export } from '../../history/export-store';
 
@@ -8,10 +8,10 @@ type Outcome = { ok: boolean; error?: { message: string } };
 async function run(promise: Promise<Outcome>, done?: string): Promise<boolean> {
   const response = await promise;
   if (!response.ok) {
-    toast.error(response.error?.message ?? 'That did not work.');
+    notify.error(response.error ?? 'That did not work.');
     return false;
   }
-  if (done) toast.success(done);
+  if (done) notify.success(done);
   return true;
 }
 
@@ -42,32 +42,32 @@ export function createItemActions(reload: () => void): ItemActions {
     remove: (item) =>
       void window.framelet.invoke('history:remove', { id: item.id }).then((response) => {
         if (!response.ok) {
-          toast.error(response.error.message);
+          notify.error(response.error);
           return;
         }
         reload();
-        toast('Removed from history', {
+        notify.info('Removed from history', {
           duration: 5000,
           action: {
             label: 'Undo',
             onClick: () =>
               void window.framelet
                 .invoke('history:undoRemove', { id: item.id })
-                .then((undone) => (undone.ok ? reload() : toast.error(undone.error.message))),
+                .then((undone) => (undone.ok ? reload() : notify.error(undone.error))),
           },
         });
       }),
     locate: (item) =>
       void window.framelet.invoke('history:relink', { id: item.id }).then((response) => {
-        if (!response.ok) toast.error(response.error.message);
-        else if ('relinked' in response.data) toast.success('File linked again');
+        if (!response.ok) notify.error(response.error);
+        else if ('relinked' in response.data) notify.success('File linked again');
         reload();
       }),
     exportMp4: (item) => void startMp4Export(item.id),
     saveCopy: (item) =>
       void window.framelet.invoke('history:saveCopy', { id: item.id }).then((response) => {
-        if (!response.ok) toast.error(response.error.message);
-        else if ('path' in response.data) toast.success('Copy saved');
+        if (!response.ok) notify.error(response.error);
+        else if ('path' in response.data) notify.success('Copy saved');
       }),
   };
 }

@@ -1,0 +1,25 @@
+{
+  "what": "Packet timestamps of finished recordings (E2E build: synthetic display, real MediaRecorder, chunk upload and FFmpeg remux; every second recording paused once for 0.8 s). ffprobe packet pts/dts per stream; ffmpeg decode to the null muxer in the default constant-frame-rate mode and with -fps_mode vfr.",
+  "before": {
+    "remux": "-c copy, no timestamp handling",
+    "recordings": 30,
+    "filesWithEqualTimestamps": 2,
+    "equalTimestampExample": "first two video packets at 0 ms and 0 ms (then 32, 65, 99 ...)",
+    "decodeComplaintsInDefaultCfrMode": 1,
+    "decodeComplaintExample": "Application provided invalid, non monotonically increasing dts to muxer in stream 0: 53 >= 53 (packet times 1699, 1751, 1783 ms: two frames fall into one 33 ms slot of the 30 fps grid; the packets themselves increase)"
+  },
+  "after": {
+    "remux": "-c copy -bsf setts (STRICTLY_INCREASING_TIMESTAMPS)",
+    "recordings": 40,
+    "filesWithNonIncreasingTimestamps": 0,
+    "vfrDecodeOrSeekErrors": 0,
+    "decodeComplaintsInDefaultCfrMode": 2,
+    "note": "the remaining default-mode messages are ffmpeg re-timing a variable-frame-rate file onto a constant grid, not a property of the file; the tests assert strictly increasing packet timestamps and an error-free -fps_mode vfr decode instead"
+  },
+  "realFfmpeg": "vendor/ffmpeg 9.0.2 for the remux; the test helpers use the same binaries (e2e) or the PATH ffmpeg 8.1.1 (native)",
+  "regressionTests": [
+    "tests/unit/ffmpeg-integration.test.ts: input whose first two frames share a timestamp -> strictly increasing output, same packet count",
+    "tests/e2e/recording-timestamps.spec.ts: 6 recordings (3 paused)",
+    "tests/native/recording.native.spec.ts: assertCommon checks timestamps on every real recording"
+  ]
+}

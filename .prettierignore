@@ -11,3 +11,4 @@ capture-prompts
 .claude
 docs/agent-progress.md
 docs/evidence
+src/main/tray-icons.generated.ts

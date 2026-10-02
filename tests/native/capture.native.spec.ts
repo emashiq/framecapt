@@ -269,6 +269,7 @@ test.beforeAll(async () => {
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('button', { name: 'Settings' })
     .click();
+  await page.getByTestId('settings-nav-advanced').click();
   await expect(page.getByTestId('diagnostics-section')).toBeVisible();
   await expect(page.getByTestId('diag-displays').locator('li').first()).toBeVisible();
 });

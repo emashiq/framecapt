@@ -15,6 +15,7 @@ describe('ipc contract', () => {
     expect([...IPC_CHANNELS].sort()).toEqual([
       'app:getInfo',
       'app:reportError',
+      'app:resolveQuit',
       'capture:grant',
       'capture:listDisplays',
       'capture:listSources',
@@ -62,18 +63,33 @@ describe('ipc contract', () => {
       'recovery:reveal',
       'session:appendChunk',
       'session:finish',
+      'settings:chooseOutputDir',
+      'settings:consumeNotice',
+      'settings:get',
+      'settings:openOutputDir',
+      'settings:reset',
+      'settings:update',
+      'settings:useDefaultOutputDir',
       'shell:showItemInFolder',
+      'shortcuts:setPaused',
+      'shortcuts:status',
+      'shortcuts:validate',
       'shot:copy',
       'shot:discard',
       'shot:export',
       'shot:get',
+      'toolbar:resize',
       'worker:frameError',
       'worker:frameResult',
       'worker:ready',
     ]);
     expect([...IPC_EVENTS].sort()).toEqual([
       'app:confirmClose',
+      'app:confirmQuit',
+      'app:navigate',
+      'app:startRequest',
       'app:themeChanged',
+      'app:toast',
       'capture:flowEnded',
       'export:done',
       'export:failed',
@@ -84,6 +100,8 @@ describe('ipc contract', () => {
       'recorder:levels',
       'recorder:state',
       'recovery:changed',
+      'settings:changed',
+      'shortcuts:changed',
       'shot:ready',
       'worker:grabFrames',
     ]);
@@ -111,6 +129,15 @@ describe('ipc contract', () => {
       ) {
         expect(roles).toEqual(['main']);
       }
+      // Settings, shortcuts and quitting are the main window's; the toolbar only sizes itself.
+      if (
+        channel.startsWith('settings:') ||
+        channel.startsWith('shortcuts:') ||
+        channel === 'app:resolveQuit'
+      ) {
+        expect(roles).toEqual(['main']);
+      }
+      if (channel === 'toolbar:resize') expect(roles).toEqual(['toolbar']);
     }
   });
 
@@ -148,8 +175,12 @@ describe('ipc contract', () => {
         platform: 'win32',
         arch: 'x64',
         isPackaged: false,
+        tray: { active: true, bounds: { x: 1, y: 2, width: 16, height: 16 } },
       };
       expect(AppInfoSchema.safeParse(info).success).toBe(true);
+      expect(
+        AppInfoSchema.safeParse({ ...info, tray: { active: false, bounds: null } }).success,
+      ).toBe(true);
       expect(response.safeParse({ ...info, isPackaged: 'no' }).success).toBe(false);
       expect(response.safeParse({ version: '0.1.0' }).success).toBe(false);
     });

@@ -29,6 +29,9 @@ export function registerRecorderHandlers(
   handle('recorder:toggleMute', { roles: ['main', 'toolbar'] }, (request) =>
     controller.toggleMute(request.source),
   );
+  handle('toolbar:resize', { roles: ['toolbar'] }, (request) =>
+    controller.resizeToolbar(request.width),
+  );
   handle('recorder:getState', { roles: ['main', 'toolbar', 'recorder', 'countdown'] }, () =>
     controller.snapshot(),
   );

@@ -15,20 +15,23 @@
   --surface-3: light-dark(#e8edf4, #1a2136);
   --line: light-dark(#e2e8f0, #232b3e);
   --line-strong: light-dark(#cbd5e1, #333d55);
+  /* The edge of a form control (input, select, switch): 3:1 against its surface (WCAG 1.4.11). */
+  --control: light-dark(#7c8aa0, #5f6d8b);
 
   --fg: light-dark(#0f172a, #e8ebf4);
   --fg-muted: light-dark(#475569, #a1abc2);
-  --fg-subtle: light-dark(#64748b, #8591ab);
+  /* Every text token is at least 4.5:1 on bg, surface, surface-2 and surface-3 in both themes. */
+  --fg-subtle: light-dark(#5d6b80, #8591ab);
 
   --accent: light-dark(#6366f1, #818cf8);
   --accent-solid: light-dark(#4f46e5, #5a5df0);
-  --accent-solid-hover: light-dark(#4338ca, #6d70f5);
+  --accent-solid-hover: light-dark(#4338ca, #4b4ee6);
   --accent-soft: light-dark(#eef2ff, rgb(99 102 241 / 0.16));
   --accent-fg: light-dark(#4338ca, #a5b4fc);
 
-  --danger: light-dark(#dc2626, #f87171);
+  --danger: light-dark(#c81e1e, #f87171);
   --danger-solid: light-dark(#dc2626, #dc2626);
-  --danger-solid-hover: light-dark(#b91c1c, #ef4444);
+  --danger-solid-hover: light-dark(#b91c1c, #b91c1c);
   --danger-soft: light-dark(#fef2f2, rgb(248 113 113 / 0.14));
 
   --warning: light-dark(#b45309, #fbbf24);
@@ -58,6 +61,7 @@
   --color-surface-3: var(--surface-3);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-control: var(--control);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-subtle: var(--fg-subtle);
@@ -190,4 +194,9 @@ html.overlay-root #root {
 
 .countdown-pop {
   animation: countdown-pop 320ms ease-out both;
+}
+
+/* The toolbar pill clips its content: a focus ring has to sit inside it. */
+.app-toolbar :focus-visible {
+  outline-offset: -2px;
 }

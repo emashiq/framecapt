@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Camera, FolderOpen, RefreshCw, ShieldCheck, Stethoscope } from 'lucide-react';
-import { toast } from 'sonner';
+import { notify } from '../../lib/notify';
 import type { DisplayInfo, SourceInfo } from '../../../shared/capture-schemas';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -90,7 +90,7 @@ export function CaptureDiagnostics() {
 
   async function reveal(): Promise<void> {
     const result = await window.framelet.invoke('diagnostics:revealFolder');
-    if (!result.ok) toast.error(result.error.message);
+    if (!result.ok) notify.error(result.error);
   }
 
   return (

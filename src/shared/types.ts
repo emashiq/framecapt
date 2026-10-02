@@ -10,24 +10,28 @@ import type {
 export const ROLES = ['main', 'overlay', 'toolbar', 'recorder', 'countdown'] as const;
 export type Role = (typeof ROLES)[number];
 
-export type IpcErrorCode =
-  | 'FORBIDDEN'
-  | 'INVALID_PAYLOAD'
-  | 'UNKNOWN_CHANNEL'
-  | 'NOT_FOUND'
-  | 'BUSY'
-  | 'INTERNAL'
+export const IPC_ERROR_CODES = [
+  'FORBIDDEN',
+  'INVALID_PAYLOAD',
+  'UNKNOWN_CHANNEL',
+  'NOT_FOUND',
+  'BUSY',
+  'INTERNAL',
   // Recording sessions (session:appendChunk / session:finish).
-  | 'SEQ_GAP'
-  | 'DUPLICATE_MISMATCH'
-  | 'CHUNK_TOO_LARGE'
-  | 'SESSION_INACTIVE'
-  | 'WRITE_FAILED'
-  | 'DISK_FULL'
-  | 'LOW_DISK'
-  | 'DISK_LOW'
-  | 'FFMPEG_MISSING'
-  | 'FINALIZE_FAILED';
+  'SEQ_GAP',
+  'DUPLICATE_MISMATCH',
+  'CHUNK_TOO_LARGE',
+  'SESSION_INACTIVE',
+  'WRITE_FAILED',
+  'DISK_FULL',
+  'LOW_DISK',
+  'DISK_LOW',
+  'FFMPEG_MISSING',
+  'FINALIZE_FAILED',
+  // Settings (phase 08).
+  'OUTPUT_DIR_UNWRITABLE',
+] as const;
+export type IpcErrorCode = (typeof IPC_ERROR_CODES)[number];
 
 export interface IpcFailure {
   ok: false;
