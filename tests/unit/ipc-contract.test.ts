@@ -21,6 +21,8 @@ describe('ipc contract', () => {
       'capture:startScreenshot',
       'diagnostics:revealFolder',
       'diagnostics:saveRecording',
+      'editor:resolveClose',
+      'editor:setDirty',
       'overlay:cancel',
       'overlay:confirm',
       'overlay:getInit',
@@ -37,6 +39,7 @@ describe('ipc contract', () => {
       'worker:ready',
     ]);
     expect([...IPC_EVENTS].sort()).toEqual([
+      'app:confirmClose',
       'app:themeChanged',
       'capture:flowEnded',
       'overlay:clearSelection',
@@ -50,7 +53,11 @@ describe('ipc contract', () => {
       const roles = [...ipcContract[channel].roles];
       if (channel.startsWith('worker:')) expect(roles).toEqual(['recorder']);
       if (channel.startsWith('overlay:')) expect(roles).toEqual(['overlay']);
-      if (channel.startsWith('shot:') || channel === 'shell:showItemInFolder') {
+      if (
+        channel.startsWith('shot:') ||
+        channel.startsWith('editor:') ||
+        channel === 'shell:showItemInFolder'
+      ) {
         expect(roles).toEqual(['main']);
       }
     }

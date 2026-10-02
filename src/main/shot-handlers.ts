@@ -8,7 +8,7 @@ import { IpcError } from './ipc-core';
 import { log } from './logger';
 import { writeFileAtomic } from './shots/atomic-write';
 import type { ShotSessionStore } from './shots/session-store';
-import { getMainWindow } from './windows';
+import { closeGuard, getMainWindow, onMainWindowClosed } from './windows';
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(
@@ -38,6 +38,12 @@ function withExtension(file: string, format: ImageFormat): string {
 export function registerShotHandlers(flow: CaptureFlow, store: ShotSessionStore): void {
   /** Paths written by `shot:export` in this run; the only ones `shell:showItemInFolder` accepts. */
   const exportedPaths = new Set<string>();
+  /** The session the editor has open. Its original is deleted when the app window closes. */
+  let editorSessionId: string | undefined;
+  onMainWindowClosed(() => {
+    if (editorSessionId) store.discardSync(editorSessionId);
+    editorSessionId = undefined;
+  });
 
   handle('capture:startScreenshot', { roles: ['main'] }, async (request) => {
     await flow.start(request);
@@ -49,6 +55,7 @@ export function registerShotHandlers(flow: CaptureFlow, store: ShotSessionStore)
     const png = session && (await store.readOriginal(session.id));
     if (!session || !png)
       throw new IpcError('NOT_FOUND', 'That screenshot is no longer available.');
+    editorSessionId = session.id;
     return { session: store.meta(session), png: toArrayBuffer(png) };
   });
 
@@ -97,7 +104,15 @@ export function registerShotHandlers(flow: CaptureFlow, store: ShotSessionStore)
   });
 
   handle('shot:discard', { roles: ['main'] }, async (request) => {
+    if (editorSessionId === request.sessionId) editorSessionId = undefined;
     await store.discard(request.sessionId);
+  });
+
+  handle('editor:setDirty', { roles: ['main'] }, (request) => {
+    closeGuard.setDirty(request.dirty);
+  });
+  handle('editor:resolveClose', { roles: ['main'] }, (request) => {
+    if (closeGuard.resolve(request.discard)) getMainWindow()?.close();
   });
 
   handle('shell:showItemInFolder', { roles: ['main'] }, (request) => {
@@ -108,8 +123,8 @@ export function registerShotHandlers(flow: CaptureFlow, store: ShotSessionStore)
     shell.showItemInFolder(resolved);
   });
 
-  handle('overlay:getInit', { roles: ['overlay'] }, (_request, ctx) => {
-    const init = flow.overlayInit(ctx.webContentsId);
+  handle('overlay:getInit', { roles: ['overlay'] }, async (_request, ctx) => {
+    const init = await flow.overlayInit(ctx.webContentsId);
     if (!init) throw new IpcError('NOT_FOUND', 'No selection is in progress.');
     return init;
   });

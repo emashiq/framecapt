@@ -4,6 +4,7 @@ import { overlayRectToFramePixels, type DisplayGeom } from '../shared/geometry';
 import type { Rect } from '../shared/rect';
 import type { FlowEndedEvent, OverlayMode, StartScreenshotRequest } from '../shared/shot-ipc';
 import { isBlankBitmap, type ShotKind } from '../shared/shots';
+import { grabScreensExact, grabWindowExact } from './capture/exact-capture';
 import type { CaptureProvider, DisplayInfo } from './capture/types';
 import { sendEvent } from './events';
 import { IpcError } from './ipc-core';
@@ -47,6 +48,8 @@ export class CaptureFlow {
   private overlays: OverlaySet | undefined;
   private displays: DisplayInfo[] = [];
   private flowId = 0;
+  /** performance.now() when the current flow was requested, for the "click to overlay" timing. */
+  private requestedAt = 0;
   private removeDisplayListeners: (() => void) | undefined;
 
   constructor(private readonly deps: CaptureFlowDeps) {}
@@ -60,6 +63,7 @@ export class CaptureFlow {
     if (!claim.ok) throw new IpcError('BUSY', 'A capture is already in progress.');
     const flowId = claim.flowId;
     this.flowId = flowId;
+    this.requestedAt = performance.now();
     try {
       if (request.target === 'window' && request.sourceId) {
         const windows = await this.deps.provider.listSources({
@@ -94,30 +98,45 @@ export class CaptureFlow {
     }
 
     const mode: OverlayMode = request.target === 'screen' ? 'pick-display' : 'region';
+    const started = performance.now();
+    // The overlay windows are created hidden now, so their renderers load while the main window
+    // hides and the screens are grabbed; they stay invisible until they have their frame.
+    const overlays = this.createOverlays(flowId, mode);
     await this.hideMainWindow();
+    const hidden = performance.now();
     if (!this.state.isCurrent(flowId)) return;
     const frames = mode === 'region' ? await this.grabDisplays(this.displays) : new Map();
+    const grabbed = performance.now();
     if (!this.state.isCurrent(flowId)) return;
-    this.openOverlays(flowId, mode, frames);
+    this.state.setPhase(flowId, 'selecting');
+    this.watchDisplays(flowId);
+    overlays.setFrames(frames);
+    log.info(
+      `Selection ready (${mode}): hide ${Math.round(hidden - started)} ms, grab ` +
+        `${Math.round(grabbed - hidden)} ms`,
+    );
   }
 
   // --- the selection UI ------------------------------------------------------------------
 
-  private openOverlays(
-    flowId: number,
-    mode: OverlayMode,
-    frames: ReadonlyMap<string, FrozenFrame>,
-  ): void {
+  private createOverlays(flowId: number, mode: OverlayMode): OverlaySet {
     const overlays = new OverlaySet(mode, {
+      onShown: (shown, total) => {
+        if (shown === 1 || shown === total) {
+          const ms = Math.round(performance.now() - this.requestedAt);
+          log.info(
+            `Selection visible (${mode}): ${shown === 1 ? 'first' : 'last'} overlay ${ms} ms after the request`,
+          );
+        }
+      },
       onAllBlurred: () => {
         log.info('Overlays lost focus; cancelling the capture');
         this.finish(flowId, { outcome: 'cancelled' });
       },
     });
     this.overlays = overlays;
-    this.state.setPhase(flowId, 'selecting');
-    this.watchDisplays(flowId);
-    overlays.open(this.displays, frames);
+    overlays.open(this.displays);
+    return overlays;
   }
 
   private watchDisplays(flowId: number): void {
@@ -141,7 +160,7 @@ export class CaptureFlow {
 
   /** What an overlay renderer should draw, or undefined for an unknown webContents. */
   overlayInit(webContentsId: number) {
-    return this.overlays?.initFor(webContentsId);
+    return this.overlays?.initFor(webContentsId) ?? Promise.resolve(undefined);
   }
 
   overlayReady(webContentsId: number): void {
@@ -183,8 +202,8 @@ export class CaptureFlow {
     }
     this.state.setPhase(flowId, 'capturing');
     try {
-      // The frozen frame is a PNG of physical pixels: scaleFactor 1 makes crop() use pixels.
-      const image = nativeImage.createFromBuffer(frame.png, { scaleFactor: 1 });
+      // The frozen frame is an image of physical pixels (scale factor 1): crop() uses pixels.
+      const image = frame.image;
       const size = image.getSize();
       if (size.width !== frame.width || size.height !== frame.height) {
         throw new FlowFailure('CAPTURE_FAILED', 'The frozen screen could not be read.');
@@ -241,6 +260,26 @@ export class CaptureFlow {
     display?: DisplayInfo,
   ): Promise<void> {
     this.state.setPhase(flowId, 'capturing');
+    if (kind === 'screen' && display && !this.deps.synthetic) {
+      // Pixel-exact desktopCapturer image first; the worker's video frame is the fallback.
+      const grab = await grabScreensExact([display]).catch((error: unknown) => {
+        log.warn(`Exact screen grab failed: ${describeFailure(error).code}`);
+        return undefined;
+      });
+      const exact = grab?.frames.get(display.id);
+      if (exact) {
+        log.info(`Screenshot path: screen exact (desktopCapturer), ${grab?.ms} ms`);
+        if (!this.state.isCurrent(flowId)) return;
+        await this.completeWith(flowId, {
+          kind,
+          width: exact.width,
+          height: exact.height,
+          png: exact.image.toPNG(),
+        });
+        return;
+      }
+      log.warn('Screenshot path: screen fell back to the getDisplayMedia frame');
+    }
     let frames: WorkerFrame[];
     try {
       frames = await requestFrames([this.sourceRequest(sourceId, kind, display)], {
@@ -255,15 +294,31 @@ export class CaptureFlow {
     if (kind === 'window' && this.looksBlank(frame)) {
       throw new FlowFailure('WINDOW_UNAVAILABLE', WINDOW_UNAVAILABLE);
     }
+    let shot: { width: number; height: number; png: Buffer } = frame;
+    if (kind === 'window' && !this.deps.synthetic) {
+      // The video frame told us the size; ask for a window image of exactly that size.
+      const probe = await grabWindowExact(sourceId, frame).catch(() => ({}));
+      const exact = 'frame' in probe ? probe.frame : undefined;
+      if (exact && !this.looksBlank(exact)) {
+        shot = exact;
+        log.info('Screenshot path: window exact (desktopCapturer thumbnail)');
+      } else {
+        const got = 'thumbnailSize' in probe ? probe.thumbnailSize : undefined;
+        log.info(
+          `Screenshot path: window from the getDisplayMedia frame ${frame.width}x${frame.height} ` +
+            `(thumbnail ${got ? `${got.width}x${got.height}` : 'unavailable'} is not that size)`,
+        );
+      }
+    }
     await this.completeWith(flowId, {
       kind,
-      width: frame.width,
-      height: frame.height,
-      png: frame.png,
+      width: shot.width,
+      height: shot.height,
+      png: shot.png,
     });
   }
 
-  private looksBlank(frame: WorkerFrame): boolean {
+  private looksBlank(frame: { png: Buffer }): boolean {
     if (this.deps.synthetic) return false;
     const image = nativeImage.createFromBuffer(frame.png, { scaleFactor: 1 });
     const size = image.getSize();
@@ -271,10 +326,34 @@ export class CaptureFlow {
     return isBlankBitmap(image.toBitmap(), size.width, size.height);
   }
 
-  /** Grabs every display's screen for the freeze-frame, keyed by display id. */
+  /**
+   * Grabs every display's screen for the freeze-frame, keyed by display id. Pixel-exact
+   * desktopCapturer images where their size matches the display exactly, the worker's
+   * getDisplayMedia frame for the rest (and for the synthetic E2E frames).
+   */
   private async grabDisplays(displays: readonly DisplayInfo[]): Promise<Map<string, FrozenFrame>> {
+    const result = new Map<string, FrozenFrame>();
+    let remaining = displays;
+    if (!this.deps.synthetic) {
+      try {
+        const grab = await grabScreensExact(displays);
+        for (const [id, frame] of grab.frames) result.set(id, frame);
+        remaining = displays.filter((display) => !grab.frames.has(display.id));
+        log.info(
+          `Freeze-frame: ${grab.frames.size}/${displays.length} screens exact (desktopCapturer) in ` +
+            `${grab.ms} ms`,
+        );
+      } catch (error) {
+        log.warn(`Exact screen grab failed (${describeFailure(error).code}); using video frames`);
+      }
+    }
+    if (remaining.length === 0) return result;
+    if (!this.deps.synthetic) {
+      log.warn(`${remaining.length} screen(s) fall back to the getDisplayMedia frame`);
+    }
+
     const sources = await this.deps.provider.listSources({ types: ['screen'], thumbnailWidth: 0 });
-    const requests = displays.map((display) => {
+    const requests = remaining.map((display) => {
       const source = sources.find((candidate) => candidate.displayId === display.id);
       if (!source) throw new FlowFailure('SOURCE_MISSING', 'A screen could not be found.');
       return { display, request: this.sourceRequest(source.id, 'screen', display) };
@@ -283,7 +362,6 @@ export class CaptureFlow {
       requests.map((entry) => entry.request),
       { synthetic: this.deps.synthetic },
     );
-    const result = new Map<string, FrozenFrame>();
     for (const { display, request } of requests) {
       const frame = frames.find((candidate) => candidate.sourceId === request.sourceId);
       if (!frame) throw new FlowFailure('CAPTURE_FAILED', 'A screen returned no image.');
@@ -294,7 +372,11 @@ export class CaptureFlow {
             `size ${physicalSize.width}x${physicalSize.height}; using the frame ratio`,
         );
       }
-      result.set(display.id, { width: frame.width, height: frame.height, png: frame.png });
+      result.set(display.id, {
+        width: frame.width,
+        height: frame.height,
+        image: nativeImage.createFromBuffer(frame.png, { scaleFactor: 1 }),
+      });
     }
     return result;
   }

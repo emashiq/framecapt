@@ -45,7 +45,7 @@ Renderer (Chromium 152): `navigator.mediaDevices.getDisplayMedia`, `getUserMedia
 
 ## Screenshots (measured)
 
-Approach: acquire a live display stream through the grant, take one real frame, encode it as PNG at the frame's own size, never scale. A source thumbnail is never used as the capture.
+Approach: acquire a live display stream through the grant, take one real frame, encode it as PNG at the frame's own size, never scale. A source thumbnail is never used as the capture. (Phase 04 changed the source of screen and region screenshots to a FULL-SIZE `desktopCapturer` image whose size is verified to equal the display's physical size; a small thumbnail is still never upscaled. See "Pixel-exact screenshot source (phase 04, measured)".)
 
 | Display               | Expected (round(DIP x scale)) | PNG header size | Result |
 | --------------------- | ----------------------------- | --------------- | ------ |
@@ -138,7 +138,35 @@ Observations across the three runs of this test (same machine):
 
 ### Screenshot fidelity of the getDisplayMedia path (phase 03, measured)
 
-A saturated hard edge (a pure #FF00FF window on a #2A2A2A backdrop) comes out of the worker's frame with about one pixel of color bleed: the pixel just outside the window is (79, 16, 79) instead of (42, 42, 42) and the first pixel inside is (217, 28, 216) instead of (255, 0, 255). Positions and sizes are exact (the edge is at the right pixel), but colors on 1 px edges are not. This is the signature of 4:2:0 chroma subsampling in the video capture pipeline; gray text on a white background is not affected, colored text and thin colored lines are. For comparison, a full-size `desktopCapturer.getSources({ thumbnailSize: <physical size> })` thumbnail of the same display returned the edge exactly ((42, 42, 42) then (255, 0, 255)), took about 400 ms for 3440x1440 and needs no renderer. Both numbers are recorded in docs/evidence/phase03/screenshots-native.json (`edgeSharpness`). Open question for the lead: switch screen screenshots (and the region freeze-frame) to a full-size `desktopCapturer` thumbnail, keeping `getDisplayMedia` for window sources and recording; not changed in phase 03 because the brief fixed the worker + `getDisplayMedia` architecture.
+A saturated hard edge (a pure #FF00FF window on a #2A2A2A backdrop) comes out of the worker's frame with about one pixel of color bleed: the pixel just outside the window is (79, 16, 79) instead of (42, 42, 42) and the first pixel inside is (217, 28, 216) instead of (255, 0, 255). Positions and sizes are exact (the edge is at the right pixel), but colors on 1 px edges are not. This is the signature of 4:2:0 chroma subsampling in the video capture pipeline; gray text on a white background is not affected, colored text and thin colored lines are. For comparison, a full-size `desktopCapturer.getSources({ thumbnailSize: <physical size> })` thumbnail of the same display returned the edge exactly ((42, 42, 42) then (255, 0, 255)), took about 400 ms for 3440x1440 and needs no renderer. Both numbers are recorded in docs/evidence/phase03/screenshots-native.json (`edgeSharpness`). This was resolved in phase 04: see "Pixel-exact screenshot source (phase 04, measured)" below.
+
+## Pixel-exact screenshot source (phase 04, measured)
+
+Decision (lead, from the phase-03 findings above): SCREEN and REGION screenshots no longer use `getDisplayMedia` video frames. Main takes one full-size `desktopCapturer` image per display. ADR-014 has the decision text; this section has the numbers. Evidence: `docs/evidence/phase04/screenshots-native.json` (written by `npm run test:native`, redacted; the PNGs next to it show the real desktop and are gitignored).
+
+**Method.** `desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: max physical width, height: max physical height }, fetchWindowIcons: false })`, ONE call per flow. Electron fits every thumbnail into the box keeping its aspect ratio, so asking for the largest width and height across displays means no display is downscaled (here 3440 x 1440 covers 3440 x 1440 and 2560 x 1440). Sources are mapped to displays by `display_id`. For each display `image.getSize()` must equal the display's physical size EXACTLY, otherwise that display falls back to the worker's `getDisplayMedia` frame (and a warning is logged). The result is kept as a `NativeImage`: `toPNG()` only when a PNG is really needed (the session original of a whole-screen capture, the crop of a region).
+
+**Window screenshots.** The worker's `getDisplayMedia` frame gives the window's size; main then requests a window thumbnail at exactly that size and uses it only if the returned size matches. On the host the fixture window's frame was 642 x 432 and the thumbnail 642 x 430, so the video frame was used (a window's chroma bleed does not matter for flat colors; coloured text edges stay at the `getDisplayMedia` fidelity). Which path ran is logged (`Screenshot path: ...`) and recorded in the evidence (`capturePaths`).
+
+**Fidelity (tolerance 0).** A #FF00FF window on a #2A2A2A backdrop, screen picker and region on both displays, 40 probes per capture on all four edges: the first pixel inside is exactly (255, 0, 255) and the first pixel outside exactly (42, 42, 42); 0 mismatches in 4 captures (phase 03, getDisplayMedia path: (217, 28, 216) and (79, 16, 79)). Every full-screen and region capture also has a magenta fraction of exactly 1.0 inside the window rectangle (was >= 0.98). Sizes are unchanged: 3440 x 1440 and 2560 x 1440 for the screens, 400 x 300 / 440 x 340 for the regions.
+
+**Timing.** `desktopCapturer.getSources` for both displays at full size: 331-418 ms (3440 x 1440 + 2560 x 1440, 9 flows), one display: 381 and 388 ms. Region click to selection UI (goal < 800 ms):
+
+| Stage (region, 2 displays)                                                      | Phase 03 (worker, getDisplayMedia)                       | Phase 04                                               |
+| ------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------ |
+| Playwright click -> overlays painted, measured by the test (`regionOverlaysMs`) | 951 ms (display 3590684614), 1961 ms (display 111732923) | 1095 ms and 1062 ms (poll-quantized, see below)        |
+| Main: request -> first / last overlay visible                                   | not measured                                             | 668-785 ms / 684-786 ms (median 686 / 701 ms, 9 flows) |
+| Main: hide main window + settle                                                 | same code (200 ms settle)                                | 239-262 ms                                             |
+| Main: grab both screens                                                         | worker round trips (not measured separately)             | 331-418 ms                                             |
+
+The Playwright number is quantized upwards by `expect.poll` intervals (100 / 250 / 500 / 1000 ms) and by its own polling of two windows, so the main-process measurement (request received -> overlay window made visible, logged as `Selection visible`) is the honest figure: **median 0.70 s, worst 0.79 s over 9 region flows**, so the 800 ms goal is met on this host, with a small margin (an earlier run of the same code had one flow at 831 ms, so treat it as met on average, not guaranteed). What got it there, in order of effect:
+
+1. The exact `desktopCapturer` grab replaced the worker round trip (a window, a stream, a frame, a PNG encode and an IPC copy per screen).
+2. The overlay windows are created hidden at the start of the flow, so their renderers load while the main window hides and the screens are grabbed (`overlay:getInit` waits for the frames).
+3. The frozen frame goes to the overlays as raw BGRA bytes and is painted on a canvas: PNG encoding of the two screens cost about 220 ms in main and another decode in each overlay.
+4. A never-shown window's renderer is throttled to about one frame per second, so the "painted" signal (a double `requestAnimationFrame`) arrived 1-2 s late on some overlays (this also explained the 1961 ms of phase 03). The overlays are now shown at opacity 0 right after the grab and fade in (opacity 1) on `overlay:ready`. Never-shown windows cannot appear in a capture and the grab still happens before any overlay is visible.
+
+Not changed, deliberately: the 200 ms settle after hiding the main window (removing it risks capturing the app window); excluding the main window with `setContentProtection` instead of hiding it was considered and not adopted (not verified to hide it from `desktopCapturer` on this host).
 
 ## Limits of this evidence
 

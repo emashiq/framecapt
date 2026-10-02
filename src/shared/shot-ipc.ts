@@ -57,6 +57,12 @@ export const ShotCopyRequestSchema = z.object({
   bytes: bytes(MAX_EXPORT_BYTES),
 });
 
+/** The editor reports whether closing the window would lose work (see main/close-guard.ts). */
+export const EditorSetDirtyRequestSchema = z.object({ dirty: z.boolean() });
+
+/** The user's answer to `app:confirmClose`: discard (close now) or keep editing. */
+export const EditorResolveCloseRequestSchema = z.object({ discard: z.boolean() });
+
 export const ShowItemInFolderRequestSchema = z.object({ path: z.string().min(1).max(1024) });
 
 // --- overlay -> main -----------------------------------------------------------------------
@@ -75,8 +81,10 @@ export const OverlayInitSchema = z.object({
   }),
   /** Pixel size of the captured frame (region) or the display's physical size (pick-display). */
   frameSize: z.object({ width: z.number(), height: z.number() }),
-  /** The frozen frame as PNG (region mode only). */
+  /** The frozen frame (region mode only): raw 4-byte pixels (frameSize.width x frameSize.height). */
   image: z.instanceof(ArrayBuffer).nullable(),
+  /** 'bgra': blue, green, red, alpha per pixel, rows top to bottom, as Electron's toBitmap(). */
+  imageFormat: z.enum(['bgra']),
 });
 export type OverlayInit = z.infer<typeof OverlayInitSchema>;
 

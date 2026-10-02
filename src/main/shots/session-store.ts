@@ -100,6 +100,17 @@ export class ShotSessionStore {
     return session !== undefined;
   }
 
+  /** Same as discard, synchronously: used while the app is closing and cannot await. */
+  discardSync(id: string): boolean {
+    const session = this.sessions.get(id);
+    this.sessions.delete(id);
+    const dir = this.dirFor(id);
+    if (!dir) return false;
+    if (session && !isInsideDir(dir, session.originalPath)) return false;
+    fs.rmSync(dir, { recursive: true, force: true });
+    return session !== undefined;
+  }
+
   /**
    * Removes session directories older than `maxAgeMs` that have no `keep` marker. Only directories
    * whose names are session ids are touched. Never logs names or content; returns counts.

@@ -2,6 +2,8 @@ import path from 'node:path';
 import { app, BrowserWindow, nativeTheme, type WebContents } from 'electron';
 import type { AppOriginConfig } from './app-origin';
 import type { Role } from '../shared/types';
+import { CloseGuard } from './close-guard';
+import { sendEvent } from './events';
 
 /** Window backgrounds matching --color-bg in styles.css, so there is no white flash. */
 const BACKGROUND = { light: '#f8fafc', dark: '#0b0f1a' } as const;
@@ -16,6 +18,15 @@ const ROLE_HASH: Record<Role, string> = {
 
 const roles = new Map<number, Role>();
 let mainWindow: BrowserWindow | undefined;
+
+/** Asks before the main window closes over unsaved editor work (see close-guard.ts). */
+export const closeGuard = new CloseGuard();
+const mainClosedListeners: (() => void)[] = [];
+
+/** Runs when the main window is gone (the editor's session directory is deleted then). */
+export function onMainWindowClosed(listener: () => void): void {
+  mainClosedListeners.push(listener);
+}
 
 /** Registers a webContents under a role; removed again when it is destroyed. */
 export function registerWebContents(contents: WebContents, role: Role): void {
@@ -80,8 +91,19 @@ export function createMainWindow(): BrowserWindow {
   registerWebContents(win.webContents, 'main');
   mainWindow = win;
   win.once('ready-to-show', () => win.show());
+  win.on('close', (event) => {
+    if (win.webContents.isDestroyed() || closeGuard.onCloseRequested() === 'close') return;
+    event.preventDefault();
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    sendEvent(win.webContents, 'app:confirmClose', {});
+  });
+  // A logoff or shutdown must never wait for the discard question.
+  win.on('session-end', () => closeGuard.allowClose());
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = undefined;
+    for (const listener of mainClosedListeners) listener();
     // The hidden worker would otherwise keep the app alive after the main window is closed.
     closeWorkerWindow();
   });

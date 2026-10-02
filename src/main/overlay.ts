@@ -1,14 +1,15 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, type NativeImage } from 'electron';
 import type { OverlayInit, OverlayMode } from '../shared/shot-ipc';
 import type { DisplayInfo } from './capture/types';
 import { sendEvent } from './events';
 import { log } from './logger';
 import { loadRenderer, registerWebContents, securePreferences } from './windows';
 
+/** A frozen screen: the pixels stay a NativeImage in main (crops are made from it). */
 export interface FrozenFrame {
   width: number;
   height: number;
-  png: Buffer;
+  image: NativeImage;
 }
 
 interface OverlayEntry {
@@ -19,6 +20,8 @@ interface OverlayEntry {
 }
 
 export interface OverlayCallbacks {
+  /** An overlay became visible; `shown` of `total` are up now. */
+  onShown?: (shown: number, total: number) => void;
   /** Every overlay lost keyboard focus (the user switched to another app). */
   onAllBlurred: () => void;
 }
@@ -33,24 +36,49 @@ export interface OverlayCallbacks {
 export class OverlaySet {
   private readonly entries = new Map<number, OverlayEntry>();
   private closed = false;
+  private readonly framesReady: Promise<void>;
+  private markFramesReady: () => void = () => undefined;
 
   constructor(
     readonly mode: OverlayMode,
     private readonly callbacks: OverlayCallbacks,
-  ) {}
+  ) {
+    this.framesReady = new Promise<void>((resolve) => {
+      this.markFramesReady = resolve;
+    });
+  }
 
   get windows(): BrowserWindow[] {
     return [...this.entries.values()].map((entry) => entry.win);
   }
 
-  open(displays: readonly DisplayInfo[], frames: ReadonlyMap<string, FrozenFrame>): void {
+  /**
+   * Creates the (hidden) overlay windows. They load their renderer while the screens are still
+   * being grabbed, and ask for their content with `overlay:getInit`, which waits for
+   * `setFrames`. A window that was never shown cannot be in a capture.
+   */
+  open(displays: readonly DisplayInfo[]): void {
     for (const display of displays) {
-      const entry = this.create(display, frames.get(display.id));
+      const entry = this.create(display);
       this.entries.set(entry.win.webContents.id, entry);
     }
   }
 
-  private create(display: DisplayInfo, frame: FrozenFrame | undefined): OverlayEntry {
+  /**
+   * The frozen frames are ready (region mode) or not needed (pick-display). The grab is over, so
+   * the windows may now exist on screen: they are shown at opacity 0 (a never-shown window's
+   * renderer is throttled to ~1 frame per second, which made the "painted" signal take 1-2 s)
+   * and become visible in `show` once their content is painted.
+   */
+  setFrames(frames: ReadonlyMap<string, FrozenFrame>): void {
+    for (const entry of this.entries.values()) {
+      entry.frame = frames.get(entry.display.id);
+      if (!entry.win.isDestroyed()) entry.win.showInactive();
+    }
+    this.markFramesReady();
+  }
+
+  private create(display: DisplayInfo): OverlayEntry {
     const { bounds } = display;
     const win = new BrowserWindow({
       x: bounds.x,
@@ -73,6 +101,8 @@ export class OverlaySet {
         : { transparent: true, backgroundColor: '#00000000' }),
       webPreferences: securePreferences(),
     });
+    // Invisible until the frozen frame is painted (see setFrames and show).
+    win.setOpacity(0);
     win.setAlwaysOnTop(true, 'screen-saver');
     // Electron can place a window created on a secondary display with the wrong size/position when
     // display scale factors differ; setting the bounds again after creation fixes it.
@@ -95,7 +125,7 @@ export class OverlaySet {
     registerWebContents(win.webContents, 'overlay');
     win.on('blur', () => setTimeout(() => this.checkBlurred(), 150));
     void loadRenderer(win, 'overlay');
-    return { win, display, frame, shown: false };
+    return { win, display, frame: undefined, shown: false };
   }
 
   private checkBlurred(): void {
@@ -114,15 +144,22 @@ export class OverlaySet {
     return this.entries.get(webContentsId)?.display.id;
   }
 
-  /** The init payload for an overlay's renderer, or undefined for an unknown webContents. */
-  initFor(webContentsId: number): OverlayInit | undefined {
+  /**
+   * The init payload for an overlay's renderer, or undefined for an unknown webContents. Waits
+   * until the frames are ready.
+   */
+  async initFor(webContentsId: number): Promise<OverlayInit | undefined> {
+    await this.framesReady;
     const entry = this.entries.get(webContentsId);
-    if (!entry) return undefined;
+    if (!entry || this.closed) return undefined;
     const { display, frame } = entry;
-    const png = frame
-      ? (frame.png.buffer.slice(
-          frame.png.byteOffset,
-          frame.png.byteOffset + frame.png.byteLength,
+    // Raw BGRA pixels: encoding the frame as PNG took ~110 ms per 3440x1440 screen in main, and
+    // decoding it again in the overlay renderer cost more. The overlay paints them onto a canvas.
+    const bitmap = frame ? frame.image.toBitmap() : null;
+    const pixels = bitmap
+      ? (bitmap.buffer.slice(
+          bitmap.byteOffset,
+          bitmap.byteOffset + bitmap.byteLength,
         ) as ArrayBuffer)
       : null;
     return {
@@ -135,7 +172,8 @@ export class OverlaySet {
         rotation: display.rotation,
       },
       frameSize: frame ? { width: frame.width, height: frame.height } : { ...display.physicalSize },
-      image: png,
+      image: pixels,
+      imageFormat: 'bgra',
     };
   }
 
@@ -145,11 +183,15 @@ export class OverlaySet {
     if (!entry || entry.shown || this.closed || entry.win.isDestroyed()) return;
     entry.shown = true;
     const first = [...this.entries.values()].filter((other) => other.shown).length === 1;
-    entry.win.show();
+    entry.win.setOpacity(1);
     if (first) {
       entry.win.focus();
       entry.win.webContents.focus();
     }
+    this.callbacks.onShown?.(
+      [...this.entries.values()].filter((other) => other.shown).length,
+      this.entries.size,
+    );
   }
 
   frameFor(displayId: string): FrozenFrame | undefined {
@@ -171,6 +213,7 @@ export class OverlaySet {
   /** Destroys every overlay window and drops the frozen frames. Idempotent. */
   close(): void {
     this.closed = true;
+    this.markFramesReady(); // releases overlays still waiting for their init (they get "none")
     for (const entry of this.entries.values()) {
       entry.frame = undefined;
       if (!entry.win.isDestroyed()) entry.win.destroy();

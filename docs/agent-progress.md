@@ -15,7 +15,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 01 Foundation | VERIFIED | Forge 8 + Vite 8 + React 19 + TS 6; secure bridge; e2e 9/9 on host |
 | 02 Capture feasibility | VERIFIED | native 11/11 on host; exact-res screenshots both monitors; loopback audio captured |
 | 03 Selection & screenshots | VERIFIED | native 18/18; region inset exact on both displays; e2e 28/28 |
-| 04 Screenshot editor | NOT_STARTED | |
+| 04 Screenshot editor | VERIFIED | editor + pixel-exact capture; redaction pixels verified PNG/JPEG/clipboard |
 | 05 Recording & audio | NOT_STARTED | |
 | 06 Storage & recovery | NOT_STARTED | |
 | 07 Export & history | NOT_STARTED | |
@@ -51,6 +51,13 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Findings: getDisplayMedia frames are 4:2:0 (≈1 px chroma bleed on saturated edges); full-size desktopCapturer thumbnail is pixel-exact (~400 ms). Electron 44 clipboard is promise-based (ClipboardItem image/png). Minimized windows are not listed by desktopCapturer.
 - Lead decision: switch screen/region screenshots to full-size desktopCapturer images (pixel-exact, dims verified) in phase 04 work item 0; keep getDisplayMedia for recording.
 - Risks: mixed DPI/negative origins/rotation unit-tested only (host is 2× scale-1); overlay interaction natively driven by Playwright events, not OS input; click→region overlay 1.95 s (target <0.8 s after the switch).
+
+### Phase 04 — Screenshot editor (VERIFIED 2026-10-02)
+- Files: src/renderer/editor/* (pure model, history, hit-test, view math, flatten), src/renderer/views/editor/*, src/main/capture/exact-capture.ts, src/main/close-guard.ts, src/shared/pixels.ts, AlertConfirm; tests unit (model/flatten with @napi-rs/canvas/view/close-guard/pixels), e2e editor.spec.ts.
+- Screenshot source switched to full-size desktopCapturer (dims verified per display; worker fallback). Magenta edge test exact with tolerance 0 (160 probes). Region click→overlay median 0.70 s (0.68–0.79) via hidden pre-created overlays + raw BGRA frame transfer. Window screenshots still use video frame (thumbnail 642x430 ≠ frame 642x432).
+- Redaction: solid #000 drawn last, +1 px; JPEG redactions padded to 16 px block grid (+2 px) because JPEG ringing leaked up to 24/255 near edges (ADR-016). Chromium-path checks: PNG 0 non-black, clipboard 0, JPEG max channel 0 under redaction.
+- Results: lint/typecheck 0; unit 188/188 (lead re-ran); e2e 45/45; native 18/18. Idle 0 rAF; drag p95 16.8 ms at 2560x1440.
+- Risks: one first-run e2e region-drag flake (launch race) — revisit in phase 08/09; mixed-DPI untested physically; session-end hook untested.
 
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

@@ -2,7 +2,7 @@
  * Native verification of the screenshot workflow on the real host (production build, real
  * desktopCapturer/getDisplayMedia, real windows). Needs an interactive Windows session. Run with
  * `npm run test:native`. Evidence (redacted JSON, plus PNGs that are gitignored because they show
- * the real desktop) goes to docs/evidence/phase03/.
+ * the real desktop) goes to docs/evidence/phase04/.
  *
  * What is NOT physically testable on this host and is covered by unit tests only (see
  * tests/unit/geometry.test.ts): mixed DPI scale factors, negative display origins, rotated
@@ -22,10 +22,18 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test';
+import { exitApp } from '../e2e/app-exit';
 import { redactPaths, writeEvidenceJson } from './evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
-const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase03');
+const evidenceDir = path.join(projectRoot, 'docs', 'evidence', 'phase04');
+const phase03Evidence = path.join(
+  projectRoot,
+  'docs',
+  'evidence',
+  'phase03',
+  'screenshots-native.json',
+);
 const electronPath = createRequire(__filename)('electron') as unknown as string;
 
 const MAGENTA: [number, number, number] = [255, 0, 255];
@@ -45,7 +53,7 @@ let outDir: string;
 let displays: Display[] = [];
 const evidence: Record<string, unknown> = {};
 const timings: Record<string, number> = {};
-const edgeSharpness: Record<string, unknown>[] = [];
+const edgeExactness: Record<string, unknown>[] = [];
 
 test.describe.configure({ mode: 'serial' });
 
@@ -72,7 +80,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await app?.close();
+  if (app) await exitApp(app);
   for (const dir of [userDataDir, outDir])
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -212,6 +220,50 @@ async function measurePng(
   );
 }
 
+const BACKDROP: [number, number, number] = [42, 42, 42];
+
+/**
+ * Pixel-exact edge check. Screens and regions come from desktopCapturer images, not from 4:2:0
+ * video frames, so a hard edge must be exact: the first pixel inside the magenta rectangle is
+ * (255, 0, 255) and the first pixel outside it is exactly the backdrop color, on all four sides.
+ * `rect` is the magenta rectangle in the PNG; every probe is compared with tolerance 0.
+ */
+async function assertExactEdges(
+  file: string,
+  rect: Region,
+  label: string,
+): Promise<Record<string, unknown>> {
+  const probes: [number, number][] = [];
+  const kinds: ('inside' | 'outside')[] = [];
+  const add = (x: number, y: number, kind: 'inside' | 'outside'): void => {
+    probes.push([x, y]);
+    kinds.push(kind);
+  };
+  const ys = [0.15, 0.35, 0.5, 0.65, 0.85].map((f) => rect.y + Math.floor(rect.height * f));
+  const xs = [0.15, 0.35, 0.5, 0.65, 0.85].map((f) => rect.x + Math.floor(rect.width * f));
+  for (const y of ys) {
+    add(rect.x - 1, y, 'outside');
+    add(rect.x, y, 'inside');
+    add(rect.x + rect.width - 1, y, 'inside');
+    add(rect.x + rect.width, y, 'outside');
+  }
+  for (const x of xs) {
+    add(x, rect.y - 1, 'outside');
+    add(x, rect.y, 'inside');
+    add(x, rect.y + rect.height - 1, 'inside');
+    add(x, rect.y + rect.height, 'outside');
+  }
+  const stats = await measurePng(file, MAGENTA, { probes, probeTolerance: 0 });
+  const wrong = probes
+    .map(([x, y], index) => ({ x, y, kind: kinds[index], color: stats.probeColors[index] ?? [] }))
+    .filter(({ kind, color }) => {
+      const want = kind === 'inside' ? MAGENTA : BACKDROP;
+      return !(color[0] === want[0] && color[1] === want[1] && color[2] === want[2]);
+    });
+  expect(wrong, `${label}: edge pixels that are not exact`).toEqual([]);
+  return { label, probes: probes.length, mismatches: wrong.length, tolerance: 0 };
+}
+
 /** A frameless, always-on-top window of one solid color at an exact DIP rect; returns its id. */
 async function openColorWindow(
   rect: Region,
@@ -257,24 +309,24 @@ async function closeColorWindow(id: number): Promise<void> {
 }
 
 async function leaveResult(): Promise<void> {
-  await page.getByTestId('result-new').click();
+  await page.getByTestId('editor-done').click();
   const confirm = page.getByTestId('confirm-yes');
   if (await confirm.isVisible().catch(() => false)) await confirm.click();
-  await expect(page.getByTestId('result-view')).toHaveCount(0);
+  await expect(page.getByTestId('editor-view')).toHaveCount(0);
   await expect(page.getByTestId('shot-region')).toBeVisible();
 }
 
 async function saveCurrentResult(name: string): Promise<string> {
   const target = path.join(outDir, name);
   await stubSaveDialog(target);
-  await page.getByTestId('result-save-png').click();
+  await page.getByTestId('editor-save').click();
   await expect.poll(() => fs.existsSync(target), { timeout: 15_000 }).toBe(true);
   return target;
 }
 
 function keepEvidence(file: string, name: string): string {
   fs.copyFileSync(file, path.join(evidenceDir, name));
-  return `docs/evidence/phase03/${name}`;
+  return `docs/evidence/phase04/${name}`;
 }
 
 async function overlayBounds(): Promise<Region[]> {
@@ -292,6 +344,16 @@ test('(a) Screenshot > Screen: picking each display exports its exact physical s
   for (const display of displays) {
     const scale = display.physicalSize.width / display.bounds.width;
     const local = { x: 200, y: 150, width: 400, height: 300 };
+    // A solid backdrop under the magenta window: the first pixel outside it has a known color.
+    const backdrop = await openColorWindow(
+      {
+        x: display.bounds.x + 140,
+        y: display.bounds.y + 90,
+        width: 520,
+        height: 420,
+      },
+      '#2A2A2A',
+    );
     const color = await openColorWindow({
       x: display.bounds.x + local.x,
       y: display.bounds.y + local.y,
@@ -336,8 +398,8 @@ test('(a) Screenshot > Screen: picking each display exports its exact physical s
       await expect(overlay.getByTestId('overlay-pick')).toHaveAttribute('data-active', 'true');
       const clicked = Date.now();
       await overlay.mouse.click(300, 300);
-      await expect(page.getByTestId('result-dimensions')).toHaveText(
-        `${display.physicalSize.width} × ${display.physicalSize.height} px`,
+      await expect(page.getByTestId('editor-dimensions')).toHaveText(
+        `${display.physicalSize.width} × ${display.physicalSize.height}`,
         { timeout: 20_000 },
       );
       timings[`screenPickToResultMs_${display.id}`] = Date.now() - clicked;
@@ -354,12 +416,14 @@ test('(a) Screenshot > Screen: picking each display exports its exact physical s
         width: Math.round(local.width * scale),
         height: Math.round(local.height * scale),
       };
-      const stats = await measurePng(file, MAGENTA, { region });
-      expect(stats.fraction).toBeGreaterThanOrEqual(0.98);
+      const stats = await measurePng(file, MAGENTA, { region, tolerance: 0 });
+      expect(stats.fraction).toBe(1);
+      const edges = await assertExactEdges(file, region, `screen ${display.id}`);
+      edgeExactness.push(edges);
 
       // Copy puts the same image on the clipboard.
       if (display === displays[0]) {
-        await page.getByTestId('result-copy').click();
+        await page.getByTestId('editor-copy').click();
         await expect(page.getByText('Copied to clipboard')).toBeVisible();
         const clip = await app.evaluate(async ({ clipboard, nativeImage }) => {
           const items = await clipboard.read();
@@ -378,11 +442,13 @@ test('(a) Screenshot > Screen: picking each display exports its exact physical s
         equal: true,
         colorWindowBounds: color.bounds,
         magentaFractionInWindowRect: Math.round(stats.fraction * 10000) / 10000,
+        exactEdges: edges,
         evidence: keepEvidence(file, `screen-${display.id}.png`),
       });
       await leaveResult();
     } finally {
       await closeColorWindow(color.id);
+      await closeColorWindow(backdrop.id);
     }
   }
   evidence.screenPick = rows;
@@ -432,7 +498,7 @@ test('(b)+(d) Region fidelity on every display: exact size, exact inset, no over
       await expect(overlay.getByTestId('size-label')).toHaveText('400 × 300');
       const enterAt = Date.now();
       await pressClosing(overlay, 'Enter');
-      await expect(page.getByTestId('result-dimensions')).toHaveText('400 × 300 px', {
+      await expect(page.getByTestId('editor-dimensions')).toHaveText('400 × 300', {
         timeout: 15_000,
       });
       timings[`regionConfirmToResultMs_${display.id}`] = Date.now() - enterAt;
@@ -440,8 +506,8 @@ test('(b)+(d) Region fidelity on every display: exact size, exact inset, no over
       const exact = await saveCurrentResult(`region-exact-${display.id}.png`);
       const exactSize = pngSize(exact);
       expect(exactSize).toEqual({ width: 400, height: 300 });
-      const exactStats = await measurePng(exact, MAGENTA);
-      expect(exactStats.fraction).toBeGreaterThanOrEqual(0.98);
+      const exactStats = await measurePng(exact, MAGENTA, { tolerance: 0 });
+      expect(exactStats.fraction).toBe(1);
       await leaveResult();
 
       // Expanded by 20 px on every side: 440 x 340, magenta inset by exactly 20 px.
@@ -450,90 +516,25 @@ test('(b)+(d) Region fidelity on every display: exact size, exact inset, no over
       await drag(overlay2, [180, 130], [620, 470]);
       await expect(overlay2.getByTestId('size-label')).toHaveText('440 × 340');
       await pressClosing(overlay2, 'Enter');
-      await expect(page.getByTestId('result-dimensions')).toHaveText('440 × 340 px', {
+      await expect(page.getByTestId('editor-dimensions')).toHaveText('440 × 340', {
         timeout: 15_000,
       });
       const wide = await saveCurrentResult(`region-expanded-${display.id}.png`);
       expect(pngSize(wide)).toEqual({ width: 440, height: 340 });
       keepEvidence(wide, `region-expanded-${display.id}.png`);
-      const xs = [60, 100, 140, 180, 220, 260, 300, 340, 380];
-      const ys = [60, 100, 140, 180, 220, 260];
-      const probes: [number, number][] = [
-        ...ys.flatMap(
-          (y) =>
-            [
-              [19, y],
-              [20, y],
-              [419, y],
-              [420, y],
-            ] as [number, number][],
-        ),
-        ...xs.flatMap(
-          (x) =>
-            [
-              [x, 19],
-              [x, 20],
-              [x, 319],
-              [x, 320],
-            ] as [number, number][],
-        ),
-      ];
+      // The magenta rectangle starts exactly 20 px in on all four sides: the first pixel inside is
+      // exactly (255, 0, 255) and the first pixel outside exactly the backdrop color.
+      const edges = await assertExactEdges(
+        wide,
+        { x: 20, y: 20, width: 400, height: 300 },
+        `region ${display.id}`,
+      );
+      edgeExactness.push(edges);
       const wideStats = await measurePng(wide, MAGENTA, {
         region: { x: 20, y: 20, width: 400, height: 300 },
-        probes,
-        probeTolerance: 110,
+        tolerance: 0,
       });
-      const at = (px: number, py: number): boolean | undefined =>
-        wideStats.probes[probes.findIndex(([x, y]) => x === px && y === py)];
-      const insetOk =
-        ys.every(
-          (y) =>
-            at(19, y) === false &&
-            at(20, y) === true &&
-            at(419, y) === true &&
-            at(420, y) === false,
-        ) &&
-        xs.every(
-          (x) =>
-            at(x, 19) === false &&
-            at(x, 20) === true &&
-            at(x, 319) === true &&
-            at(x, 320) === false,
-        );
-      expect(
-        insetOk,
-        `magenta starts exactly 20 px in on all four sides; probes: ${JSON.stringify(probes.map(([x, y], i) => [x, y, wideStats.probes[i], wideStats.probeColors[i]?.join('/')]))}`,
-      ).toBe(true);
-      expect(wideStats.fraction).toBeGreaterThanOrEqual(0.98);
-
-      // Edge sharpness: the getDisplayMedia frame is 4:2:0 video, so a hard magenta edge bleeds by
-      // a pixel. For comparison, the same edge from a full-size desktopCapturer thumbnail.
-      const colorAt = (px: number, py: number): number[] | undefined =>
-        wideStats.probeColors[probes.findIndex(([x, y]) => x === px && y === py)]?.slice(0, 3);
-      const thumbnailEdge = await app.evaluate(
-        async ({ desktopCapturer }, { id, size, x, y }) => {
-          const sources = await desktopCapturer.getSources({
-            types: ['screen'],
-            thumbnailSize: size,
-          });
-          const image = sources.find((source) => source.display_id === id)?.thumbnail;
-          if (!image) return null;
-          const bitmap = image.toBitmap(); // BGRA
-          const width = image.getSize().width;
-          const at = (px: number): number[] => {
-            const i = (y * width + px) * 4;
-            return [bitmap[i + 2] ?? 0, bitmap[i + 1] ?? 0, bitmap[i] ?? 0];
-          };
-          return { size: image.getSize(), outside: at(x - 1), edge: at(x) };
-        },
-        { id: display.id, size: display.physicalSize, x: 200, y: 230 },
-      );
-      edgeSharpness.push({
-        displayId: display.id,
-        magentaTrue: [255, 0, 255],
-        getDisplayMediaFrame: { outside: colorAt(19, 100), edge: colorAt(20, 100) },
-        desktopCapturerThumbnail: thumbnailEdge,
-      });
+      expect(wideStats.fraction).toBe(1);
       await leaveResult();
 
       rows.push({
@@ -548,7 +549,8 @@ test('(b)+(d) Region fidelity on every display: exact size, exact inset, no over
         expanded: {
           dragLocalDip: [180, 130, 440, 340],
           exportedSize: { width: 440, height: 340 },
-          insetExactly20px: insetOk,
+          insetExactly20px: true,
+          exactEdges: edges,
           innerMagentaFraction: Math.round(wideStats.fraction * 10000) / 10000,
         },
         evidence: [
@@ -563,7 +565,7 @@ test('(b)+(d) Region fidelity on every display: exact size, exact inset, no over
     }
   }
   evidence.regionFidelity = rows;
-  evidence.edgeSharpness = edgeSharpness;
+  evidence.edgeExactness = edgeExactness;
 });
 
 test('(d) The hint pill and dim never reach the output (selection under the pill)', async () => {
@@ -599,12 +601,12 @@ test('(d) The hint pill and dim never reach the output (selection under the pill
       clip: { x: centerX - 700, y: 0, width: 1400, height: 420 },
     });
     await pressClosing(overlay, 'Enter');
-    await expect(page.getByTestId('result-dimensions')).toHaveText('600 × 152 px', {
+    await expect(page.getByTestId('editor-dimensions')).toHaveText('600 × 152', {
       timeout: 15_000,
     });
     const file = await saveCurrentResult('region-under-pill.png');
-    const stats = await measurePng(file, MAGENTA);
-    expect(stats.fraction).toBeGreaterThanOrEqual(0.98);
+    const stats = await measurePng(file, MAGENTA, { tolerance: 0 });
+    expect(stats.fraction).toBe(1);
     evidence.overlayExclusion = {
       displayId: display.id,
       hintPillBox: hintBox,
@@ -629,8 +631,8 @@ test('region selection can be dragged past the screen edge and is clamped to the
   );
   await expect(overlay.getByTestId('overlay-hint')).toContainText('Selections stay on one screen');
   await pressClosing(overlay, 'Enter');
-  await expect(page.getByTestId('result-dimensions')).toHaveText(
-    `${display.physicalSize.width} × ${display.physicalSize.height} px`,
+  await expect(page.getByTestId('editor-dimensions')).toHaveText(
+    `${display.physicalSize.width} × ${display.physicalSize.height}`,
     { timeout: 20_000 },
   );
   evidence.regionClampedToDisplay = { displayId: display.id, size: display.physicalSize };
@@ -681,11 +683,11 @@ test('(c) Window screenshot of a real external window; minimized and vanished wi
     const sourceId = (await card.getAttribute('data-source-id')) as string;
     const started = Date.now();
     await card.click();
-    await expect(page.getByTestId('result-dimensions')).toHaveText(/\d+ × \d+ px/, {
+    await expect(page.getByTestId('editor-dimensions')).toHaveText(/\d+ × \d+/, {
       timeout: 20_000,
     });
     timings.windowCaptureMs = Date.now() - started;
-    const dims = (await page.getByTestId('result-dimensions').textContent()) ?? '';
+    const dims = (await page.getByTestId('editor-dimensions').textContent()) ?? '';
     const [capturedW, capturedH] = (/(\d+) × (\d+)/.exec(dims) ?? []).slice(1).map(Number) as [
       number,
       number,
@@ -736,7 +738,7 @@ test('(c) Window screenshot of a real external window; minimized and vanished wi
       const error = page.getByText(
         "That window is minimized or can't be captured. Restore it and try again.",
       );
-      const result = page.getByTestId('result-dimensions');
+      const result = page.getByTestId('editor-dimensions');
       await expect
         .poll(async () => (await error.count()) + (await result.count()), { timeout: 20_000 })
         .toBeGreaterThan(0);
@@ -823,6 +825,63 @@ test('main log has no capture content and no window titles; evidence is redacted
   evidence.logLines = log
     .split('\n')
     .filter((line) => /Overlay bounds mismatch|differs from display/.test(line)).length;
+
+  // Which capture path ran (the main log records it, without any content).
+  const pathLines = log.split('\n').filter((line) => /Screenshot path:|Freeze-frame:/.test(line));
+  const count = (pattern: RegExp): number => pathLines.filter((line) => pattern.test(line)).length;
+  const allExact = /Freeze-frame: (\d+)\/\1 screens exact/;
+  evidence.capturePaths = {
+    freezeFrameAllScreensExact: count(allExact),
+    freezeFramePartialOrFallback: count(/Freeze-frame:/) - count(allExact),
+    screenExactDesktopCapturer: count(/screen exact \(desktopCapturer\)/),
+    screenFellBackToVideoFrame: count(/screen fell back/),
+    windowExactThumbnail: count(/window exact/),
+    windowVideoFrameSizeMismatch: count(/window from the getDisplayMedia frame/),
+    windowPath: pathLines
+      .filter((line) => /window/.test(line))
+      .map((line) => line.replace(/^\S+\s+/, '')),
+    sample: pathLines.slice(0, 6).map((line) => line.replace(/^\S+\s+/, '')),
+    selectionReady: log
+      .split('\n')
+      .filter((line) => /Selection (ready|visible)/.test(line))
+      .map((line) => line.replace(/^\S+\s+/, '')),
+  };
+  expect(count(/screen fell back/)).toBe(0);
+  expect(count(allExact)).toBeGreaterThan(0);
+
+  const visibleMs = (mode: string, which: 'first' | 'last'): number[] =>
+    log.split('\n').flatMap((line) => {
+      const match = new RegExp(`Selection visible \\(${mode}\\): ${which} overlay (\\d+) ms`).exec(
+        line,
+      );
+      return match ? [Number(match[1])] : [];
+    });
+
+  // Region click -> overlays, before (phase 03, getDisplayMedia worker) and after (this run).
+  const regionKeys = Object.keys(timings).filter((key) => key.startsWith('regionOverlaysMs_'));
+  const before = fs.existsSync(phase03Evidence)
+    ? (
+        JSON.parse(fs.readFileSync(phase03Evidence, 'utf8')) as {
+          timingsMs?: Record<string, number>;
+        }
+      ).timingsMs
+    : undefined;
+  evidence.regionClickToOverlays = {
+    goalMs: 800,
+    phase03BeforeMs: Object.fromEntries(
+      regionKeys.map((key) => [key.replace('regionOverlaysMs_', ''), before?.[key] ?? null]),
+    ),
+    afterMs: Object.fromEntries(
+      regionKeys.map((key) => [key.replace('regionOverlaysMs_', ''), timings[key]]),
+    ),
+    measuredBy: 'Playwright: Region button click until the overlay UI of every display has painted',
+    // The same flows measured in main: request received -> overlay window shown. Playwright's
+    // number is quantized upwards by expect.poll intervals (100/250/500/1000 ms), this one is not.
+    mainMeasuredMs: {
+      firstOverlay: visibleMs('region', 'first'),
+      lastOverlay: visibleMs('region', 'last'),
+    },
+  };
 
   writeEvidenceJson(evidenceDir, 'screenshots-native.json', {
     date: new Date().toISOString(),

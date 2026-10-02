@@ -15,11 +15,14 @@ export interface AppShellProps {
   view: ViewId;
   onNavigate: (view: ViewId) => void;
   children: ReactNode;
-  /** Full-width content area (the screenshot result), instead of the centered reading column. */
-  wide?: boolean;
+  /**
+   * Editor mode: the sidebar shrinks to icons and the content area is edge to edge, because the
+   * screenshot editor needs the room.
+   */
+  editor?: boolean;
 }
 
-export function AppShell({ view, onNavigate, children, wide = false }: AppShellProps) {
+export function AppShell({ view, onNavigate, children, editor = false }: AppShellProps) {
   const mainRef = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
 
@@ -34,12 +37,19 @@ export function AppShell({ view, onNavigate, children, wide = false }: AppShellP
 
   return (
     <div className="flex h-full">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-surface-2 px-3 py-4">
-        <div className="mb-6 flex items-center gap-2.5 px-2">
+      <aside
+        className={cn(
+          'flex shrink-0 flex-col border-r border-line bg-surface-2 py-4',
+          editor ? 'w-16 items-center px-2' : 'w-60 px-3',
+        )}
+      >
+        <div className={cn('mb-6 flex items-center gap-2.5', !editor && 'px-2')}>
           <Logo size={30} />
-          <span className="text-[17px] font-semibold tracking-tight text-fg">Framelet</span>
+          {!editor && (
+            <span className="text-[17px] font-semibold tracking-tight text-fg">Framelet</span>
+          )}
         </div>
-        <nav aria-label="Primary" className="flex flex-col gap-1">
+        <nav aria-label="Primary" className={cn('flex flex-col gap-1', editor && 'items-center')}>
           {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
             const active = id === view;
             return (
@@ -47,30 +57,38 @@ export function AppShell({ view, onNavigate, children, wide = false }: AppShellP
                 key={id}
                 type="button"
                 aria-current={active ? 'page' : undefined}
+                aria-label={editor ? label : undefined}
+                title={editor ? label : undefined}
                 onClick={() => onNavigate(id)}
                 className={cn(
-                  'flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150',
+                  'flex h-10 items-center gap-3 rounded-lg text-sm font-medium transition-colors duration-150',
+                  editor ? 'w-10 justify-center' : 'px-3',
                   active
                     ? 'bg-accent-soft text-accent-fg'
                     : 'text-fg-muted hover:bg-surface-3 hover:text-fg',
                 )}
               >
                 <Icon className="size-[18px]" aria-hidden="true" />
-                {label}
+                {!editor && label}
               </button>
             );
           })}
         </nav>
-        <p className="mt-auto px-2 text-xs text-fg-subtle">Offline. No account. Yours.</p>
+        {!editor && (
+          <p className="mt-auto px-2 text-xs text-fg-subtle">Offline. No account. Yours.</p>
+        )}
       </aside>
       <main
         ref={mainRef}
         tabIndex={-1}
-        className="min-w-0 flex-1 overflow-y-auto bg-bg outline-none focus-visible:outline-none"
+        className={cn(
+          'min-w-0 flex-1 bg-bg outline-none focus-visible:outline-none',
+          editor ? 'overflow-hidden' : 'overflow-y-auto',
+        )}
       >
         <div
           key={view}
-          className={cn('view-in', wide ? 'h-full px-6 py-5' : 'mx-auto max-w-4xl px-8 py-8')}
+          className={cn('view-in', editor ? 'h-full' : 'mx-auto max-w-4xl px-8 py-8')}
         >
           {children}
         </div>

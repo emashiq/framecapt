@@ -9,6 +9,8 @@ import {
   SourceInfoSchema,
 } from './capture-schemas';
 import {
+  EditorResolveCloseRequestSchema,
+  EditorSetDirtyRequestSchema,
   FlowEndedEventSchema,
   GrabFramesEventSchema,
   OverlayConfirmRequestSchema,
@@ -120,6 +122,16 @@ export const ipcContract = {
     response: z.void(),
     roles: ['main'],
   },
+  'editor:setDirty': {
+    request: EditorSetDirtyRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  'editor:resolveClose': {
+    request: EditorResolveCloseRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
   'shell:showItemInFolder': {
     request: ShowItemInFolderRequestSchema,
     response: z.void(),
@@ -188,6 +200,8 @@ export const ipcEvents = {
   'app:themeChanged': z.object({ dark: z.boolean() }),
   'shot:ready': ShotReadyEventSchema,
   'capture:flowEnded': FlowEndedEventSchema,
+  /** The main window was asked to close while the editor has unsaved work. */
+  'app:confirmClose': z.object({}),
   'overlay:clearSelection': z.object({}),
   'worker:grabFrames': GrabFramesEventSchema,
 } as const satisfies Record<string, z.ZodType>;

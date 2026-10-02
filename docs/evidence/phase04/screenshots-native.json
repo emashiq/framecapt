@@ -1,0 +1,452 @@
+{
+  "date": "2026-10-02T08:59:43.373Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300 x64",
+    "cpu": "AMD Ryzen 7 7700 8-Core Processor",
+    "electron": "44.5.1"
+  },
+  "displays": [
+    {
+      "id": "3590684614",
+      "bounds": {
+        "x": 3440,
+        "y": 0,
+        "width": 2560,
+        "height": 1440
+      },
+      "scaleFactor": 1,
+      "physicalSize": {
+        "width": 2560,
+        "height": 1440
+      },
+      "isPrimary": false
+    },
+    {
+      "id": "111732923",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      },
+      "scaleFactor": 1,
+      "physicalSize": {
+        "width": 3440,
+        "height": 1440
+      },
+      "isPrimary": true
+    }
+  ],
+  "timingsMs": {
+    "screenPickOverlaysMs_3590684614": 493,
+    "screenPickToResultMs_3590684614": 1529,
+    "screenPickOverlaysMs_111732923": 502,
+    "screenPickToResultMs_111732923": 1526,
+    "regionOverlaysMs_3590684614": 1095,
+    "regionConfirmToResultMs_3590684614": 68,
+    "regionOverlaysMs_111732923": 1062,
+    "regionConfirmToResultMs_111732923": 86,
+    "windowCaptureMs": 2516
+  },
+  "overlayBoundsPickDisplay": [
+    {
+      "display": {
+        "x": 3440,
+        "y": 0,
+        "width": 2560,
+        "height": 1440
+      },
+      "overlay": {
+        "x": 3440,
+        "y": 0,
+        "width": 2560,
+        "height": 1440
+      }
+    },
+    {
+      "display": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      },
+      "overlay": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      }
+    }
+  ],
+  "clipboardSize": {
+    "width": 2560,
+    "height": 1440
+  },
+  "screenPick": [
+    {
+      "displayId": "3590684614",
+      "physical": {
+        "width": 2560,
+        "height": 1440
+      },
+      "exported": {
+        "width": 2560,
+        "height": 1440
+      },
+      "equal": true,
+      "colorWindowBounds": {
+        "x": 3640,
+        "y": 150,
+        "width": 400,
+        "height": 300
+      },
+      "magentaFractionInWindowRect": 1,
+      "exactEdges": {
+        "label": "screen 3590684614",
+        "probes": 40,
+        "mismatches": 0,
+        "tolerance": 0
+      },
+      "evidence": "docs/evidence/phase04/screen-3590684614.png"
+    },
+    {
+      "displayId": "111732923",
+      "physical": {
+        "width": 3440,
+        "height": 1440
+      },
+      "exported": {
+        "width": 3440,
+        "height": 1440
+      },
+      "equal": true,
+      "colorWindowBounds": {
+        "x": 200,
+        "y": 150,
+        "width": 400,
+        "height": 300
+      },
+      "magentaFractionInWindowRect": 1,
+      "exactEdges": {
+        "label": "screen 111732923",
+        "probes": 40,
+        "mismatches": 0,
+        "tolerance": 0
+      },
+      "evidence": "docs/evidence/phase04/screen-111732923.png"
+    }
+  ],
+  "overlayBoundsRegion": [
+    {
+      "display": {
+        "x": 3440,
+        "y": 0,
+        "width": 2560,
+        "height": 1440
+      },
+      "matched": true
+    },
+    {
+      "display": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      },
+      "matched": true
+    }
+  ],
+  "regionFidelity": [
+    {
+      "displayId": "3590684614",
+      "scaleFactor": 1,
+      "colorWindowBounds": {
+        "x": 3640,
+        "y": 150,
+        "width": 400,
+        "height": 300
+      },
+      "exact": {
+        "dragLocalDip": [
+          200,
+          150,
+          400,
+          300
+        ],
+        "exportedSize": {
+          "width": 400,
+          "height": 300
+        },
+        "magentaFraction": 1
+      },
+      "expanded": {
+        "dragLocalDip": [
+          180,
+          130,
+          440,
+          340
+        ],
+        "exportedSize": {
+          "width": 440,
+          "height": 340
+        },
+        "insetExactly20px": true,
+        "exactEdges": {
+          "label": "region 3590684614",
+          "probes": 40,
+          "mismatches": 0,
+          "tolerance": 0
+        },
+        "innerMagentaFraction": 1
+      },
+      "evidence": [
+        "docs/evidence/phase04/region-exact-3590684614.png",
+        "docs/evidence/phase04/region-expanded-3590684614.png"
+      ],
+      "pixelRatio": 1
+    },
+    {
+      "displayId": "111732923",
+      "scaleFactor": 1,
+      "colorWindowBounds": {
+        "x": 200,
+        "y": 150,
+        "width": 400,
+        "height": 300
+      },
+      "exact": {
+        "dragLocalDip": [
+          200,
+          150,
+          400,
+          300
+        ],
+        "exportedSize": {
+          "width": 400,
+          "height": 300
+        },
+        "magentaFraction": 1
+      },
+      "expanded": {
+        "dragLocalDip": [
+          180,
+          130,
+          440,
+          340
+        ],
+        "exportedSize": {
+          "width": 440,
+          "height": 340
+        },
+        "insetExactly20px": true,
+        "exactEdges": {
+          "label": "region 111732923",
+          "probes": 40,
+          "mismatches": 0,
+          "tolerance": 0
+        },
+        "innerMagentaFraction": 1
+      },
+      "evidence": [
+        "docs/evidence/phase04/region-exact-111732923.png",
+        "docs/evidence/phase04/region-expanded-111732923.png"
+      ],
+      "pixelRatio": 1
+    }
+  ],
+  "edgeExactness": [
+    {
+      "label": "screen 3590684614",
+      "probes": 40,
+      "mismatches": 0,
+      "tolerance": 0
+    },
+    {
+      "label": "screen 111732923",
+      "probes": 40,
+      "mismatches": 0,
+      "tolerance": 0
+    },
+    {
+      "label": "region 3590684614",
+      "probes": 40,
+      "mismatches": 0,
+      "tolerance": 0
+    },
+    {
+      "label": "region 111732923",
+      "probes": 40,
+      "mismatches": 0,
+      "tolerance": 0
+    }
+  ],
+  "overlayExclusion": {
+    "displayId": "111732923",
+    "hintPillBox": {
+      "x": 1533.1875,
+      "y": 24,
+      "width": 373.625,
+      "height": 35.328125
+    },
+    "selection": {
+      "from": [
+        1420,
+        8
+      ],
+      "to": [
+        2020,
+        160
+      ]
+    },
+    "exportedSize": {
+      "width": 600,
+      "height": 152
+    },
+    "magentaFraction": 1,
+    "note": "The output is the frozen frame crop; the 45% dim, selection border, handles, pill and action bar are DOM drawn over it and never part of it."
+  },
+  "regionClampedToDisplay": {
+    "displayId": "3590684614",
+    "size": {
+      "width": 2560,
+      "height": 1440
+    }
+  },
+  "windowCapture": {
+    "requestedContentSize": {
+      "width": 640,
+      "height": 400
+    },
+    "windowBoundsOuterDip": {
+      "width": 656,
+      "height": 439
+    },
+    "windowContentBoundsDip": {
+      "width": 640,
+      "height": 400
+    },
+    "capturedSize": {
+      "width": 642,
+      "height": 432
+    },
+    "capturedEqualsContentSize": false,
+    "capturedEqualsOuterBounds": false,
+    "frameAndTitleBarIncluded": true,
+    "centerMagentaFraction": 1,
+    "captureMs": 2516,
+    "evidence": "docs/evidence/phase04/window-fixture.png"
+  },
+  "minimizedWindow": {
+    "listedWhileMinimized": false,
+    "outcome": "not listed by desktopCapturer while minimized, so it cannot be picked"
+  },
+  "vanishedWindow": {
+    "code": "NOT_FOUND"
+  },
+  "cancel": {
+    "baselineWindows": 2,
+    "afterEachCancel": 2,
+    "shotsDirectoriesBefore": 0,
+    "shotsDirectoriesAfter": 0,
+    "paths": [
+      "Escape",
+      "Cancel button",
+      "right click",
+      "Escape in screen picker"
+    ]
+  },
+  "logLines": 0,
+  "capturePaths": {
+    "freezeFrameAllScreensExact": 9,
+    "freezeFramePartialOrFallback": 0,
+    "screenExactDesktopCapturer": 2,
+    "screenFellBackToVideoFrame": 0,
+    "windowExactThumbnail": 0,
+    "windowVideoFrameSizeMismatch": 1,
+    "windowPath": [
+      "[info] Screenshot path: window from the getDisplayMedia frame 642x432 (thumbnail 642x430 is not that size)"
+    ],
+    "sample": [
+      "[info] Screenshot path: screen exact (desktopCapturer), 381 ms",
+      "[info] Screenshot path: screen exact (desktopCapturer), 388 ms",
+      "[info] Freeze-frame: 2/2 screens exact (desktopCapturer) in 418 ms",
+      "[info] Freeze-frame: 2/2 screens exact (desktopCapturer) in 374 ms",
+      "[info] Freeze-frame: 2/2 screens exact (desktopCapturer) in 347 ms",
+      "[info] Freeze-frame: 2/2 screens exact (desktopCapturer) in 358 ms"
+    ],
+    "selectionReady": [
+      "[info] Selection ready (pick-display): hide 244 ms, grab 0 ms",
+      "[info] Selection visible (pick-display): first overlay 271 ms after the request",
+      "[info] Selection visible (pick-display): last overlay 272 ms after the request",
+      "[info] Selection ready (pick-display): hide 240 ms, grab 0 ms",
+      "[info] Selection visible (pick-display): first overlay 268 ms after the request",
+      "[info] Selection visible (pick-display): last overlay 269 ms after the request",
+      "[info] Selection ready (region): hide 262 ms, grab 418 ms",
+      "[info] Selection visible (region): first overlay 785 ms after the request",
+      "[info] Selection visible (region): last overlay 786 ms after the request",
+      "[info] Selection ready (region): hide 244 ms, grab 374 ms",
+      "[info] Selection visible (region): first overlay 700 ms after the request",
+      "[info] Selection visible (region): last overlay 701 ms after the request",
+      "[info] Selection ready (region): hide 252 ms, grab 348 ms",
+      "[info] Selection visible (region): first overlay 668 ms after the request",
+      "[info] Selection visible (region): last overlay 698 ms after the request",
+      "[info] Selection ready (region): hide 254 ms, grab 359 ms",
+      "[info] Selection visible (region): first overlay 685 ms after the request",
+      "[info] Selection visible (region): last overlay 715 ms after the request",
+      "[info] Selection ready (region): hide 239 ms, grab 376 ms",
+      "[info] Selection visible (region): first overlay 703 ms after the request",
+      "[info] Selection visible (region): last overlay 715 ms after the request",
+      "[info] Selection ready (region): hide 248 ms, grab 417 ms",
+      "[info] Selection visible (region): first overlay 752 ms after the request",
+      "[info] Selection visible (region): last overlay 782 ms after the request",
+      "[info] Selection ready (region): hide 258 ms, grab 331 ms",
+      "[info] Selection visible (region): first overlay 683 ms after the request",
+      "[info] Selection visible (region): last overlay 684 ms after the request",
+      "[info] Selection ready (region): hide 249 ms, grab 342 ms",
+      "[info] Selection visible (region): first overlay 685 ms after the request",
+      "[info] Selection visible (region): last overlay 699 ms after the request",
+      "[info] Selection ready (region): hide 252 ms, grab 351 ms",
+      "[info] Selection visible (region): first overlay 686 ms after the request",
+      "[info] Selection visible (region): last overlay 698 ms after the request",
+      "[info] Selection ready (pick-display): hide 240 ms, grab 0 ms",
+      "[info] Selection visible (pick-display): first overlay 269 ms after the request",
+      "[info] Selection visible (pick-display): last overlay 282 ms after the request"
+    ]
+  },
+  "regionClickToOverlays": {
+    "goalMs": 800,
+    "phase03BeforeMs": {
+      "111732923": 1961,
+      "3590684614": 951
+    },
+    "afterMs": {
+      "111732923": 1062,
+      "3590684614": 1095
+    },
+    "measuredBy": "Playwright: Region button click until the overlay UI of every display has painted",
+    "mainMeasuredMs": {
+      "firstOverlay": [
+        785,
+        700,
+        668,
+        685,
+        703,
+        752,
+        683,
+        685,
+        686
+      ],
+      "lastOverlay": [
+        786,
+        701,
+        698,
+        715,
+        715,
+        782,
+        684,
+        699,
+        698
+      ]
+    }
+  }
+}

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Kbd } from '../../components/ui/Kbd';
 import { cn } from '../../lib/cn';
+import { bgraToRgba } from '../../../shared/pixels';
 import { overlayRectToFramePixels, normalizeDragRect, type Point } from '../../../shared/geometry';
 import type { Rect } from '../../../shared/rect';
 import {
@@ -53,11 +54,9 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
   const noticeTimer = useRef<number | undefined>(undefined);
   const submitting = useRef(false);
 
-  const imageUrl = useMemo(
-    () => (init.image ? URL.createObjectURL(new Blob([init.image], { type: 'image/png' })) : ''),
-    [init.image],
-  );
-  useEffect(() => () => URL.revokeObjectURL(imageUrl), [imageUrl]);
+  // The frozen frame is decoded off-screen and painted onto a canvas. (An <img> + decode() in a
+  // window that is still hidden was observed to wait a full second before it resolved.)
+  const frameRef = useRef<HTMLCanvasElement>(null);
 
   const showNotice = useCallback((text: string) => {
     setNotice(text);
@@ -126,6 +125,20 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
 
   // Tell main the window is painted so it can show it (no black flash before the frozen frame).
   const [imageReady, setImageReady] = useState(false);
+  useEffect(() => {
+    const canvas = frameRef.current;
+    if (!init.image || !canvas) return;
+    const { width, height } = init.frameSize;
+    if (init.image.byteLength === width * height * 4) {
+      canvas.width = width;
+      canvas.height = height;
+      canvas
+        .getContext('2d')
+        ?.putImageData(new ImageData(bgraToRgba(init.image), width, height), 0, 0);
+    }
+    setImageReady(true);
+  }, [init.image, init.frameSize]);
+
   useEffect(() => {
     if (!imageReady) return;
     requestAnimationFrame(() =>
@@ -222,17 +235,11 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
         else cancel();
       }}
     >
-      <img
-        src={imageUrl}
-        alt=""
-        draggable={false}
+      <canvas
+        ref={frameRef}
+        aria-hidden="true"
+        data-testid="frozen-frame"
         className="pointer-events-none absolute inset-0 size-full"
-        onLoad={(event) => {
-          void event.currentTarget.decode().then(
-            () => setImageReady(true),
-            () => setImageReady(true),
-          );
-        }}
       />
 
       {selection ? (
