@@ -4,6 +4,13 @@ All notable changes to FrameCapt are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-10-03
+
+Privacy fix release ([release notes](docs/release-notes-0.1.0-alpha.3.md)).
+
+- **Fixed (privacy):** Chromium's built-in spellchecker could download its English dictionary from Google (`redirector.gvt1.com`) on Linux, although FrameCapt never checks spelling. The spellchecker is now switched off completely on every platform (`--disable-spell-checking`, no languages), enforced by a unit test. Affected: the Linux packages of 0.1.0-alpha.2. No connection was measured on Windows.
+- Tests and CI: GitHub Actions now runs the full suite on Windows and Linux (E2E, Linux package install smoke test); recorder start/stop races covered by new regression tests (no product bug found).
+
 ## [0.1.0-alpha.2] - 2026-10-03
 
 Second alpha pre-release: adds Linux packages ([release notes](docs/release-notes-0.1.0-alpha.2.md)).
