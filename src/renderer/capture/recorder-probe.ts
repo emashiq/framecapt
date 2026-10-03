@@ -1,4 +1,8 @@
-import { pickDefaultFormat, RECORDER_CANDIDATES } from '../../shared/recorder-formats';
+import {
+  DEFAULT_PREFERENCE,
+  pickDefaultFormat,
+  RECORDER_CANDIDATES,
+} from '../../shared/recorder-formats';
 
 export interface RecorderFormats {
   /** MediaRecorder.isTypeSupported() for every candidate, in candidate order. */
@@ -13,5 +17,9 @@ export function detectRecorderFormats(): RecorderFormats {
   for (const mime of RECORDER_CANDIDATES) {
     supported[mime] = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mime);
   }
-  return { supported, defaultMime: pickDefaultFormat(supported) };
+  // E2E builds only: a hosted CI runner (one core, no GPU) cannot encode 1080p VP9 in real time.
+  const preference = __FRAMECAPT_E2E__
+    ? ['video/webm;codecs=vp8,opus', ...DEFAULT_PREFERENCE]
+    : DEFAULT_PREFERENCE;
+  return { supported, defaultMime: pickDefaultFormat(supported, preference) };
 }

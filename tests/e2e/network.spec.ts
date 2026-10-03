@@ -31,7 +31,29 @@ interface TcpRow {
   remotePort: number;
 }
 
+/** Linux: `ss -tnpH` lines, e.g. `ESTAB 0 0 127.0.0.1:41234 [::1]:9222 users:(("electron",pid=7,fd=3))`. */
+function tcpConnectionsLinux(pids: number[]): TcpRow[] {
+  const result = spawnSync('ss', ['-tnpH'], { shell: false, encoding: 'utf8' });
+  const rows: TcpRow[] = [];
+  for (const line of (result.stdout ?? '').split('\n')) {
+    const fields = line.trim().split(/\s+/);
+    const pid = Number(/pid=(\d+)/.exec(line)?.[1]);
+    const peer = fields[4] ?? '';
+    if (!pids.includes(pid) || !peer) continue;
+    const cut = peer.lastIndexOf(':');
+    rows.push({
+      pid,
+      state: fields[0] ?? '',
+      local: fields[3] ?? '',
+      remote: peer.slice(0, cut).replace(/^\[|\]$/g, ''),
+      remotePort: Number(peer.slice(cut + 1)),
+    });
+  }
+  return rows;
+}
+
 function tcpConnections(pids: number[]): TcpRow[] {
+  if (process.platform !== 'win32') return tcpConnectionsLinux(pids);
   const script = `
     $ids = @(${pids.join(',')})
     Get-NetTCPConnection -ErrorAction SilentlyContinue |
