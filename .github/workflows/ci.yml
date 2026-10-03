@@ -61,6 +61,11 @@ jobs:
         with:
           path: vendor/ffmpeg
           key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
+      # The hosted runner has one core: Defender's real-time scan of every recorded chunk and every
+      # Electron start competes with the recording flows. Test-only: this runner is thrown away.
+      - name: Turn off real-time antivirus scanning (disposable runner)
+        shell: pwsh
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
       # package:e2e builds the mock-provider app, then Playwright drives it. Windows open on the
       # runner's desktop session; real capture is not attempted (mock provider).
       - run: npm run test:e2e

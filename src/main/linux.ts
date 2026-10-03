@@ -27,6 +27,7 @@ export function applyLinuxSwitches(
   // the CI network test); FrameCapt makes no request of its own, so background networking is off.
   commandLine.appendSwitch('disable-background-networking');
   commandLine.appendSwitch('disable-component-update');
+  commandLine.appendSwitch('disable-spell-checking');
 }
 
 /** `~/Pictures` / `~/Videos` when Electron cannot resolve the XDG user directory. */

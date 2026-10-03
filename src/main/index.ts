@@ -109,6 +109,9 @@ function start(): void {
     installCsp(session.defaultSession, getOriginConfig());
     installPermissionHandlers(session.defaultSession, getOriginConfig);
     installNetworkBlocker(session.defaultSession, getOriginConfig);
+    // Linux Chromium downloads a Hunspell dictionary from Google for the session's spellchecker even
+    // when no window checks spelling; FrameCapt has no text input that needs it and makes no requests.
+    session.defaultSession.setSpellCheckerEnabled(false);
     // Unconfigured (empty feed URL) builds never touch autoUpdater: no update code, no network.
     const updates = new UpdateService({
       feedUrl: __FRAMECAPT_UPDATE_URL__,
