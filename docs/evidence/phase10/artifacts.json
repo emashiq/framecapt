@@ -1,7 +1,7 @@
 {
-  "date": "2026-10-02T19:56:12.551Z",
+  "date": "2026-10-03T05:24:21.373Z",
   "app": {
-    "name": "Framelet",
+    "name": "FrameCapt",
     "version": "0.1.0"
   },
   "electron": "44.5.1",
@@ -12,25 +12,25 @@
   "signing": "UNSIGNED: no certificate was configured; Windows SmartScreen will warn",
   "artifacts": [
     {
-      "path": "out/make/squirrel.windows/x64/Framelet-0.1.0-full.nupkg",
-      "bytes": 228412674,
-      "sha256": "4311d0672b129f6cf01c34e88dedc78c5dd80ea18a00cbd999803233f69a2c3f"
+      "path": "out/make/squirrel.windows/x64/FrameCapt-0.1.0-full.nupkg",
+      "bytes": 228766988,
+      "sha256": "60baf7eb564584ce3c361a369f45371e09107a16c12dac49507642bec9fd3f84"
     },
     {
-      "path": "out/make/squirrel.windows/x64/Framelet-Setup-0.1.0.exe",
-      "bytes": 229001728,
-      "sha256": "d7b52327b5c7017850dc655a0ac9b108ded8f78176e1ffc4f7f0330c1268bce9",
+      "path": "out/make/squirrel.windows/x64/FrameCapt-Setup-0.1.0.exe",
+      "bytes": 229965312,
+      "sha256": "75def59a566a751113b7338b6dd4dfe59b4dfca7d0a044d78c59658eadd799e9",
       "authenticode": "NotSigned"
     },
     {
       "path": "out/make/squirrel.windows/x64/RELEASES",
-      "bytes": 79,
-      "sha256": "12243c5d957b809a34c881c5402dcc30618380436f583158b6d0a1dba447b5ab"
+      "bytes": 80,
+      "sha256": "0382926b5bcc4da62666d97a52b580875f3e4793dc6f279a903d360a04df4616"
     },
     {
-      "path": "out/make/zip/win32/x64/Framelet-win32-x64-0.1.0.zip",
-      "bytes": 236143000,
-      "sha256": "55d2b87899bc6647fb2edc1bc5ab777bab21ee032f205fa58b570d298ff0cf4b"
+      "path": "out/make/zip/win32/x64/FrameCapt-win32-x64-0.1.0.zip",
+      "bytes": 236328401,
+      "sha256": "7cc2e5f9e57f5a7e678ec29dce52e0f2f8570df9f22f5de7eca9c54a2f235c90"
     }
   ]
 }

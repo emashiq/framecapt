@@ -75,14 +75,14 @@ Not available, so never verified: Windows 10, arm64, mixed-DPI, negative-origin 
 | `npm run smoke:installed`                                     | PASS, all checks ([evidence](evidence/phase10/installed-smoke.json))                                                                                       |
 | Clean clone → `npm ci` → lint/typecheck/test                  | PASS ([Clean-clone check](#clean-clone-check))                                                                                                             |
 
-## Artifacts (UNSIGNED; `Get-AuthenticodeSignature` = NotSigned)
+## Artifacts (UNSIGNED; `Get-AuthenticodeSignature` = NotSigned; FrameCapt build with owner logo, 2026-10-03, `smoke:installed` 47/47 PASS)
 
 | File                                                       | Bytes       | SHA-256                                                            |
 | ---------------------------------------------------------- | ----------- | ------------------------------------------------------------------ |
-| `out/make/squirrel.windows/x64/FrameCapt-Setup-0.1.0.exe`  | 229,001,728 | `d7b52327b5c7017850dc655a0ac9b108ded8f78176e1ffc4f7f0330c1268bce9` |
-| `out/make/squirrel.windows/x64/FrameCapt-0.1.0-full.nupkg` | 228,412,674 | `4311d0672b129f6cf01c34e88dedc78c5dd80ea18a00cbd999803233f69a2c3f` |
-| `out/make/squirrel.windows/x64/RELEASES`                   | 79          | `12243c5d957b809a34c881c5402dcc30618380436f583158b6d0a1dba447b5ab` |
-| `out/make/zip/win32/x64/FrameCapt-win32-x64-0.1.0.zip`     | 236,143,000 | `55d2b87899bc6647fb2edc1bc5ab777bab21ee032f205fa58b570d298ff0cf4b` |
+| `out/make/squirrel.windows/x64/FrameCapt-Setup-0.1.0.exe`  | 229,965,312 | `75def59a566a751113b7338b6dd4dfe59b4dfca7d0a044d78c59658eadd799e9` |
+| `out/make/squirrel.windows/x64/FrameCapt-0.1.0-full.nupkg` | 228,766,988 | `60baf7eb564584ce3c361a369f45371e09107a16c12dac49507642bec9fd3f84` |
+| `out/make/squirrel.windows/x64/RELEASES`                   | 80          | `0382926b5bcc4da62666d97a52b580875f3e4793dc6f279a903d360a04df4616` |
+| `out/make/zip/win32/x64/FrameCapt-win32-x64-0.1.0.zip`     | 236,328,401 | `7cc2e5f9e57f5a7e678ec29dce52e0f2f8570df9f22f5de7eca9c54a2f235c90` |
 
 Builds are not bit-for-bit reproducible; publish the checksums of the files you actually release ([evidence/phase10/artifacts.json](evidence/phase10/artifacts.json)).
 
