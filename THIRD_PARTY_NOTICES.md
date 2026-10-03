@@ -32,6 +32,10 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## 2a. Linux x64 build (experimental): FFmpeg and the AppImage runtime
+
+The experimental Linux packages (2026-10-03) bundle, instead of the Windows build below: **FFmpeg `n9.0.2-22-g46d8f462ee-20261001`**, the BtbN `linux64-gpl` static build (GPL-3.0-or-later: `--enable-gpl --enable-version3`, no `--enable-nonfree`; downloaded from https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-01-13-06/ffmpeg-n9.0.2-22-g46d8f462ee-linux64-gpl-9.0.tar.xz, SHA-256 `a6170faecf757381ad0338d7a6ba26e97c2ebe2b9c1568633421e15d1ed436a9`, source commit `46d8f462ee` of the `release/9.0` branch, build scripts https://github.com/BtbN/FFmpeg-Builds; full options in `resources/ffmpeg/linux-x64/PROVENANCE.json`), with the same Corresponding Source duty as below (OWNER-TASKS L1); and, in the AppImage only, the **AppImage type2-runtime** release `20251108` (MIT, https://github.com/AppImage/type2-runtime, SHA-256 `2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d`). The packaging tools (`@electron-forge/maker-deb`, `@reforged/maker-appimage`) are development dependencies and are not shipped.
+
 ## 2. FFmpeg (bundled program, GPL-3.0-or-later)
 
 | Item                                | Value                                                                                                                                                                                                                                                                                                                                                                                                                                   |

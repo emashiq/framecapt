@@ -3,6 +3,7 @@ import { isAppUrl, type AppOriginConfig } from '../app-origin';
 import { handle } from '../ipc';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
+import { platformCapabilities } from '../../shared/platform';
 import { GrantStore } from './grants';
 import type { CaptureProvider } from './types';
 
@@ -42,7 +43,11 @@ export function installCaptureAuthorization(
 
       const { grant } = result;
       const video = { id: grant.sourceId, name: grant.sourceName };
-      const loopback = grant.systemAudio && request.audioRequested;
+      // `audio: 'loopback'` exists on Windows only: never promise system audio elsewhere.
+      const loopback =
+        grant.systemAudio &&
+        request.audioRequested &&
+        platformCapabilities(process.platform).systemAudio;
       log.info(
         `Display capture granted: ${grant.sourceId.split(':')[0]} source, ` +
           `systemAudio=${loopback ? 'loopback' : 'off'}, userGesture=${request.userGesture}`,

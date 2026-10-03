@@ -4,7 +4,13 @@ import path from 'node:path';
 import { z } from 'zod';
 
 /** Directory of the bundled build below `vendor/ffmpeg` (dev) or `resources/ffmpeg` (packaged). */
-export const FFMPEG_PLATFORM_DIR = 'win32-x64';
+export function ffmpegPlatformDir(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+): string {
+  return `${platform}-${arch}`;
+}
+
 export const STDERR_TAIL_BYTES = 64 * 1024;
 
 export type FfmpegErrorCode =
@@ -37,17 +43,23 @@ export interface FfmpegPaths {
 
 /**
  * The absolute paths of the bundled ffmpeg and ffprobe. Never PATH, never anything a renderer
- * said. Packaged: `<resources>/ffmpeg/win32-x64` (Forge `extraResource` copies the `vendor/ffmpeg`
- * folder by name); development: `<repo>/vendor/ffmpeg/win32-x64`.
+ * said. Packaged: `<resources>/ffmpeg/<platform>-<arch>` (Forge `extraResource` copies the `vendor/ffmpeg`
+ * folder by name); development: `<repo>/vendor/ffmpeg/<platform>-<arch>` (`.exe` names on Windows only).
  */
 export function resolveFfmpeg(
   location: FfmpegLocation,
   exists: (file: string) => boolean = fs.existsSync,
+  target: { platform: NodeJS.Platform; arch: string } = process,
 ): FfmpegPaths {
+  const platformDir = ffmpegPlatformDir(target.platform, target.arch);
+  const suffix = target.platform === 'win32' ? '.exe' : '';
   const dir = location.isPackaged
-    ? path.join(location.resourcesPath, 'ffmpeg', FFMPEG_PLATFORM_DIR)
-    : path.join(location.appPath, 'vendor', 'ffmpeg', FFMPEG_PLATFORM_DIR);
-  const paths = { ffmpeg: path.join(dir, 'ffmpeg.exe'), ffprobe: path.join(dir, 'ffprobe.exe') };
+    ? path.join(location.resourcesPath, 'ffmpeg', platformDir)
+    : path.join(location.appPath, 'vendor', 'ffmpeg', platformDir);
+  const paths = {
+    ffmpeg: path.join(dir, `ffmpeg${suffix}`),
+    ffprobe: path.join(dir, `ffprobe${suffix}`),
+  };
   if (!exists(paths.ffmpeg) || !exists(paths.ffprobe)) {
     throw new FfmpegError(
       'FFMPEG_MISSING',

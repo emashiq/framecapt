@@ -1,7 +1,11 @@
-import type { ForgeConfig } from '@electron-forge/shared-types';
+import type { ForgeConfig, ForgeConfigMaker } from '@electron-forge/shared-types';
+import fs from 'node:fs';
+import path from 'node:path';
+import { MakerDeb } from '@electron-forge/maker-deb';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { MakerAppImage } from '@reforged/maker-appimage';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import packageJson from './package.json';
@@ -18,6 +22,10 @@ const BUILD_VERSION = `${CORE_VERSION}.${Number(PRERELEASE.match(/(\d+)$/)?.[1] 
 // confirm or replace before any public release. See docs/release-process.md ("Owner actions").
 // ---------------------------------------------------------------------------------------------
 const PRODUCT_NAME = 'FrameCapt'; // PROVISIONAL
+// Linux: lower-case executable and package name (/usr/bin/framecapt), the usual convention.
+const LINUX_NAME = 'framecapt';
+const IS_LINUX = process.platform === 'linux';
+const HOMEPAGE = 'https://github.com/emashiq/framecapt'; // PROVISIONAL
 const PUBLISHER = 'FrameCapt contributors'; // PROVISIONAL
 const DESCRIPTION = 'FrameCapt - an offline, Windows-first screenshot and screen recording app.';
 
@@ -42,16 +50,37 @@ if (!windowsSign && (certificateFile || certificatePassword)) {
     'Code signing is half configured: set both WINDOWS_CERTIFICATE_FILE and WINDOWS_CERTIFICATE_PASSWORD, or neither.',
   );
 }
-console.log(
-  windowsSign
-    ? `[framecapt] Windows code signing: ENABLED (certificate from WINDOWS_CERTIFICATE_FILE)`
-    : '[framecapt] Windows code signing: DISABLED - this build is UNSIGNED (set WINDOWS_CERTIFICATE_FILE and WINDOWS_CERTIFICATE_PASSWORD to sign)',
-);
+if (!IS_LINUX) {
+  console.log(
+    windowsSign
+      ? `[framecapt] Windows code signing: ENABLED (certificate from WINDOWS_CERTIFICATE_FILE)`
+      : '[framecapt] Windows code signing: DISABLED - this build is UNSIGNED (set WINDOWS_CERTIFICATE_FILE and WINDOWS_CERTIFICATE_PASSWORD to sign)',
+  );
+}
+
+/**
+ * Copies the FFmpeg build of the target platform (`<vendor>/<platform>-<arch>`) to
+ * `<package>/resources/ffmpeg/<platform>-<arch>`. `buildPath` is `<package>/resources/app`.
+ */
+export function copyFfmpegResource(
+  vendorRoot: string,
+  buildPath: string,
+  platform: string,
+  arch: string,
+): void {
+  const source = path.join(vendorRoot, `${platform}-${arch}`);
+  if (!fs.existsSync(source)) {
+    throw new Error(`FFmpeg for ${platform}-${arch} is missing: run "npm run fetch:ffmpeg".`);
+  }
+  fs.cpSync(source, path.join(path.dirname(buildPath), 'ffmpeg', `${platform}-${arch}`), {
+    recursive: true,
+  });
+}
 
 const config: ForgeConfig = {
   packagerConfig: {
     name: PRODUCT_NAME,
-    executableName: PRODUCT_NAME,
+    executableName: IS_LINUX ? LINUX_NAME : PRODUCT_NAME,
     // PROVISIONAL app id - owner must confirm before publication
     appBundleId: 'com.framecapt.app',
     buildVersion: BUILD_VERSION,
@@ -66,22 +95,35 @@ const config: ForgeConfig = {
       'requested-execution-level': 'asInvoker',
     },
     asar: true,
-    // The pinned FFmpeg build (npm run fetch:ffmpeg, run by the prepackage/premake/prestart hooks).
-    // extraResource copies the folder by its name: <resources>/ffmpeg/win32-x64/{ffmpeg,ffprobe}.exe.
-    // LICENSE (GPL-3.0) and THIRD_PARTY_NOTICES.md ship next to Electron's own license files.
-    extraResource: ['vendor/ffmpeg', 'LICENSE', 'THIRD_PARTY_NOTICES.md'],
+    // LICENSE (GPL-3.0) and THIRD_PARTY_NOTICES.md ship next to Electron's own license files. The
+    // window icon PNG is Linux-only (Windows embeds the icon in the exe). The pinned FFmpeg build
+    // is copied by the packageAfterCopy hook below (only the build of the platform being packaged).
+    extraResource: [
+      'LICENSE',
+      'THIRD_PARTY_NOTICES.md',
+      ...(IS_LINUX ? ['assets/brand/framecapt-logo-256.png'] : []),
+    ],
     ...(windowsSign && { windowsSign }),
-    // Pinned Electron zip checksum (from the official v44.5.1 SHASUMS256.txt, verified 2026-10-02).
+    // Pinned Electron zip checksum (from the official v44.5.1 release; the linux one is the GitHub release asset digest, 2026-10-03).
     // Builds are reproducible and work from the local cache without re-fetching SHASUMS256.txt.
     // Update together with the electron version in package.json.
     download: {
       checksums: {
         'electron-v44.5.1-win32-x64.zip':
           '9b382492dcfee91f8f9e92c91f7972550a1b95d2299cac72279dab33a600d7db',
+        'electron-v44.5.1-linux-x64.zip':
+          '5bcd217611d6843ececd6c9e9c1fcd1da3ab066c43d8b1a9e4b44689a1fba6f5',
       },
     },
   },
   rebuildConfig: {},
+  hooks: {
+    // The pinned FFmpeg (npm run fetch:ffmpeg, run by the prepackage/premake/prestart hooks):
+    // <resources>/ffmpeg/<platform>-<arch>/{ffmpeg,ffprobe}[.exe]. Only the folder of the target
+    // platform is shipped: no Windows .exe in a Linux package and no Linux binary in a Windows one.
+    packageAfterCopy: async (_config, buildPath, _electronVersion, platform, arch) =>
+      copyFfmpegResource(path.join(__dirname, 'vendor', 'ffmpeg'), buildPath, platform, arch),
+  },
   makers: [
     new MakerSquirrel({
       // The NuGet package id and the install folder (%LOCALAPPDATA%\FrameCapt). PROVISIONAL.
@@ -105,6 +147,36 @@ const config: ForgeConfig = {
     }),
     // Portable zip: unzip anywhere and run FrameCapt.exe (no installer, no updates, no shortcuts).
     new MakerZIP({}, ['win32']),
+    // Linux x64 (experimental): a .deb and an AppImage. Maintainer and homepage are PROVISIONAL.
+    new MakerDeb({
+      options: {
+        name: LINUX_NAME,
+        productName: PRODUCT_NAME,
+        genericName: 'Screen Capture',
+        description: DESCRIPTION,
+        categories: ['Graphics', 'Utility', 'AudioVideo'],
+        icon: 'assets/brand/framecapt-logo-512.png',
+        maintainer: PUBLISHER, // PROVISIONAL
+        homepage: HOMEPAGE, // PROVISIONAL
+        section: 'graphics',
+        bin: LINUX_NAME,
+      },
+    }),
+    // @reforged/maker-appimage 5.3.1 is typed against maker-base 6/7 (platforms: string[]); it runs
+    // under Forge 8 (verified by npm run make on Linux, docs/building-on-linux.md).
+    new MakerAppImage({
+      options: {
+        name: LINUX_NAME,
+        productName: PRODUCT_NAME,
+        genericName: 'Screen Capture',
+        categories: ['Graphics', 'Utility', 'AudioVideo'],
+        icon: 'assets/brand/framecapt-logo-512.png',
+        bin: LINUX_NAME,
+        // The pinned, SHA-256-verified runtime (npm run make fetches it): without this option the
+        // maker downloads the moving "continuous" release unchecked.
+        runtime: path.join(__dirname, 'vendor', 'appimage-runtime', 'runtime-x86_64'),
+      },
+    }) as unknown as ForgeConfigMaker,
   ],
   plugins: [
     new VitePlugin({

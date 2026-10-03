@@ -9,6 +9,7 @@
     "tests/native",
     "playwright.config.ts",
     "playwright.native.config.ts",
+    "playwright.linux.config.ts",
     "src/renderer/global.d.ts"
   ]
 }

@@ -4,6 +4,8 @@ All notable changes to FrameCapt are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+- Experimental Linux x64 build (.deb, AppImage): X11/XWayland, microphone only (no system audio), launch at login through an XDG autostart entry, pinned Linux FFmpeg 9.0.2 and AppImage runtime. Built and tested in WSL2 and on Xvfb only; unsigned. See docs/building-on-linux.md.
+
 ## [0.1.0-alpha.1] - 2026-10-03
 
 First alpha pre-release, published on GitHub with an unsigned Windows installer and portable zip ([release notes](docs/release-notes-0.1.0-alpha.1.md)). Contains everything listed under 0.1.0 below plus:

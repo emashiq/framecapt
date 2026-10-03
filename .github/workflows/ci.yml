@@ -109,3 +109,59 @@ jobs:
           path: out/make/
           retention-days: 14
           if-no-files-found: error
+
+  # Experimental Linux x64 build (ADR-036). Independent of the Windows jobs. A hosted runner has no
+  # real desktop: the suites run on Xvfb with a window manager (a real X11 server: capture works).
+  linux:
+    name: Linux (experimental) - checks, e2e, .deb + AppImage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb openbox fakeroot dpkg squashfs-tools libfuse2t64
+          # Ubuntu 24.04+ restricts unprivileged user namespaces, which Chromium's sandbox uses when
+          # the unpackaged Electron in node_modules has no setuid chrome-sandbox.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: npm ci
+      - name: Cache FFmpeg
+        uses: actions/cache@v6
+        with:
+          path: vendor/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
+      # The pinned linux FFmpeg first, so the real-ffmpeg unit tests run instead of skipping.
+      - run: npm run fetch:ffmpeg
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: bash scripts/xvfb-wm.sh npm run test:e2e
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-e2e-test-results
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+      # .deb + AppImage (the AppImage runtime is fetched pinned and SHA-256 verified by premake).
+      - run: npm run make
+      - run: npm run check:mocks
+      - run: bash scripts/xvfb-wm.sh npm run smoke:packaged
+      - run: bash scripts/xvfb-wm.sh npm run test:native:linux
+      - run: bash scripts/xvfb-wm.sh npm run smoke:linux
+      - name: Checksums
+        run: |
+          cd out/make
+          find . -type f \( -name '*.deb' -o -name '*.AppImage' \) -exec sha256sum {} + | tee SHA256SUMS.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: framecapt-linux-experimental-unsigned
+          path: out/make/
+          retention-days: 14
+          if-no-files-found: error

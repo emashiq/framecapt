@@ -18,6 +18,7 @@ import { Switch } from '../../components/ui/Switch';
 import { useExportCapabilities } from '../../history/use-export-capabilities';
 import { notify } from '../../lib/notify';
 import { useAppInfo } from '../../lib/use-app-info';
+import { usePlatformCapabilities } from '../../lib/use-platform-capabilities';
 import {
   chooseOutputDir,
   updateSettings,
@@ -261,6 +262,7 @@ export function RecordingSection({ onReset }: SectionProps) {
   const options = recordOptionsFromSettings(recording);
   const caps = useExportCapabilities();
   const mp4Unavailable = caps !== null && !caps.mp4Available;
+  const platform = usePlatformCapabilities();
   return (
     <SectionCard
       id="recording"
@@ -338,13 +340,21 @@ export function RecordingSection({ onReset }: SectionProps) {
           />
         )}
       </SettingRow>
-      <SettingRow label="System audio" description="Record everything you hear on this PC.">
+      <SettingRow
+        label="System audio"
+        description={
+          platform.systemAudio
+            ? 'Record everything you hear on this PC.'
+            : (platform.systemAudioReason ?? 'Not available on this system.')
+        }
+      >
         {({ labelledBy, describedBy }) => (
           <Switch
             aria-labelledby={labelledBy}
             aria-describedby={describedBy}
             data-testid="setting-system-audio"
-            checked={recording.systemAudio}
+            disabled={!platform.systemAudio}
+            checked={recording.systemAudio && platform.systemAudio}
             onCheckedChange={(systemAudio) => void updateSettings({ recording: { systemAudio } })}
           />
         )}

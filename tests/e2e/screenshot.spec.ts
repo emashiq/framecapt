@@ -460,8 +460,13 @@ test('copy puts a PNG on the clipboard; discard asks first when nothing was save
   await b.mouse.click(300, 300);
   await expect(page.getByTestId('editor-view')).toBeVisible();
 
+  // The clipboard API needs a focused document; a window manager (Linux) hands focus back a moment
+  // after the overlays close.
+  await (await app.browserWindow(page)).evaluate((win) => win.focus());
+  await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
   await page.getByTestId('editor-copy').click();
-  await expect(page.getByText('Copied to clipboard')).toBeVisible();
+  // Encoding a 3440x1440 image is slow without a GPU (Linux CI): more than the default 5 s.
+  await expect(page.getByText('Copied to clipboard')).toBeVisible({ timeout: 20_000 });
   const size = await app.evaluate(async ({ clipboard, nativeImage }) => {
     const items = await clipboard.read();
     const blob = await items[0]?.getType('image/png');

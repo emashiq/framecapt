@@ -576,6 +576,9 @@ test.describe('one display', () => {
     expect([...seen].sort()).toEqual(['1', '2', '3']);
     const toolbar = await toolbarPage();
     expect(pagesOf('#/countdown')).toHaveLength(0);
+    // Let the first frames arrive: a stop in the very first moments is "too short to save" (slower
+    // machines, e.g. software rendering on Linux CI, need more than the toolbar showing up).
+    await toolbar.waitForTimeout(1000);
     await toolbar.getByTestId('toolbar-stop').click();
     await finishAndWaitForResult();
     await resetToHome();
@@ -612,6 +615,8 @@ test.describe('one display', () => {
   });
 
   test('system audio that cannot be provided is a visible choice, never silence', async () => {
+    // Linux never offers system audio: the switch is disabled up front (tests/e2e/linux.spec.ts).
+    test.skip(process.platform === 'linux', 'system audio capture is Windows-only');
     await page.getByTestId('opt-system').click();
     await expect(page.getByTestId('opt-system')).toHaveAttribute('aria-checked', 'true');
     await startScreen();

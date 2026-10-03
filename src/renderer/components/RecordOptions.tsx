@@ -2,6 +2,7 @@ import { useId, type ReactNode } from 'react';
 import { Settings2 } from 'lucide-react';
 import type { RecordOptions as Options } from '../../shared/recorder-ipc';
 import type { RecordFps, RecordQuality } from '../../shared/recording';
+import { usePlatformCapabilities } from '../lib/use-platform-capabilities';
 import { useMicrophones } from '../recorder/use-microphones';
 import { MicrophoneSelect } from './MicrophoneSelect';
 import { Button } from './ui/Button';
@@ -75,6 +76,7 @@ export function RecordOptions({
   const countdownId = useId();
   const microphones = useMicrophones();
   const noMic = microphones.loaded && microphones.devices.length === 0;
+  const platform = usePlatformCapabilities();
 
   return (
     <Card padding="lg" data-testid="record-options" aria-label="Recording options" role="group">
@@ -121,13 +123,15 @@ export function RecordOptions({
         <Cell
           id={systemId}
           label="System audio"
-          hint="Everything you hear on this PC"
+          hint={
+            platform.systemAudio ? 'Everything you hear on this PC' : platform.systemAudioReason
+          }
           control={
             <Switch
               aria-labelledby={systemId}
               data-testid="opt-system"
-              checked={options.systemAudio}
-              disabled={disabled}
+              checked={options.systemAudio && platform.systemAudio}
+              disabled={disabled || !platform.systemAudio}
               onCheckedChange={(systemAudio) => onChange({ ...options, systemAudio })}
             />
           }
@@ -182,6 +186,11 @@ export function RecordOptions({
           </Cell>
         ) : null}
       </div>
+      {platform.toolbarNote ? (
+        <p className="mt-4 text-xs text-fg-muted" data-testid="record-toolbar-note">
+          {platform.toolbarNote}
+        </p>
+      ) : null}
     </Card>
   );
 }

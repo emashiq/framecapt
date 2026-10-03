@@ -8,6 +8,7 @@ import {
   type DisplayGeom,
 } from '../../shared/geometry';
 import { checkPixelRect, type Rect } from '../../shared/rect';
+import { platformCapabilities } from '../../shared/platform';
 import type {
   EngineCommand,
   EngineEvent,
@@ -301,7 +302,12 @@ export class RecorderController implements SelectionHost {
     this.ctx = {
       sessionId,
       target: request.target,
-      options: structuredClone(request.options),
+      options: {
+        ...structuredClone(request.options),
+        // No system audio where the OS has no loopback: the request is dropped up front.
+        systemAudio:
+          request.options.systemAudio && platformCapabilities(process.platform).systemAudio,
+      },
       sourceId: request.sourceId ?? '',
       sourceName: '',
       display: undefined,

@@ -49,7 +49,7 @@ function partials(): string[] {
 
 describe('mp4Args', () => {
   it('is the documented H.264 + AAC command, as an array', () => {
-    const args = mp4Args('C:/in.webm', 'C:/out.partial.mp4');
+    const args = mp4Args('/in.webm', '/out.partial.mp4');
     expect(args).toEqual([
       '-hide_banner',
       '-y',
@@ -58,7 +58,7 @@ describe('mp4Args', () => {
       '-f',
       'matroska',
       '-i',
-      'C:/in.webm',
+      '/in.webm',
       '-map',
       '0:v:0',
       '-map',
@@ -82,15 +82,15 @@ describe('mp4Args', () => {
       '-progress',
       'pipe:1',
       '-nostats',
-      'C:/out.partial.mp4',
+      '/out.partial.mp4',
     ]);
   });
 
   it('keeps awkward paths as single arguments (no shell is involved)', () => {
-    const awkward = 'C:\\Users\\A B\\"quoted" & calc.exe; -rf\\clip.webm';
-    const args = mp4Args(awkward, 'C:\\out dir\\x.partial.mp4');
+    const awkward = '/Users/A B/"quoted" & calc.exe; -rf/clip.webm';
+    const args = mp4Args(awkward, '/out dir/x.partial.mp4');
     expect(args[args.indexOf('-i') + 1]).toBe(awkward);
-    expect(args.at(-1)).toBe('C:\\out dir\\x.partial.mp4');
+    expect(args.at(-1)).toBe('/out dir/x.partial.mp4');
     expect(args.filter((arg) => arg === awkward)).toHaveLength(1);
   });
 });

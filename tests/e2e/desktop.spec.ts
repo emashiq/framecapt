@@ -55,6 +55,7 @@ async function launch(
     settings?: unknown;
     rawSettings?: string;
     env?: Record<string, string>;
+    args?: string[];
   } = {},
 ): Promise<Launched> {
   expect(
@@ -68,7 +69,7 @@ async function launch(
     fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(options.settings));
   }
   const app = await electron.launch({
-    args: ['.'],
+    args: ['.', ...(options.args ?? [])],
     cwd: projectRoot,
     env: {
       ...process.env,
@@ -923,6 +924,8 @@ test.describe('errors and devices', () => {
   test('a saved microphone that is gone is reported, not dropped', async () => {
     const { page } = await start({
       settings: { version: 1, recording: { micEnabled: true, micDeviceId: 'device-that-is-gone' } },
+      // A headless Linux box (CI under Xvfb) has no audio input at all: give Chromium a fake one.
+      ...(process.platform === 'linux' && { args: ['--use-fake-device-for-media-stream'] }),
     });
     await expect(page.getByTestId('mic-missing')).toHaveText(
       'Saved microphone not found — using default',

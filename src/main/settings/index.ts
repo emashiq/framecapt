@@ -1,5 +1,6 @@
 import { app, nativeTheme } from 'electron';
 import type { EffectiveSettings, Settings } from '../../shared/settings';
+import { defaultMediaFolders, setAutostart } from '../linux';
 import { log } from '../logger';
 import { loginItemOptions } from './login-item';
 import { resolveOutputDirs } from './output-dirs';
@@ -16,10 +17,10 @@ export function createAppSettings(store: SettingsStore): AppSettings {
   return {
     store,
     dirs: () =>
-      resolveOutputDirs(store.get(), {
-        pictures: app.getPath('pictures'),
-        videos: app.getPath('videos'),
-      }),
+      resolveOutputDirs(
+        store.get(),
+        defaultMediaFolders((name) => app.getPath(name)),
+      ),
   };
 }
 
@@ -46,13 +47,19 @@ export function watchSettings(store: SettingsStore): void {
 }
 
 export function applyLoginItem(openAtLogin: boolean): void {
-  if (process.platform !== 'win32' && process.platform !== 'darwin') return;
+  if (process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux')
+    return;
   if (!app.isPackaged) {
     log.info(`Launch at login ${openAtLogin ? 'on' : 'off'}: not applied by an unpackaged build`);
     return;
   }
   try {
-    app.setLoginItemSettings(loginItemOptions(openAtLogin, { execPath: process.execPath }));
+    if (process.platform === 'linux') {
+      // Electron has no login item on Linux: an XDG autostart entry does the same.
+      setAutostart(openAtLogin, { ...process.env, execPath: process.execPath });
+    } else {
+      app.setLoginItemSettings(loginItemOptions(openAtLogin, { execPath: process.execPath }));
+    }
     log.info(`Launch at login ${openAtLogin ? 'enabled' : 'disabled'}`);
   } catch (error) {
     log.warn(`Launch at login could not be changed: ${String(error)}`);

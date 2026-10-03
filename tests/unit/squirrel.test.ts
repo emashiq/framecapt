@@ -42,12 +42,16 @@ describe('handleSquirrelEvent', () => {
     }));
     vi.doMock('node:child_process', () => ({ spawn }));
     const original = process.argv;
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
     process.argv = ['FrameCapt.exe', ...(argv1 ? [argv1] : [])];
+    // The hooks are Windows-only: their logic is exercised as win32 on every OS.
+    Object.defineProperty(process, 'platform', { value: 'win32' });
     try {
       const { handleSquirrelEvent } = await import('../../src/main/squirrel');
       return { handled: handleSquirrelEvent(), quit, spawn, setLoginItemSettings };
     } finally {
       process.argv = original;
+      if (platform) Object.defineProperty(process, 'platform', platform);
     }
   }
 

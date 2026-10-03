@@ -86,3 +86,23 @@ To update FFmpeg: pick a release at https://github.com/GyanD/codexffmpeg/release
 ## Packaging
 
 `forge.config.ts` sets `packagerConfig.extraResource: ['vendor/ffmpeg']`. Electron Packager copies an extra resource into `resources/` under its own **base name**, so the result is `resources/ffmpeg/win32-x64/ffmpeg.exe` (not `resources/ffmpeg/ffmpeg.exe`); `resolveFfmpeg()` uses that exact layout. Verified: `out/FrameCapt-win32-x64/resources/ffmpeg/win32-x64/{ffmpeg.exe,ffprobe.exe,LICENSE,PROVENANCE.json,README.txt}` exist after `npm run package`, and the packaged exe logs `ffmpeg ok ...` on start (see docs/recording-persistence.md, "Verification").
+
+## Linux x64 build (experimental, 2026-10-03)
+
+| Item                | Value                                                                                                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Version             | `n9.0.2-22-g46d8f462ee-20261001`: the `release/9.0` branch, 9.0.2 plus 22 commits (git `46d8f462ee`). Closest published static Linux GPL build to the Windows 9.0.2                                     |
+| Distributor         | BtbN/FFmpeg-Builds, `linux64-gpl` static build, GitHub release `autobuild-2026-10-01-13-06`                                                                                                             |
+| URL                 | https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-01-13-06/ffmpeg-n9.0.2-22-g46d8f462ee-linux64-gpl-9.0.tar.xz                                                                  |
+| SHA-256 of the file | `a6170faecf757381ad0338d7a6ba26e97c2ebe2b9c1568633421e15d1ed436a9` (the GitHub API `digest` of the asset, 151,030,404 bytes; verified by the fetch script)                                              |
+| Extracted           | `bin/ffmpeg` (172,705,032 B), `bin/ffprobe` (172,479,688 B), `LICENSE.txt` (saved as `LICENSE`, 35,147 B); `ffplay`, docs, presets are not extracted. Executable bits are set by the script             |
+| License             | GPL-3.0-or-later: `-buildconf` has `--enable-gpl --enable-version3` and no `--enable-nonfree`; `ffmpeg -L` reports GPL version 3 or later (checked by `fetch-ffmpeg.mjs`, written to `PROVENANCE.json`) |
+| Location            | `vendor/ffmpeg/linux-x64/` (dev), `<resources>/ffmpeg/linux-x64/` (packaged)                                                                                                                            |
+
+`scripts/fetch-ffmpeg.mjs` picks the target from `process.platform`/`process.arch` (`win32-x64` zip, `linux-x64` tar.xz extracted with the system `tar` through an argument array). `resolveFfmpeg()` uses `<platform>-<arch>` and `.exe` names only on Windows. Other platforms (macOS, arm64): nothing is pinned, the script does nothing and the app reports FFMPEG_MISSING.
+
+**BtbN autobuild tags are not permanent** (the project deletes old ones): a tag can disappear and break the pinned URL. OWNER TASK: mirror this exact tarball (and, for GPLv3 section 6, the corresponding sources and the build scripts at https://github.com/BtbN/FFmpeg-Builds) next to every Linux binary release and then point `url` at the mirror; the SHA-256 stays. See [OWNER-TASKS.md](OWNER-TASKS.md).
+
+The build contains encoders FrameCapt does not use and network protocols (libzmq, libssh, libsrt, librist, openssl). They are unreachable from the app: every input is opened with `-protocol_whitelist file` and absolute paths (S-02, [security-review.md](security-review.md)).
+
+Verified on Linux: the unit suite incl. the real-ffmpeg integration tests (finalize, recover, MP4 export, abort kills the process) passes against this build; the packaged app logs `ffmpeg ok ffmpeg version n9.0.2-22-g46d8f462ee-20261001`.

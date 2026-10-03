@@ -91,3 +91,26 @@ FrameCapt makes no network request by itself (no telemetry, no cloud, no update 
 ## Checks that gate a release candidate
 
 `npm run make` and `npm run check:mocks`, `npm run smoke:packaged`, `npm run smoke:installed` (all described in [testing.md](testing.md) and [release-process.md](release-process.md)). Not covered: signed builds, Windows 10, arm64, an upgrade from an older installed version (no earlier version exists), a non-interactive install on a locked-down machine, SmartScreen behavior, antivirus reactions.
+
+## Linux x64 (experimental)
+
+Built and run in WSL2 Ubuntu 26.04 and on Xvfb; commands, packages and tests are in [building-on-linux.md](building-on-linux.md). **Both artifacts are UNSIGNED.**
+
+| Artifact (`npm run make` on Linux)                 | Notes                                                                                                                                                         |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `out/make/deb/x64/framecapt_<v>_amd64.deb`         | `@electron-forge/maker-deb` 8.0.1. Package `framecapt`, section graphics, maintainer/homepage PROVISIONAL. About 192 MB (FFmpeg is about 345 MB uncompressed) |
+| `out/make/AppImage/x64/FrameCapt-<v>-x64.AppImage` | `@reforged/maker-appimage` 5.3.1 (ISC licence, typed against maker-base 6/7 and working under Forge 8). About 263 MB                                          |
+| `out/FrameCapt-linux-x64/`                         | The unpacked app; executable `framecapt` (lower case on Linux), `chrome-sandbox`, `resources/`                                                                |
+
+Packaged layout (deb): `/usr/lib/framecapt/framecapt` (also `/usr/bin/framecapt`), `/usr/lib/framecapt/resources/{app.asar,ffmpeg/linux-x64/{ffmpeg,ffprobe,LICENSE,PROVENANCE.json},LICENSE,THIRD_PARTY_NOTICES.md,framecapt-logo-256.png}`, `/usr/share/applications/framecapt.desktop`, `/usr/share/pixmaps/framecapt.png`. The FFmpeg folder is copied by a `packageAfterCopy` hook in `forge.config.ts` for the platform being packaged only (no Windows `.exe` in a Linux package, no Linux binary in a Windows one). Executable bits survive in the `.deb` (verified with `dpkg-deb -c` and by running it).
+
+The AppImage maker would download the moving `continuous` release of the AppImage runtime without checking it. `scripts/fetch-appimage-runtime.mjs` (run by `premake`) downloads the dated release `20251108` of `AppImage/type2-runtime` (MIT), checks its SHA-256 (`2fca8b44...ec260d`) and the maker is given that file (`runtime` option).
+
+The `.deb` `Depends` are the maker's defaults (`libgtk-3-0, libnotify4, libnss3, xdg-utils, libatspi2.0-0, libdrm2, libgbm1, libxcb-dri3-0, libsecret-1-0` and a trash tool); on Ubuntu 24.04+ these resolve through the `t64` packages (installed and run on 26.04 with `apt`). `chrome-sandbox` is installed setuid root.
+
+| Location                                                        | Holds                                                                    | On `apt remove`                    |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------- |
+| `/usr/lib/framecapt`, `/usr/bin/framecapt`, desktop entry, icon | The program                                                              | removed                            |
+| `~/.config/FrameCapt`                                           | `settings.json`, history, `recordings`/`shots` sessions, `logs/main.log` | **kept**                           |
+| `~/Pictures/FrameCapt`, `~/Videos/FrameCapt` (default)          | Screenshots, recordings, MP4 exports                                     | **kept**                           |
+| `~/.config/autostart/framecapt.desktop`                         | Launch at login (optional, written by the Settings switch)               | kept (removed by switching it off) |

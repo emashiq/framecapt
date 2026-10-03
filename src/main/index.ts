@@ -4,6 +4,7 @@ import { createCaptureProvider } from './capture';
 import { registerAppProtocol, registerPrivilegedSchemes } from './app-protocol';
 import { setupDesktop, type Desktop } from './desktop';
 import { registerHandlers } from './handlers';
+import { applyLinuxSwitches } from './linux';
 import { initLogger, log } from './logger';
 import {
   installCsp,
@@ -33,6 +34,8 @@ if (!handleSquirrelEvent()) {
 function start(): void {
   // Every renderer is sandboxed, including any window a future change forgets to configure.
   app.enableSandbox();
+  // X11 (or XWayland) on Linux, before anything is ready: see linux.ts.
+  applyLinuxSwitches(app.commandLine);
   // Privileged schemes must be registered before the app is ready.
   registerPrivilegedSchemes();
 

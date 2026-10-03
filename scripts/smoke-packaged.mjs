@@ -1,5 +1,6 @@
 /* global window, document */
-// Smoke test of the PACKAGED app (out/FrameCapt-win32-x64/FrameCapt.exe, fuses on): it starts, the
+// Smoke test of the PACKAGED app (out/FrameCapt-win32-x64/FrameCapt.exe, or on Linux
+// out/FrameCapt-linux-x64/framecapt; fuses on): it starts, the
 // renderer loads from the asar through the app://framecapt scheme (not file://), the CSP meta tag is there, the bridge exposes only invoke/on, and
 // a payload with an extra key is refused. Usage: npm run smoke:packaged (after `npm run package`).
 // The app runs with a temporary --user-data-dir and a DevTools port that only listens on loopback.
@@ -13,7 +14,10 @@ import { chromium } from '@playwright/test';
 import { FuseState, FuseV1Options, getCurrentFuseWire } from '@electron/fuses';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const exe = path.join(root, 'out', 'FrameCapt-win32-x64', 'FrameCapt.exe');
+const isLinux = process.platform === 'linux';
+const exe = isLinux
+  ? path.join(root, 'out', 'FrameCapt-linux-x64', 'framecapt')
+  : path.join(root, 'out', 'FrameCapt-win32-x64', 'FrameCapt.exe');
 if (!fs.existsSync(exe)) throw new Error(`${exe} not found. Run \`npm run package\` first.`);
 
 const wire = await getCurrentFuseWire(exe);
@@ -29,6 +33,7 @@ const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-smoke-'));
 const child = spawn(exe, [`--remote-debugging-port=${port}`, `--user-data-dir=${userData}`], {
   stdio: 'ignore',
   shell: false,
+  detached: isLinux, // own process group, so the whole tree can be ended below
 });
 const failures = [];
 const check = (name, ok, detail = '') => {
@@ -94,8 +99,15 @@ try {
   }
   await browser.close().catch(() => undefined);
 } finally {
-  if (child.pid)
+  if (child.pid && isLinux) {
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch {
+      // already gone
+    }
+  } else if (child.pid) {
     spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  }
   await new Promise((resolve) => setTimeout(resolve, 1000));
   fs.rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
 }

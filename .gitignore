@@ -4,6 +4,7 @@ dist/
 .vite/
 coverage/
 vendor/ffmpeg/
+vendor/appimage-runtime/
 test-results/
 playwright-report/
 *.log

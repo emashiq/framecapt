@@ -27,7 +27,7 @@ try {
 } catch (error) {
   if (!(error instanceof FfmpegError)) throw error;
   console.warn(
-    `SKIPPING ffmpeg integration tests: ${error.message} (vendor/ffmpeg/win32-x64 is missing)`,
+    `SKIPPING ffmpeg integration tests: ${error.message} (vendor/ffmpeg/<platform>-<arch> is missing)`,
   );
 }
 
@@ -381,8 +381,12 @@ describe.skipIf(paths === null)('real ffmpeg: finalization and recovery', () => 
     expect(fs.existsSync(path.join(root, ID, 'finalize.log'))).toBe(true);
   }, 60_000);
 
-  /** Command lines of every running ffmpeg.exe (Windows only; used to prove a kill). */
+  /** Command lines of every running ffmpeg (used to prove a kill). */
   function runningFfmpegCommandLines(): string {
+    if (process.platform !== 'win32') {
+      // pgrep -a lists pid + full command line; exit 1 (no match) leaves stdout empty.
+      return spawnSync('pgrep', ['-af', 'ffmpeg'], { shell: false, encoding: 'utf8' }).stdout;
+    }
     const script =
       'Get-CimInstance Win32_Process -Filter "Name=\'ffmpeg.exe\'" | ForEach-Object { $_.CommandLine }';
     // -EncodedCommand (UTF-16LE base64) keeps the quotes intact: no shell quoting involved.
@@ -394,7 +398,7 @@ describe.skipIf(paths === null)('real ffmpeg: finalization and recovery', () => 
     ).stdout;
   }
 
-  it('abort really ends a running ffmpeg process (taskkill /T /F), not just the promise', async () => {
+  it('abort really ends a running ffmpeg process (process-tree kill), not just the promise', async () => {
     const marker = `framecapt-kill-test-${process.pid}-${Date.now()}`;
     const controller = new AbortController();
     const running = tools.run(

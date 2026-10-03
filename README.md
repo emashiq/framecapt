@@ -47,6 +47,10 @@ There is no public release yet. Two ways to get a build:
 1. **From source** (see [Build from source](#build-from-source)); `npm run make` produces `FrameCapt-Setup-0.1.0.exe` and a portable zip under `out/make/`.
 2. **The installer.** `FrameCapt-Setup-0.1.0.exe` is a per-user Squirrel installer (no administrator rights; installs to `%LOCALAPPDATA%\FrameCapt`). **The installer is UNSIGNED: no code-signing certificate exists yet, so Windows SmartScreen will warn when you run it** and you will have to choose "More info" and "Run anyway". Verify the SHA-256 shown on the release page before running it. Uninstalling keeps your settings, history and captures.
 
+## Linux (experimental)
+
+An experimental Linux x64 build (`.deb` for Ubuntu/Debian and an AppImage) exists, built with `npm run make` on Linux ([docs/building-on-linux.md](docs/building-on-linux.md)). It is **not released, unsigned and was only tested in WSL2 (WSLg) and on a virtual X server**, never on a real Linux desktop. Limitations: it runs on X11 (through XWayland on Wayland sessions; native Wayland windows may be missing or black, and under WSLg the captured pixels are black); **no system audio** (microphone only); the recording toolbar may appear in full-screen recordings; global shortcuts, tray and microphone are unverified on a real desktop. Details: [docs/capability-matrix.md](docs/capability-matrix.md).
+
 ## Quick start
 
 | Do this                       | Default shortcut |

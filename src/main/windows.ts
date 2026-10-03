@@ -5,6 +5,7 @@ import type { AppOriginConfig } from './app-origin';
 import type { Role } from '../shared/types';
 import { CloseGuard } from './close-guard';
 import { sendEvent } from './events';
+import { windowIconFor } from './window-icon';
 
 /** Window backgrounds matching --color-bg in styles.css, so there is no white flash. */
 const BACKGROUND = { light: '#f8fafc', dark: '#0b0f1a' } as const;
@@ -133,14 +134,13 @@ export function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
   return win.loadURL(`${devServerUrl ?? APP_ENTRY_URL}#${hash}`);
 }
 
-/**
- * The taskbar/title-bar icon. A packaged build uses the icon embedded in FrameCapt.exe; an unpackaged
- * run (npm start, e2e) would show Electron's, so it gets the .ico from the repository.
- */
+/** The BrowserWindow `icon` option for this platform (empty where the exe carries the icon). */
 function devWindowIcon(): { icon?: string } {
-  return app.isPackaged
-    ? {}
-    : { icon: path.join(app.getAppPath(), 'assets', 'app', 'framecapt.ico') };
+  return windowIconFor(process.platform, {
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+  });
 }
 
 export function createMainWindow(options: { show?: boolean } = {}): BrowserWindow {

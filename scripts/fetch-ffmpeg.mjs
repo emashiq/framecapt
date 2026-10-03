@@ -1,8 +1,10 @@
-// Fetches the pinned FFmpeg build into vendor/ffmpeg/win32-x64 (gitignored): downloads the release
-// zip, verifies its SHA-256 (a mismatch aborts and deletes the download), extracts ONLY the four
-// files listed below and writes PROVENANCE.json. Idempotent: it does nothing when the files exist
-// and PROVENANCE.json records the same SHA-256. Node built-ins only (the zip is read with
-// node:zlib), no PATH lookups, no shell. See docs/ffmpeg.md.
+// Fetches the pinned FFmpeg build of this platform into vendor/ffmpeg/<platform>-<arch>
+// (gitignored): downloads the release archive, verifies its SHA-256 (a mismatch aborts and deletes
+// the download), extracts ONLY the files listed below and writes PROVENANCE.json. Idempotent: it
+// does nothing when the files exist and PROVENANCE.json records the same SHA-256.
+//   win32-x64  Gyan essentials .zip, read with node:zlib (Node built-ins only)
+//   linux-x64  BtbN linux64-gpl .tar.xz, extracted by the system `tar` (argument array, no shell)
+// No PATH lookups for ffmpeg itself, no shell. See docs/ffmpeg.md.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -13,23 +15,47 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 
-export const FFMPEG = {
-  version: '9.0.2',
-  url: 'https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip',
-  sha256: '60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba',
-  /** Folder inside the zip. */
-  root: 'ffmpeg-9.0.2-essentials_build/',
-  /** Entry path (inside the root) -> file name written. Nothing else is extracted. */
-  files: {
-    'bin/ffmpeg.exe': 'ffmpeg.exe',
-    'bin/ffprobe.exe': 'ffprobe.exe',
-    LICENSE: 'LICENSE',
-    'README.txt': 'README.txt',
+export const TARGETS = {
+  'win32-x64': {
+    kind: 'zip',
+    version: '9.0.2',
+    url: 'https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip',
+    sha256: '60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba',
+    /** Folder inside the archive. */
+    root: 'ffmpeg-9.0.2-essentials_build/',
+    /** Entry path (inside the root) -> file name written. Nothing else is extracted. */
+    files: {
+      'bin/ffmpeg.exe': 'ffmpeg.exe',
+      'bin/ffprobe.exe': 'ffprobe.exe',
+      LICENSE: 'LICENSE',
+      'README.txt': 'README.txt',
+    },
+    ffmpeg: 'ffmpeg.exe',
+    build: 'Gyan essentials build',
+  },
+  // BtbN autobuild tags can be deleted by their owner some day: mirror the tarball (docs/ffmpeg.md).
+  // The tag below is the release/9.0 branch (n9.0.2 + 22 commits, git 46d8f462ee), static, GPL.
+  'linux-x64': {
+    kind: 'tar.xz',
+    version: '9.0.2',
+    url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-01-13-06/ffmpeg-n9.0.2-22-g46d8f462ee-linux64-gpl-9.0.tar.xz',
+    sha256: 'a6170faecf757381ad0338d7a6ba26e97c2ebe2b9c1568633421e15d1ed436a9',
+    root: 'ffmpeg-n9.0.2-22-g46d8f462ee-linux64-gpl-9.0/',
+    files: {
+      'bin/ffmpeg': 'ffmpeg',
+      'bin/ffprobe': 'ffprobe',
+      'LICENSE.txt': 'LICENSE',
+    },
+    ffmpeg: 'ffmpeg',
+    build: 'BtbN linux64-gpl static build',
   },
 };
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = path.join(repoRoot, 'vendor', 'ffmpeg', 'win32-x64');
+const targetName = `${process.platform}-${process.arch}`;
+/** The pinned build of this platform, or undefined (nothing is pinned for macOS or arm64). */
+export const FFMPEG = TARGETS[targetName];
+const outDir = path.join(repoRoot, 'vendor', 'ffmpeg', targetName);
 const provenancePath = path.join(outDir, 'PROVENANCE.json');
 
 function readProvenance() {
@@ -111,7 +137,12 @@ async function extractEntry(fd, entry, target) {
 }
 
 function run(file, args) {
-  const result = spawnSync(file, args, { shell: false, encoding: 'utf8', windowsHide: true });
+  const result = spawnSync(file, args, {
+    shell: false,
+    encoding: 'utf8',
+    windowsHide: true,
+    maxBuffer: 64 * 1024 * 1024,
+  });
   if (result.error || result.status !== 0) {
     throw new Error(`${path.basename(file)} ${args.join(' ')} failed: ${result.stderr ?? ''}`);
   }
@@ -119,7 +150,7 @@ function run(file, args) {
 }
 
 /** The license claim comes from the binary itself: -buildconf flags and the -L text. */
-function verifyLicense(buildConfiguration, licenseText) {
+function verifyLicense(buildConfiguration, licenseText, build) {
   const has = (flag) => buildConfiguration.includes(flag);
   if (has('--enable-nonfree'))
     throw new Error('This FFmpeg build is non-free and not redistributable.');
@@ -133,19 +164,46 @@ function verifyLicense(buildConfiguration, licenseText) {
   ) {
     throw new Error('ffmpeg -L does not report GPL version 3 or later.');
   }
-  return 'GPL-3.0-or-later (Gyan essentials build, --enable-gpl --enable-version3)';
+  return `GPL-3.0-or-later (${build}, --enable-gpl --enable-version3)`;
+}
+
+/** Extracts the listed members of a .tar.xz with the system tar (GNU or bsdtar; modes are kept). */
+function extractTarXz(archive) {
+  const members = Object.keys(FFMPEG.files).map((name) => FFMPEG.root + name);
+  run('tar', ['-xJf', archive, '--strip-components=1', '-C', outDir, ...members]);
+  for (const [entryName, fileName] of Object.entries(FFMPEG.files)) {
+    const target = path.join(outDir, entryName);
+    if (!fs.existsSync(target)) throw new Error(`The archive has no ${entryName}.`);
+    fs.renameSync(target, path.join(outDir, fileName));
+  }
+  fs.rmSync(path.join(outDir, 'bin'), { recursive: true, force: true });
+  for (const binary of ['ffmpeg', 'ffprobe']) fs.chmodSync(path.join(outDir, binary), 0o755);
+}
+
+async function extractZip(archive) {
+  const fd = fs.openSync(archive, 'r');
+  try {
+    const entries = readCentralDirectory(fd, fs.fstatSync(fd).size);
+    for (const [entryName, fileName] of Object.entries(FFMPEG.files)) {
+      const entry = entries.get(FFMPEG.root + entryName);
+      if (!entry) throw new Error(`The zip has no ${entryName}.`);
+      await extractEntry(fd, entry, path.join(outDir, fileName));
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 async function main() {
-  if (process.platform !== 'win32') {
-    console.log('fetch-ffmpeg: only the Windows x64 build is pinned; nothing to do on this OS.');
+  if (!FFMPEG) {
+    console.log(`fetch-ffmpeg: no FFmpeg build is pinned for ${targetName}; nothing to do.`);
     return;
   }
   if (isInstalled()) {
     console.log(`fetch-ffmpeg: FFmpeg ${FFMPEG.version} already in place (sha256 matches).`);
     return;
   }
-  const temp = path.join(os.tmpdir(), `framecapt-ffmpeg-${process.pid}.zip`);
+  const temp = path.join(os.tmpdir(), `framecapt-ffmpeg-${process.pid}.${FFMPEG.kind}`);
   let touched = false;
   try {
     console.log(`fetch-ffmpeg: downloading ${FFMPEG.url}`);
@@ -155,27 +213,20 @@ async function main() {
         `SHA-256 mismatch: expected ${FFMPEG.sha256}, got ${actual}. Download deleted.`,
       );
     }
-    console.log('fetch-ffmpeg: SHA-256 verified; extracting 4 files');
+    console.log(
+      `fetch-ffmpeg: SHA-256 verified; extracting ${Object.keys(FFMPEG.files).length} files`,
+    );
     touched = true;
     fs.rmSync(outDir, { recursive: true, force: true });
     fs.mkdirSync(outDir, { recursive: true });
-    const fd = fs.openSync(temp, 'r');
-    try {
-      const entries = readCentralDirectory(fd, fs.fstatSync(fd).size);
-      for (const [entryName, fileName] of Object.entries(FFMPEG.files)) {
-        const entry = entries.get(FFMPEG.root + entryName);
-        if (!entry) throw new Error(`The zip has no ${entryName}.`);
-        await extractEntry(fd, entry, path.join(outDir, fileName));
-      }
-    } finally {
-      fs.closeSync(fd);
-    }
-    const ffmpeg = path.join(outDir, 'ffmpeg.exe');
+    if (FFMPEG.kind === 'zip') await extractZip(temp);
+    else extractTarXz(temp);
+    const ffmpeg = path.join(outDir, FFMPEG.ffmpeg);
     const buildConfiguration = run(ffmpeg, ['-hide_banner', '-buildconf'])
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.startsWith('--'));
-    const license = verifyLicense(buildConfiguration, run(ffmpeg, ['-L']));
+    const license = verifyLicense(buildConfiguration, run(ffmpeg, ['-L']), FFMPEG.build);
     const versionLine = run(ffmpeg, ['-version']).split(/\r?\n/)[0];
     fs.writeFileSync(
       provenancePath,

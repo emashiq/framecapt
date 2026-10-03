@@ -1,0 +1,78 @@
+{
+  "platform": {
+    "app": {
+      "version": "0.1.0-alpha.1",
+      "electron": "44.5.1",
+      "chrome": "152.0.7977.130",
+      "node": "24.21.0",
+      "platform": "linux",
+      "arch": "x64",
+      "isPackaged": false,
+      "tray": {
+        "active": true,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        }
+      },
+      "updates": {
+        "state": "unconfigured"
+      }
+    },
+    "os": "Linux 6.6.114.1-microsoft-standard-WSL2 x64",
+    "session": {
+      "DISPLAY": ":0",
+      "WAYLAND_DISPLAY": "wayland-0"
+    },
+    "ozonePlatformSwitch": "x11",
+    "displays": 2,
+    "display": {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 3440,
+        "height": 1440
+      },
+      "physicalSize": {
+        "width": 3440,
+        "height": 1440
+      }
+    }
+  },
+  "screenshot": {
+    "png": {
+      "width": 3440,
+      "height": 1440
+    },
+    "expected": {
+      "width": 3440,
+      "height": 1440
+    },
+    "magentaFraction": 0
+  },
+  "recording": {
+    "codec": "vp9",
+    "size": {
+      "width": 1920,
+      "height": 804
+    },
+    "expected": {
+      "width": 1920,
+      "height": 804
+    },
+    "durationSec": 4.014,
+    "container": "matroska,webm",
+    "audioStreams": 0,
+    "decodeClean": true,
+    "magentaFractionAtTwoSeconds": 0
+  },
+  "mp4Export": {
+    "codec": "h264",
+    "pixFmt": "yuv420p",
+    "durationSec": 4.033333,
+    "decodeClean": true,
+    "originalUnchanged": true
+  }
+}

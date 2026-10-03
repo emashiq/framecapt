@@ -160,6 +160,8 @@ test('countdown window', async () => {
 });
 
 test('the "system audio is not available" choice', async () => {
+  // Linux has no system audio at all: the switch is disabled up front (tests/e2e/linux.spec.ts).
+  test.skip(process.platform === 'linux', 'system audio capture is Windows-only');
   await page.getByTestId('opt-system').click();
   await page.getByTestId('record-screen').click();
   await expect(page.getByTestId('choice-dialog')).toBeVisible({ timeout: 20_000 });

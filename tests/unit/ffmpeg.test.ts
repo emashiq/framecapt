@@ -17,10 +17,13 @@ import {
   TailBuffer,
   thumbnailArgs,
   type ProcessDeps,
+  ffmpegPlatformDir,
 } from '../../src/main/media/ffmpeg';
 import { mp4Args } from '../../src/main/media/export';
 
 describe('resolveFfmpeg', () => {
+  const WIN = { platform: 'win32', arch: 'x64' } as const;
+  const LINUX = { platform: 'linux', arch: 'x64' } as const;
   const location = {
     isPackaged: false,
     resourcesPath: path.join('C:', 'App', 'resources'),
@@ -28,7 +31,7 @@ describe('resolveFfmpeg', () => {
   };
 
   it('development: <repo>/vendor/ffmpeg/win32-x64, absolute file names, no PATH lookup', () => {
-    const paths = resolveFfmpeg(location, () => true);
+    const paths = resolveFfmpeg(location, () => true, WIN);
     expect(paths.ffmpeg).toBe(
       path.join('C:', 'repo', 'vendor', 'ffmpeg', 'win32-x64', 'ffmpeg.exe'),
     );
@@ -38,10 +41,30 @@ describe('resolveFfmpeg', () => {
   });
 
   it('packaged: <resources>/ffmpeg/win32-x64', () => {
-    const paths = resolveFfmpeg({ ...location, isPackaged: true }, () => true);
+    const paths = resolveFfmpeg({ ...location, isPackaged: true }, () => true, WIN);
     expect(paths.ffmpeg).toBe(
       path.join('C:', 'App', 'resources', 'ffmpeg', 'win32-x64', 'ffmpeg.exe'),
     );
+  });
+
+  it('linux: <platform>-<arch> folder, extensionless names, dev and packaged', () => {
+    const dev = resolveFfmpeg({ ...location, appPath: '/repo' }, () => true, LINUX);
+    expect(dev.ffmpeg).toBe(path.join('/repo', 'vendor', 'ffmpeg', 'linux-x64', 'ffmpeg'));
+    expect(dev.ffprobe).toBe(path.join('/repo', 'vendor', 'ffmpeg', 'linux-x64', 'ffprobe'));
+    const packaged = resolveFfmpeg(
+      { ...location, isPackaged: true, resourcesPath: '/opt/FrameCapt/resources' },
+      () => true,
+      LINUX,
+    );
+    expect(packaged.ffmpeg).toBe(
+      path.join('/opt/FrameCapt/resources', 'ffmpeg', 'linux-x64', 'ffmpeg'),
+    );
+  });
+
+  it('the folder name follows the platform and architecture', () => {
+    expect(ffmpegPlatformDir('win32', 'x64')).toBe('win32-x64');
+    expect(ffmpegPlatformDir('linux', 'x64')).toBe('linux-x64');
+    expect(ffmpegPlatformDir()).toBe(`${process.platform}-${process.arch}`);
   });
 
   it('a missing binary is the typed error FFMPEG_MISSING with the fix in the message', () => {
@@ -61,7 +84,7 @@ describe('resolveFfmpeg', () => {
 
 describe('argument building', () => {
   it('remux copies every stream and writes WebM, with machine-readable progress', () => {
-    const args = remuxArgs('C:/in.webm', 'C:/out.partial.webm');
+    const args = remuxArgs('/in.webm', '/out.partial.webm');
     expect(args).toEqual([
       '-hide_banner',
       '-nostats',
@@ -74,7 +97,7 @@ describe('argument building', () => {
       '-f',
       'matroska',
       '-i',
-      'C:/in.webm',
+      '/in.webm',
       '-c',
       'copy',
       '-map',
@@ -83,7 +106,7 @@ describe('argument building', () => {
       STRICTLY_INCREASING_TIMESTAMPS,
       '-f',
       'webm',
-      'C:/out.partial.webm',
+      '/out.partial.webm',
     ]);
     // The commas inside the expression are escaped for the filter-chain parser.
     expect(STRICTLY_INCREASING_TIMESTAMPS).toContain('\\,');
@@ -93,30 +116,30 @@ describe('argument building', () => {
 
   it('relative paths and paths that look like options are refused, never passed on', () => {
     for (const bad of ['in.webm', '-i', '-f', '--help', './x.webm', 'x/../-y']) {
-      expect(() => remuxArgs(bad, 'C:/out.webm'), bad).toThrow(FfmpegError);
-      expect(() => remuxArgs('C:/in.webm', bad), bad).toThrow(FfmpegError);
+      expect(() => remuxArgs(bad, '/out.webm'), bad).toThrow(FfmpegError);
+      expect(() => remuxArgs('/in.webm', bad), bad).toThrow(FfmpegError);
       expect(() => probeArgs(bad), bad).toThrow(FfmpegError);
     }
   });
 
   it('every input is opened with the file protocol only (no network via a crafted playlist)', () => {
     const inputs: string[][] = [
-      remuxArgs('C:/a.webm', 'C:/b.webm'),
-      mp4Args('C:/a.webm', 'C:/b.mp4'),
-      thumbnailArgs('C:/a.mp4', 'C:/t.png', 1, 480),
-      probeArgs('C:/a.webm'),
+      remuxArgs('/a.webm', '/b.webm'),
+      mp4Args('/a.webm', '/b.mp4'),
+      thumbnailArgs('/a.mp4', '/t.png', 1, 480),
+      probeArgs('/a.webm'),
     ];
     for (const args of inputs) {
       const at = args.indexOf('-protocol_whitelist');
       expect(at, args.join(' ')).toBeGreaterThanOrEqual(0);
       expect(args[at + 1]).toBe('file');
       // ... and it applies to the input: it comes before the file name.
-      expect(at).toBeLessThan(args.findIndex((arg) => arg.startsWith('C:')));
+      expect(at).toBeLessThan(args.findIndex((arg) => arg.startsWith('/')));
     }
   });
 
   it('a path with spaces or shell characters stays ONE argument (no shell is involved)', () => {
-    const nasty = 'C:\\Users\\a b\\FrameCapt "x" & calc.webm';
+    const nasty = '/Users/a b/FrameCapt "x" & calc.webm';
     expect(remuxArgs(nasty, nasty + '.out').filter((arg) => arg.includes('calc'))).toHaveLength(2);
     expect(probeArgs(nasty).at(-1)).toBe(nasty);
   });
@@ -185,11 +208,11 @@ function fakeDeps() {
 describe('runProcess', () => {
   it('spawns with shell:false, hidden window, no stdin and the argument array as given', async () => {
     const { deps, spawned, children } = fakeDeps();
-    const promise = runProcess('C:\\ff\\ffmpeg.exe', ['-i', 'a b.webm'], {}, deps);
+    const promise = runProcess('/ff/ffmpeg.exe', ['-i', 'a b.webm'], {}, deps);
     children[0]?.emit('close', 0);
     await expect(promise).resolves.toEqual({ code: 0, stderrTail: '' });
     expect(spawned).toHaveLength(1);
-    expect(spawned[0]?.file).toBe('C:\\ff\\ffmpeg.exe');
+    expect(spawned[0]?.file).toBe('/ff/ffmpeg.exe');
     expect(spawned[0]?.args).toEqual(['-i', 'a b.webm']);
     expect(spawned[0]?.options.shell).toBe(false);
     expect(spawned[0]?.options.windowsHide).toBe(true);
@@ -199,13 +222,13 @@ describe('runProcess', () => {
   it('the media tools use shell:false for ffmpeg, ffprobe and the version check alike', async () => {
     const { deps, spawned, children } = fakeDeps();
     const tools = createMediaTools(
-      () => ({ ffmpeg: 'C:\\ff\\ffmpeg.exe', ffprobe: 'C:\\ff\\ffprobe.exe' }),
+      () => ({ ffmpeg: '/ff/ffmpeg.exe', ffprobe: '/ff/ffprobe.exe' }),
       deps,
     );
     const run = tools.run(['-version']);
     children[0]?.emit('close', 0);
     await run;
-    const probe = tools.probe('C:/x.webm');
+    const probe = tools.probe('/x.webm');
     children[1]?.stdout.write(JSON.stringify({ streams: [], format: {} }));
     children[1]?.emit('close', 0);
     await probe;

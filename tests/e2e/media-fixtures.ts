@@ -4,9 +4,10 @@ import path from 'node:path';
 
 /** Verification helpers around the vendored ffmpeg/ffprobe (the same binaries the app bundles). */
 const projectRoot = path.resolve(__dirname, '..', '..');
-const vendorDir = path.join(projectRoot, 'vendor', 'ffmpeg', 'win32-x64');
-export const FFMPEG = path.join(vendorDir, 'ffmpeg.exe');
-export const FFPROBE = path.join(vendorDir, 'ffprobe.exe');
+const vendorDir = path.join(projectRoot, 'vendor', 'ffmpeg', `${process.platform}-${process.arch}`);
+const exe = process.platform === 'win32' ? '.exe' : '';
+export const FFMPEG = path.join(vendorDir, `ffmpeg${exe}`);
+export const FFPROBE = path.join(vendorDir, `ffprobe${exe}`);
 
 export interface Probed {
   format?: { duration?: string; size?: string };
