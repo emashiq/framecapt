@@ -16,7 +16,7 @@ import { windowIconFor } from '../../src/main/window-icon';
 import { platformCapabilities } from '../../src/shared/platform';
 
 describe('applyLinuxSwitches', () => {
-  it('forces the X11 ozone platform on Linux only', () => {
+  it('forces the X11 ozone platform and turns background networking off, on Linux only', () => {
     const calls: [string, string | undefined][] = [];
     const commandLine = {
       appendSwitch: (name: string, value?: string) => calls.push([name, value]),
@@ -25,7 +25,11 @@ describe('applyLinuxSwitches', () => {
     applyLinuxSwitches(commandLine, 'darwin');
     expect(calls).toEqual([]);
     applyLinuxSwitches(commandLine, 'linux');
-    expect(calls).toEqual([['ozone-platform', LINUX_OZONE_PLATFORM]]);
+    expect(calls).toEqual([
+      ['ozone-platform', LINUX_OZONE_PLATFORM],
+      ['disable-background-networking', undefined],
+      ['disable-component-update', undefined],
+    ]);
     expect(LINUX_OZONE_PLATFORM).toBe('x11');
   });
 });

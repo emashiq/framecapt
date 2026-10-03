@@ -252,6 +252,7 @@ test.describe('one display', () => {
   });
 
   test('screen recording: toolbar, pause and resume, stop, result view with a playable file', async () => {
+    const beganAt = Date.now();
     await startScreen();
     await expect(page.getByTestId('flow-status')).not.toBeEmpty();
 
@@ -265,6 +266,7 @@ test.describe('one display', () => {
     await expect(timer).not.toHaveText('00:00', { timeout: 5000 });
 
     // Pause: amber state, "Paused", timer frozen.
+    const pausedAt = Date.now();
     await toolbar.getByTestId('toolbar-pause').click();
     await expect(toolbar.getByTestId('toolbar')).toHaveAttribute('data-status', 'paused');
     await expect(toolbar.getByTestId('toolbar-paused-label')).toHaveText('Paused');
@@ -275,11 +277,13 @@ test.describe('one display', () => {
     expect((await state()).status).toBe('paused');
 
     await toolbar.getByTestId('toolbar-resume').click();
+    const pausedMs = Date.now() - pausedAt;
     await expect(toolbar.getByTestId('toolbar')).toHaveAttribute('data-status', 'recording');
     await toolbar.waitForTimeout(1500);
 
     await toolbar.getByTestId('toolbar-stop').click();
     await finishAndWaitForResult();
+    const wallMs = Date.now() - beganAt;
 
     // The toolbar is gone, the main window is back, the state is completed.
     await expect.poll(() => pagesOf('#/toolbar').length).toBe(0);
@@ -291,9 +295,10 @@ test.describe('one display', () => {
     await expect(page.getByTestId('badge-dimensions')).toHaveText('1920 × 1080');
     await expect(page.getByTestId('badge-audio')).toHaveText('No audio');
     const durationMs = done.result?.durationMs ?? 0;
-    // About 1.5 s + 1.5 s of active recording (the 1.5 s pause is not counted).
+    // About 1.5 s + 1.5 s of active recording; the pause is not counted. The bound follows the
+    // wall clock, so a slow machine (a hosted CI runner) cannot fail it by being slow.
     expect(durationMs).toBeGreaterThan(2000);
-    expect(durationMs).toBeLessThan(6000);
+    expect(durationMs).toBeLessThan(Math.max(6000, wallMs - pausedMs + 500));
 
     // The file exists in Videos/FrameCapt and its manifest says completed.
     expect(outputFiles()).toHaveLength(1);

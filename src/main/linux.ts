@@ -23,6 +23,10 @@ export function applyLinuxSwitches(
 ): void {
   if (platform !== 'linux') return;
   commandLine.appendSwitch('ozone-platform', LINUX_OZONE_PLATFORM);
+  // Chromium's network service otherwise keeps connections open to Google hosts on Linux (seen in
+  // the CI network test); FrameCapt makes no request of its own, so background networking is off.
+  commandLine.appendSwitch('disable-background-networking');
+  commandLine.appendSwitch('disable-component-update');
 }
 
 /** `~/Pictures` / `~/Videos` when Electron cannot resolve the XDG user directory. */
