@@ -35,7 +35,9 @@ let userDataDir: string;
 const recordingsDir = (): string => path.join(userDataDir, 'recordings');
 const videosDir = (): string => path.join(userDataDir, 'videos', 'FrameCapt');
 const outputFiles = (): string[] =>
-  fs.existsSync(videosDir()) ? fs.readdirSync(videosDir()).filter((f) => f.endsWith('.webm')) : [];
+  fs.existsSync(videosDir())
+    ? fs.readdirSync(videosDir()).filter((f) => f.endsWith('.webm') && !f.includes('.partial.'))
+    : [];
 const liveSessionDirs = (): string[] =>
   fs.existsSync(recordingsDir())
     ? fs.readdirSync(recordingsDir()).filter((name) => name !== 'completed')

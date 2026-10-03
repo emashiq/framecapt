@@ -562,18 +562,32 @@ test.describe('one display', () => {
     await setCountdown(true);
     await startScreen();
     await expect.poll(() => pagesOf('#/countdown').length, { timeout: 15_000 }).toBe(1);
-    const seen = new Set<string>();
     const countdown = pagesOf('#/countdown')[0] as Page;
+    // A page-side observer records every number, however slowly this machine polls.
+    await countdown.evaluate(() => {
+      const seen = new Set<string>();
+      (window as unknown as { __seen: Set<string> }).__seen = seen;
+      const read = (): void => {
+        const text = document.querySelector('[data-testid="countdown-number"]')?.textContent;
+        if (text) seen.add(text);
+      };
+      new MutationObserver(read).observe(document.body, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      });
+      read();
+    });
+    const seenNumbers = new Set<string>();
     const deadline = Date.now() + 8000;
     while (Date.now() < deadline && pagesOf('#/countdown').length > 0) {
-      const text = await countdown
-        .getByTestId('countdown-number')
-        .textContent({ timeout: 300 })
-        .catch(() => null);
-      if (text) seen.add(text);
+      const numbers = await countdown
+        .evaluate(() => [...(window as unknown as { __seen: Set<string> }).__seen])
+        .catch(() => []);
+      for (const number of numbers) seenNumbers.add(number);
       await page.waitForTimeout(150);
     }
-    expect([...seen].sort()).toEqual(['1', '2', '3']);
+    expect([...seenNumbers].sort()).toEqual(['1', '2', '3']);
     const toolbar = await toolbarPage();
     expect(pagesOf('#/countdown')).toHaveLength(0);
     // Let the first frames arrive: a stop in the very first moments is "too short to save" (slower
