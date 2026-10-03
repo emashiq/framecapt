@@ -9,7 +9,7 @@ let dir: string;
 let file: string;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-settings-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-settings-'));
   file = path.join(dir, SETTINGS_FILE);
 });
 afterEach(() => {

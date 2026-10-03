@@ -8,7 +8,7 @@ const script = path.resolve(__dirname, '..', '..', 'scripts', 'check-no-mocks.mj
 let root: string;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-nomock-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-nomock-'));
 });
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
@@ -46,8 +46,8 @@ describe('check-no-mocks', () => {
   it('fails on the mock provider, any E2E env switch, and the synthetic renderer code', () => {
     for (const [file, text] of [
       ['.vite/build/main.cjs', 'class MockCaptureProvider {}'],
-      ['.vite/build/main.cjs', 'process.env.FRAMELET_E2E_SOMETHING_NEW'],
-      ['.vite/build/preload.cjs', 'globalThis.__frameletTest = {}'],
+      ['.vite/build/main.cjs', 'process.env.FRAMECAPT_E2E_SOMETHING_NEW'],
+      ['.vite/build/preload.cjs', 'globalThis.__frameCaptTest = {}'],
       ['.vite/renderer/main_window/assets/index.js', 'function drawSyntheticFrame(){}'],
     ] as const) {
       cleanBuild();
@@ -61,7 +61,7 @@ describe('check-no-mocks', () => {
   it('also scans the packaged app.asar that ships', () => {
     cleanBuild();
     write(
-      'out/Framelet-win32-x64/resources/app.asar',
+      'out/FrameCapt-win32-x64/resources/app.asar',
       '{"files":{}}\u0000...MockCaptureProvider...',
     );
     const result = check();

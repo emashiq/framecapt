@@ -118,5 +118,8 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Deliverable: docs/RELEASE-READINESS.md (acceptance checklist PASS/BLOCKED per item, owner actions prioritized).
 - Next actionable step: owner decisions in docs/OWNER-TASKS.md (identity, signing, contacts), then a manual real-mic + Windows 10 tester pass.
 
+### Rename (2026-10-03)
+- Product renamed from the working name Framelet to FrameCapt (owner decision) across code, tests, scripts, assets, configs and current docs. Agent definition names `framelet-impl-*` and historical entries above/under docs/evidence keep the old name. Provisional; trademark clearance still pending. No user-data migration (never released; userData follows productName).
+
 ## Recovery instructions
 If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.

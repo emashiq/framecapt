@@ -145,7 +145,7 @@ async function main() {
     console.log(`fetch-ffmpeg: FFmpeg ${FFMPEG.version} already in place (sha256 matches).`);
     return;
   }
-  const temp = path.join(os.tmpdir(), `framelet-ffmpeg-${process.pid}.zip`);
+  const temp = path.join(os.tmpdir(), `framecapt-ffmpeg-${process.pid}.zip`);
   let touched = false;
   try {
     console.log(`fetch-ffmpeg: downloading ${FFMPEG.url}`);

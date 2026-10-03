@@ -20,7 +20,7 @@ export const MAX_THUMBNAIL_WIDTH = 480;
 /** Largest image `history:copyImage` reads into the clipboard. */
 export const MAX_COPY_IMAGE_BYTES = 200 * 1024 * 1024;
 
-/** One entry as the renderer sees it: facts about a file Framelet produced, plus whether it still exists. */
+/** One entry as the renderer sees it: facts about a file FrameCapt produced, plus whether it still exists. */
 export const HistoryItemViewSchema = z.object({
   id: HistoryIdSchema,
   type: HistoryTypeSchema,
@@ -38,7 +38,7 @@ export const HistoryItemViewSchema = z.object({
   source: HistorySourceSchema,
   /** The history item this MP4 was converted from. */
   derivedFrom: HistoryIdSchema.nullable(),
-  /** False when the file was moved or deleted outside Framelet. */
+  /** False when the file was moved or deleted outside FrameCapt. */
   exists: z.boolean(),
 });
 export type HistoryItemView = z.infer<typeof HistoryItemViewSchema>;

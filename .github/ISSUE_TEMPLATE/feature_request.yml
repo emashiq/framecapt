@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Framelet is a Windows-first, offline tool. Features that need accounts, cloud services, telemetry or network access are out of scope by design.
+        FrameCapt is a Windows-first, offline tool. Features that need accounts, cloud services, telemetry or network access are out of scope by design.
   - type: textarea
     id: problem
     attributes:
@@ -15,7 +15,7 @@ body:
   - type: textarea
     id: proposal
     attributes:
-      label: What would you like Framelet to do?
+      label: What would you like FrameCapt to do?
     validations:
       required: true
   - type: textarea

@@ -7,7 +7,7 @@ export interface AppOriginConfig {
 
 /**
  * True when `url` belongs to the app's own UI: the Vite dev server origin in development, or the
- * `app://framelet` origin (the built renderer, served by app-protocol.ts) otherwise. Everything
+ * `app://framecapt` origin (the built renderer, served by app-protocol.ts) otherwise. Everything
  * else (file://, http(s), about:blank, data:, other hosts of the app scheme, ...) is rejected.
  * Pure: no Electron imports, unit-testable.
  */
@@ -39,7 +39,7 @@ export function isAppUrl(url: string | undefined | null, config: AppOriginConfig
 
 /**
  * The only network-scheme requests the app may ever make: its own dev server (development builds)
- * and nothing else. Framelet has no telemetry, uploads or remote content; anything with an
+ * and nothing else. FrameCapt has no telemetry, uploads or remote content; anything with an
  * http(s), ws(s) or ftp scheme is cancelled in the session (defence in depth behind the CSP).
  */
 export function isNetworkRequestAllowed(url: string, config: AppOriginConfig): boolean {

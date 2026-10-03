@@ -4,7 +4,7 @@
  * start (moov before mdat) and fully decoded. Cancel at about 30 % must leave the original
  * byte-identical (SHA-256) and no partial file or running encoder, and a retry must succeed; a
  * corrupt or unwritable job must surface an error and leave the original alone. Skipped, with a
- * message, when the binaries are not fetched. FRAMELET_WRITE_EVIDENCE=1 writes
+ * message, when the binaries are not fetched. FRAMECAPT_WRITE_EVIDENCE=1 writes
  * docs/evidence/phase07/export-integration.json.
  */
 import { createHash } from 'node:crypto';
@@ -69,8 +69,8 @@ describe.skipIf(paths === null)('real ffmpeg: MP4 export', () => {
   }
 
   beforeAll(() => {
-    work = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-export-'));
-    webm = path.join(work, 'Framelet test.webm');
+    work = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-export-'));
+    webm = path.join(work, 'FrameCapt test.webm');
     ffmpeg([
       ...['-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30'],
       ...['-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000'],
@@ -92,7 +92,7 @@ describe.skipIf(paths === null)('real ffmpeg: MP4 export', () => {
 
   afterAll(() => {
     fs.rmSync(work, { recursive: true, force: true });
-    if (process.env.FRAMELET_WRITE_EVIDENCE === '1') {
+    if (process.env.FRAMECAPT_WRITE_EVIDENCE === '1') {
       writeEvidenceJson(
         path.join(repoRoot, 'docs', 'evidence', 'phase07'),
         'export-integration.json',
@@ -198,7 +198,7 @@ describe.skipIf(paths === null)('real ffmpeg: MP4 export', () => {
     expect(result).toMatchObject({ ok: false, code: 'CANCELLED' });
     expect(fs.existsSync(dest)).toBe(false);
     expect(fs.readdirSync(work).filter((name) => name.includes('.partial.'))).toEqual([]);
-    expect(runningEncodersFor('framelet-export-')).toBe(false);
+    expect(runningEncodersFor('framecapt-export-')).toBe(false);
     expect(sha(long)).toBe(before);
 
     // Retry (not cancelled this time) works.

@@ -373,7 +373,7 @@ async function main() {
   }
   log('build verified: no mock or test-hook code', mocks.stdout.trim());
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-bench-'));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-bench-'));
   const userData = path.join(work, 'userdata');
   const free = fs.statfsSync(work);
   const freeGiB = (Number(free.bavail) * Number(free.bsize)) / 1024 ** 3;
@@ -437,17 +437,17 @@ async function main() {
     result.beacon = beaconInfo;
     const beaconStartedAt = Date.now();
 
-    log('launching Framelet');
+    log('launching FrameCapt');
     app = await electron.launch({
       args: ['.'],
       cwd: root,
-      env: { ...process.env, FRAMELET_USER_DATA_DIR: userData },
+      env: { ...process.env, FRAMECAPT_USER_DATA_DIR: userData },
     });
     const page = await app.firstWindow();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForFunction(() => typeof window.framelet?.invoke === 'function');
-    const info = await page.evaluate(() => window.framelet.invoke('app:getInfo'));
-    const displays = await page.evaluate(() => window.framelet.invoke('capture:listDisplays'));
+    await page.waitForFunction(() => typeof window.framecapt?.invoke === 'function');
+    const info = await page.evaluate(() => window.framecapt.invoke('app:getInfo'));
+    const displays = await page.evaluate(() => window.framecapt.invoke('capture:listDisplays'));
     if (!info.ok || !displays.ok) throw new Error('app:getInfo / capture:listDisplays failed');
     result.environment.app = {
       version: info.data.version,
@@ -464,7 +464,7 @@ async function main() {
     const primary = displays.data.find((d) => d.isPrimary) ?? displays.data[0];
     const metricsOf = () => app.evaluate(({ app: electronApp }) => electronApp.getAppMetrics());
     const state = () =>
-      page.evaluate(() => window.framelet.invoke('recorder:getState')).then((r) => r.data);
+      page.evaluate(() => window.framecapt.invoke('recorder:getState')).then((r) => r.data);
 
     // --- idle: the app open with no recording (the OS's own CPU time is the reference) -----------
     await sleep(8000);
@@ -500,7 +500,7 @@ async function main() {
     lastCpuTimes = os.cpus().map((cpu) => cpu.times);
     log(`starting the recording (${DURATION_MIN} min)`);
     const started = await page.evaluate(
-      (request) => window.framelet.invoke('recorder:start', request),
+      (request) => window.framecapt.invoke('recorder:start', request),
       {
         target: 'screen',
         displayId: primary.id,
@@ -565,7 +565,7 @@ async function main() {
         const rec = recorderPage();
         if (rec) {
           sample.recorder = await rec.evaluate(() => {
-            const resources = window.__frameletResources?.();
+            const resources = window.__frameCaptResources?.();
             const heap = performance.memory;
             return {
               liveTracks: resources?.liveTracks,
@@ -615,7 +615,7 @@ async function main() {
     const cpuAtEnd = cpuSecondsOf(pidsAtEnd);
     const stopAt = Date.now();
     log('stopping');
-    await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+    await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
     let done = null;
     for (;;) {
       const snapshot = await state();
@@ -647,7 +647,7 @@ async function main() {
     }
     await sleep(3000);
     const afterStop = await metricsOf();
-    const recorderAfter = await (recorderPage()?.evaluate(() => window.__frameletResources?.()) ??
+    const recorderAfter = await (recorderPage()?.evaluate(() => window.__frameCaptResources?.()) ??
       null);
 
     // Beacon off before the (CPU heavy) analysis: nothing more to measure live.

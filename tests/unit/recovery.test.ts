@@ -18,9 +18,9 @@ let out: string;
 let userExports: string;
 
 beforeEach(() => {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-recovery-'));
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-recovery-'));
   root = path.join(base, 'recordings');
-  out = path.join(base, 'Videos', 'Framelet');
+  out = path.join(base, 'Videos', 'FrameCapt');
   userExports = out;
   fs.mkdirSync(root, { recursive: true });
   fs.mkdirSync(out, { recursive: true });
@@ -174,13 +174,13 @@ describe('recovery scan: classification', () => {
 });
 
 describe('startup: interrupted finalization and leftovers', () => {
-  const partialOf = (id: string): string => path.join(out, `.framelet-${id}.partial.webm`);
+  const partialOf = (id: string): string => path.join(out, `.framecapt-${id}.partial.webm`);
   const finalizing = (id: string, partialPath = partialOf(id)) =>
     ({
       state: 'finalizing',
       finalize: {
         outputDir: out,
-        fileName: 'Framelet 2026-10-02 at 10.00.05.webm',
+        fileName: 'FrameCapt 2026-10-02 at 10.00.05.webm',
         partialPath,
         startedAt: 1,
       },
@@ -193,7 +193,7 @@ describe('startup: interrupted finalization and leftovers', () => {
     const report = await recovery.startup();
     expect(report).toMatchObject({ resumed: 1, candidates: 0 });
     expect(tools.runs).toHaveLength(1);
-    expect(fs.readdirSync(out)).toEqual(['Framelet 2026-10-02 at 10.00.05.webm']);
+    expect(fs.readdirSync(out)).toEqual(['FrameCapt 2026-10-02 at 10.00.05.webm']);
     expect(fs.existsSync(dir)).toBe(false);
     expect(fs.existsSync(path.join(root, 'completed', `${ID_A}.json`))).toBe(true);
   });
@@ -202,15 +202,15 @@ describe('startup: interrupted finalization and leftovers', () => {
     seed(ID_A, finalizing(ID_A));
     fs.writeFileSync(partialOf(ID_A), 'mine');
     fs.writeFileSync(partialOf(ID_B), 'belongs to another session');
-    fs.writeFileSync(path.join(out, 'Framelet 2026-10-01 at 09.00.00.webm'), 'user export');
+    fs.writeFileSync(path.join(out, 'FrameCapt 2026-10-01 at 09.00.00.webm'), 'user export');
     fs.writeFileSync(path.join(out, 'notes.txt'), 'user file');
     const { recovery } = service();
     await recovery.startup();
     expect(fs.readdirSync(out).sort()).toEqual(
       [
-        '.framelet-1f1e1d1c-1b1a-4918-8716-151413121110.partial.webm',
-        'Framelet 2026-10-01 at 09.00.00.webm',
-        'Framelet 2026-10-02 at 10.00.05.webm',
+        '.framecapt-1f1e1d1c-1b1a-4918-8716-151413121110.partial.webm',
+        'FrameCapt 2026-10-01 at 09.00.00.webm',
+        'FrameCapt 2026-10-02 at 10.00.05.webm',
         'notes.txt',
       ].sort(),
     );
@@ -245,7 +245,7 @@ describe('startup: interrupted finalization and leftovers', () => {
 
   it('removes discarded leftovers and completed ones whose output exists; keeps the rest', async () => {
     const discarded = seed(ID_A, { state: 'discarded' });
-    const output = path.join(out, 'Framelet done.webm');
+    const output = path.join(out, 'FrameCapt done.webm');
     fs.writeFileSync(output, 'video');
     const doneWithOutput = seed(ID_B, { state: 'completed', outputPath: output });
     const doneNoOutput = seed(ID_C, {
@@ -277,7 +277,7 @@ describe('recover', () => {
     const outcome = await recovery.recover(ID_A);
     expect(outcome).toMatchObject({
       outcome: 'recovered',
-      fileName: 'Framelet 2026-10-02 at 10.00.00 (recovered).webm'.replace(
+      fileName: 'FrameCapt 2026-10-02 at 10.00.00 (recovered).webm'.replace(
         '10.00.00',
         expectedTime(),
       ),
@@ -365,12 +365,12 @@ describe('discard: containment', () => {
   it('deletes exactly that session directory and nothing else', async () => {
     const a = seed(ID_A);
     const b = seed(ID_B);
-    fs.writeFileSync(path.join(userExports, 'Framelet export.webm'), 'export');
+    fs.writeFileSync(path.join(userExports, 'FrameCapt export.webm'), 'export');
     const { recovery } = service();
     await recovery.discard(ID_A);
     expect(fs.existsSync(a)).toBe(false);
     expect(fs.existsSync(b)).toBe(true);
-    expect(fs.readFileSync(path.join(userExports, 'Framelet export.webm'), 'utf8')).toBe('export');
+    expect(fs.readFileSync(path.join(userExports, 'FrameCapt export.webm'), 'utf8')).toBe('export');
     expect(fs.existsSync(root)).toBe(true);
   });
 
@@ -408,7 +408,7 @@ describe('discard: containment', () => {
   });
 
   it('also removes the matching partial file of an interrupted finalization, never another one', async () => {
-    const partial = path.join(out, `.framelet-${ID_A}.partial.webm`);
+    const partial = path.join(out, `.framecapt-${ID_A}.partial.webm`);
     fs.writeFileSync(partial, 'mine');
     const other = path.join(out, 'my-video.webm');
     fs.writeFileSync(other, 'user');
@@ -471,7 +471,7 @@ describe('recovery: links and tampered session files', () => {
       finalize: {
         outputDir: 'relative/folder',
         fileName: '../../escape.webm',
-        partialPath: path.join('relative', 'folder', `.framelet-${ID_A}.partial.webm`),
+        partialPath: path.join('relative', 'folder', `.framecapt-${ID_A}.partial.webm`),
         startedAt: 1,
       },
     });
@@ -480,7 +480,7 @@ describe('recovery: links and tampered session files', () => {
     // The output went to the app's own output folder under a plain file name.
     const files = fs.readdirSync(out);
     expect(files).toHaveLength(1);
-    expect(files[0]).toMatch(/^Framelet .*\.webm$/);
+    expect(files[0]).toMatch(/^FrameCapt .*\.webm$/);
     expect(fs.existsSync(path.join(path.dirname(out), '..', 'escape.webm'))).toBe(false);
     expect(fs.existsSync(dir)).toBe(false);
   });

@@ -91,7 +91,7 @@ export function SourcePicker({ open, purpose = 'capture', onClose, onPick }: Sou
     if (!open) return;
     let cancelled = false;
     void (async () => {
-      const result = await window.framelet.invoke('capture:listSources', {
+      const result = await window.framecapt.invoke('capture:listSources', {
         types: ['window'],
         thumbnailWidth: THUMBNAIL_MAX_WIDTH,
       });
@@ -180,7 +180,8 @@ export function SourcePicker({ open, purpose = 'capture', onClose, onPick }: Sou
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold text-fg">Choose a window</h2>
           <p className="text-[13px] text-fg-muted">
-            Framelet hides itself, then {purpose === 'record' ? 'records' : 'captures'} that window.
+            FrameCapt hides itself, then {purpose === 'record' ? 'records' : 'captures'} that
+            window.
           </p>
         </div>
         <label className="relative w-60">

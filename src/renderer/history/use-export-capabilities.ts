@@ -5,7 +5,7 @@ let cached: Promise<ExportCapabilities> | null = null;
 
 /** Whether this build can make MP4 (asked once; main detected it at startup). */
 export function loadExportCapabilities(): Promise<ExportCapabilities> {
-  cached ??= window.framelet
+  cached ??= window.framecapt
     .invoke('export:capabilities')
     .then((response) => (response.ok ? response.data : { mp4Available: false }));
   return cached;

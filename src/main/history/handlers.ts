@@ -147,7 +147,7 @@ export function registerHistoryHandlers(
     removed: await history.clearMissing(),
   }));
 
-  // The finished WebM is already a complete file in Videos/Framelet; this only copies it.
+  // The finished WebM is already a complete file in Videos/FrameCapt; this only copies it.
   handle('history:saveCopy', { roles: ['main'] }, async (request) => {
     const item = requireItem(history, request.id);
     if (item.type !== 'recording') {

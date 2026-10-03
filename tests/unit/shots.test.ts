@@ -51,13 +51,13 @@ describe('detectImageFormat / validateImageBytes', () => {
 describe('defaultShotFileName', () => {
   it('formats local time without colons', () => {
     const date = new Date(2026, 9, 2, 14, 5, 9);
-    expect(defaultShotFileName(date, 'png')).toBe('Framelet 2026-10-02 at 14.05.09.png');
-    expect(defaultShotFileName(date, 'jpeg')).toBe('Framelet 2026-10-02 at 14.05.09.jpg');
+    expect(defaultShotFileName(date, 'png')).toBe('FrameCapt 2026-10-02 at 14.05.09.png');
+    expect(defaultShotFileName(date, 'jpeg')).toBe('FrameCapt 2026-10-02 at 14.05.09.jpg');
   });
 
   it('zero-pads every field', () => {
     const date = new Date(2026, 0, 3, 1, 2, 3);
-    expect(defaultShotFileName(date, 'png')).toBe('Framelet 2026-01-03 at 01.02.03.png');
+    expect(defaultShotFileName(date, 'png')).toBe('FrameCapt 2026-01-03 at 01.02.03.png');
   });
 
   it('never contains characters Windows forbids in file names', () => {

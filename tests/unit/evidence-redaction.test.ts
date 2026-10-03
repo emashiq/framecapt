@@ -38,13 +38,13 @@ describe('evidence redaction', () => {
   });
 });
 
-describe('evidence directory gating (FRAMELET_WRITE_EVIDENCE)', () => {
+describe('evidence directory gating (FRAMECAPT_WRITE_EVIDENCE)', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   async function dirFor(flag: string | undefined) {
     vi.resetModules();
-    if (flag === undefined) vi.stubEnv('FRAMELET_WRITE_EVIDENCE', '');
-    else vi.stubEnv('FRAMELET_WRITE_EVIDENCE', flag);
+    if (flag === undefined) vi.stubEnv('FRAMECAPT_WRITE_EVIDENCE', '');
+    else vi.stubEnv('FRAMECAPT_WRITE_EVIDENCE', flag);
     const mod = await import('../native/evidence');
     return mod.evidenceDirFor(path.resolve('repo'), 'phase10');
   }
@@ -52,12 +52,12 @@ describe('evidence directory gating (FRAMELET_WRITE_EVIDENCE)', () => {
   it('is a scratch directory outside the repository by default', async () => {
     for (const flag of [undefined, '0', 'true']) {
       const dir = await dirFor(flag);
-      expect(dir).toBe(path.join(os.tmpdir(), 'framelet-evidence-scratch', 'phase10'));
+      expect(dir).toBe(path.join(os.tmpdir(), 'framecapt-evidence-scratch', 'phase10'));
       expect(dir.startsWith(path.resolve('repo'))).toBe(false);
     }
   });
 
-  it('is docs/evidence/<phase> only when FRAMELET_WRITE_EVIDENCE=1', async () => {
+  it('is docs/evidence/<phase> only when FRAMECAPT_WRITE_EVIDENCE=1', async () => {
     expect(await dirFor('1')).toBe(path.join(path.resolve('repo'), 'docs', 'evidence', 'phase10'));
   });
 });

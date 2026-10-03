@@ -111,7 +111,7 @@ export function getRendererDir(): string {
   return path.join(__dirname, '..', 'renderer', MAIN_WINDOW_VITE_NAME);
 }
 
-/** The secure renderer settings every Framelet window uses. */
+/** The secure renderer settings every FrameCapt window uses. */
 export function securePreferences(): Electron.WebPreferences {
   return {
     preload: path.join(__dirname, 'preload.cjs'),
@@ -136,7 +136,7 @@ export function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
 export function createMainWindow(options: { show?: boolean } = {}): BrowserWindow {
   const showOnReady = options.show ?? true;
   const win = new BrowserWindow({
-    title: 'Framelet',
+    title: 'FrameCapt',
     width: 1100,
     height: 720,
     minWidth: 860,
@@ -203,7 +203,7 @@ let workerWindow: BrowserWindow | undefined;
 export function getWorkerWindow(): BrowserWindow {
   if (workerWindow && !workerWindow.isDestroyed()) return workerWindow;
   const win = new BrowserWindow({
-    title: 'Framelet capture worker',
+    title: 'FrameCapt capture worker',
     show: false,
     width: 320,
     height: 240,

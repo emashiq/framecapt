@@ -50,9 +50,9 @@ async function launch(
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: dir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
-      FRAMELET_E2E_MOCK_DISPLAYS: '1',
+      FRAMECAPT_USER_DATA_DIR: dir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
       ...env,
     },
   });
@@ -63,14 +63,14 @@ async function launch(
 }
 
 test.beforeAll(async () => {
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-history-'));
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-history-out-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-history-'));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-history-out-'));
   ({ app, page } = await launch(userDataDir));
 });
 
 test.afterAll(async () => {
   if (app) await exitApp(app);
-  if (process.env.FRAMELET_DEBUG_LOG && userDataDir) {
+  if (process.env.FRAMECAPT_DEBUG_LOG && userDataDir) {
     const log = path.join(userDataDir, 'logs', 'main.log');
     if (fs.existsSync(log)) console.log(fs.readFileSync(log, 'utf8'));
   }
@@ -85,7 +85,7 @@ const thumbFiles = (): string[] => {
   const dir = path.join(historyDir(), 'thumbs');
   return fs.existsSync(dir) ? fs.readdirSync(dir).filter((name) => name.endsWith('.png')) : [];
 };
-const videosDir = (): string => path.join(userDataDir, 'videos', 'Framelet');
+const videosDir = (): string => path.join(userDataDir, 'videos', 'FrameCapt');
 
 async function goTo(name: 'Capture' | 'History', target: Page = page): Promise<void> {
   await target.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
@@ -278,7 +278,7 @@ test('a saved screenshot appears in history with a thumbnail of the flattened im
       timeout: 10_000,
     })
     .toBeGreaterThan(0);
-  expect(await img.getAttribute('src')).toBe(`framelet-media://thumb/${shotId}`);
+  expect(await img.getAttribute('src')).toBe(`framecapt-media://thumb/${shotId}`);
 });
 
 let recordingFile: string;
@@ -325,7 +325,7 @@ test('Recent captures on the home view shows the latest items and opens them', a
   await expect(page.getByTestId('history-details')).toContainText('Login screen.png');
   await expect(page.getByTestId('history-image')).toHaveAttribute(
     'src',
-    new RegExp(`^framelet-media://file/${shotId}/[0-9a-z]{8}$`),
+    new RegExp(`^framecapt-media://file/${shotId}/[0-9a-z]{8}$`),
   );
   await expect
     .poll(() =>
@@ -456,7 +456,7 @@ test('the video details play the recording and show its facts', async () => {
   const video = page.getByTestId('history-video');
   await expect(video).toHaveAttribute(
     'src',
-    new RegExp(`^framelet-media://file/${recordingId}/[0-9a-z]{8}$`),
+    new RegExp(`^framecapt-media://file/${recordingId}/[0-9a-z]{8}$`),
   );
   await expect
     .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState), { timeout: 15_000 })
@@ -509,7 +509,7 @@ test('"Save a copy as…" copies the WebM unchanged', async () => {
   expect(fs.readdirSync(outDir).filter((name) => name.includes('.partial'))).toEqual([]);
 });
 
-test('a file deleted outside Framelet shows a calm missing state; nothing else is touched', async () => {
+test('a file deleted outside FrameCapt shows a calm missing state; nothing else is touched', async () => {
   const othersBefore = [sha(recordingFile)];
   fs.rmSync(shotFile);
   // History checks the files whenever it loads: leaving and returning reloads it.
@@ -626,9 +626,9 @@ test('a damaged history file is set aside at startup: one notice, files untouche
 
 test('without an H.264 encoder MP4 export is explained and WebM stays the deliverable', async () => {
   await exitApp(app);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-noh264-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-noh264-'));
   try {
-    const file = path.join(dir, 'files', 'Framelet clip.webm');
+    const file = path.join(dir, 'files', 'FrameCapt clip.webm');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     makeWebm(file, 2, { audio: false });
     const id = newId();
@@ -647,7 +647,7 @@ test('without an H.264 encoder MP4 export is explained and WebM stays the delive
         source: 'screen',
       },
     ]);
-    ({ app, page } = await launch(dir, { FRAMELET_E2E_NO_H264: '1' }));
+    ({ app, page } = await launch(dir, { FRAMECAPT_E2E_NO_H264: '1' }));
     await goTo('History');
     await cards().first().locator('[data-card-main]').click();
     await expect(page.getByTestId('mp4-unavailable')).toHaveText(
@@ -658,7 +658,7 @@ test('without an H.264 encoder MP4 export is explained and WebM stays the delive
     await expect(page.getByTestId('details-save-copy')).toBeVisible();
     // main refuses the call too, whatever the UI does.
     const response = await page.evaluate(
-      (historyId) => window.framelet.invoke('export:mp4', { historyId }),
+      (historyId) => window.framecapt.invoke('export:mp4', { historyId }),
       id,
     );
     expect(response.ok).toBe(false);
@@ -682,24 +682,24 @@ test('history channels take ids only and refuse unknown ones', async () => {
     'history:saveCopy',
   ] as const) {
     const result = await page.evaluate(
-      ([name, id]) => window.framelet.invoke(name as 'history:open', { id: id as string }),
+      ([name, id]) => window.framecapt.invoke(name as 'history:open', { id: id as string }),
       [channel, unknown] as const,
     );
     expect(result, channel).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } });
   }
   // A path is not an id.
   const bad = await page.evaluate(() =>
-    window.framelet.invoke('history:open', { id: 'C:\\Windows\\win.ini' } as never),
+    window.framecapt.invoke('history:open', { id: 'C:\\Windows\\win.ini' } as never),
   );
   expect(bad).toMatchObject({ ok: false, error: { code: 'INVALID_PAYLOAD' } });
   // The media protocol serves nothing outside history: every one of these fails to load as an
   // image (404). fetch() is not even allowed to try (CSP connect-src), which is fine too.
   const loaded = await page.evaluate(async () => {
     const urls = [
-      'framelet-media://file/99999999-9999-4999-8999-999999999999',
-      'framelet-media://thumb/99999999-9999-4999-8999-999999999999',
-      'framelet-media://thumb/..%2F..%2Fhistory.json',
-      'framelet-media://file/C:/Windows/win.ini',
+      'framecapt-media://file/99999999-9999-4999-8999-999999999999',
+      'framecapt-media://thumb/99999999-9999-4999-8999-999999999999',
+      'framecapt-media://thumb/..%2F..%2Fhistory.json',
+      'framecapt-media://file/C:/Windows/win.ini',
     ];
     return Promise.all(
       urls.map(

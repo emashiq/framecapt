@@ -1,12 +1,12 @@
 # Moves the mouse pointer and left-clicks with the Win32 SendInput API (real, OS-level mouse input).
 # Usage: powershell -File click-at.ps1 <x> <y>      (physical screen coordinates)
-# Used by scripts/smoke-installed.mjs to pick a display in Framelet's own selection overlay.
+# Used by scripts/smoke-installed.mjs to pick a display in FrameCapt's own selection overlay.
 param([Parameter(Mandatory = $true)][int]$X, [Parameter(Mandatory = $true)][int]$Y)
 
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-public static class FrameletMouse {
+public static class FrameCaptMouse {
   [StructLayout(LayoutKind.Sequential)]
   public struct MOUSEINPUT { public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
   [StructLayout(LayoutKind.Explicit, Size = 40)]
@@ -26,14 +26,14 @@ public static class FrameletMouse {
 }
 "@
 
-[void][FrameletMouse]::SetProcessDPIAware()
-if (-not [FrameletMouse]::SetCursorPos($X, $Y)) { throw "SetCursorPos failed" }
+[void][FrameCaptMouse]::SetProcessDPIAware()
+if (-not [FrameCaptMouse]::SetCursorPos($X, $Y)) { throw "SetCursorPos failed" }
 Start-Sleep -Milliseconds 150
 # A little real movement first, so the page sees the pointer on its display before the click.
-[void][FrameletMouse]::SetCursorPos($X + 1, $Y + 1)
+[void][FrameCaptMouse]::SetCursorPos($X + 1, $Y + 1)
 Start-Sleep -Milliseconds 80
-[void][FrameletMouse]::SetCursorPos($X, $Y)
+[void][FrameCaptMouse]::SetCursorPos($X, $Y)
 Start-Sleep -Milliseconds 80
-if ([FrameletMouse]::Button($false) -ne 1) { throw "SendInput failed (button down)" }
+if ([FrameCaptMouse]::Button($false) -ne 1) { throw "SendInput failed (button down)" }
 Start-Sleep -Milliseconds 60
-if ([FrameletMouse]::Button($true) -ne 1) { throw "SendInput failed (button up)" }
+if ([FrameCaptMouse]::Button($true) -ne 1) { throw "SendInput failed (button up)" }

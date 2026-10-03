@@ -30,7 +30,7 @@ export function reportError(
     if (cappedStack !== undefined) report.stack = cappedStack;
     if (cappedComponentStack !== undefined) report.componentStack = cappedComponentStack;
 
-    void window.framelet.invoke('app:reportError', report).catch(() => undefined);
+    void window.framecapt.invoke('app:reportError', report).catch(() => undefined);
   } catch {
     // Reporting must never cause another error.
   }

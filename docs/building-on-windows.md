@@ -1,6 +1,6 @@
-# Building Framelet on Windows
+# Building FrameCapt on Windows
 
-Framelet is built and tested on Windows 11 x64. Other platforms are not supported.
+FrameCapt is built and tested on Windows 11 x64. Other platforms are not supported.
 
 ## Prerequisites
 
@@ -14,8 +14,8 @@ Framelet is built and tested on Windows 11 x64. Other platforms are not supporte
 ## Commands
 
 ```
-git clone <repository-url> framelet
-cd framelet
+git clone <repository-url> framecapt
+cd framecapt
 npm ci                      # install exactly what package-lock.json says
 npm run fetch:ffmpeg        # optional: done automatically by the commands below
 npm start                   # run the app in development (Electron Forge + Vite)
@@ -32,19 +32,19 @@ npm run make                # installer and portable zip
 Notes:
 
 - `npm run test:e2e` and `npm run test:native` start real Electron windows. `test:native` records your real screen and plays a test tone, and the shortcut tests press real global hotkeys: close other apps that use `Ctrl+Shift+1..9` first, and do not touch the mouse or keyboard while it runs. Running them is optional for contributors; the GitHub workflow runs lint, typecheck, unit tests, the e2e suite and a packaging build ([testing.md](testing.md)).
-- `npm run smoke:installed` (after `make`) **installs and uninstalls Framelet on the machine** it runs on.
+- `npm run smoke:installed` (after `make`) **installs and uninstalls FrameCapt on the machine** it runs on.
 - E2E builds contain a mock capture provider; `npm run check:mocks` verifies that a production build does not. Never package an E2E build (`npm run package` and `make` clean the build folder first).
-- Tests that write evidence files do so only with `FRAMELET_WRITE_EVIDENCE=1`.
+- Tests that write evidence files do so only with `FRAMECAPT_WRITE_EVIDENCE=1`.
 
 ## Output locations
 
-| Command                    | Output                                                                                                                                                                                      |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm start`                | Build output in `.vite/` (gitignored); user data in `%APPDATA%\Framelet` (likely shared with an installed app; unverified)                                                                  |
-| `npm run package`          | `out/Framelet-win32-x64/` (the unpacked app: `Framelet.exe`, `resources/app.asar`, `resources/ffmpeg/win32-x64/`)                                                                           |
-| `npm run make`             | `out/make/squirrel.windows/x64/Framelet-Setup-0.1.0.exe` (per-user installer, about 229 MB), `Framelet-0.1.0-full.nupkg`, `RELEASES`; `out/make/zip/win32/x64/Framelet-win32-x64-0.1.0.zip` |
-| `npm run record:artifacts` | `out/make/SHA256SUMS.txt` and `docs/evidence/phase10/artifacts.json`                                                                                                                        |
-| FFmpeg                     | `vendor/ffmpeg/win32-x64/` (gitignored)                                                                                                                                                     |
+| Command                    | Output                                                                                                                                                                                         |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm start`                | Build output in `.vite/` (gitignored); user data in `%APPDATA%\FrameCapt` (likely shared with an installed app; unverified)                                                                    |
+| `npm run package`          | `out/FrameCapt-win32-x64/` (the unpacked app: `FrameCapt.exe`, `resources/app.asar`, `resources/ffmpeg/win32-x64/`)                                                                            |
+| `npm run make`             | `out/make/squirrel.windows/x64/FrameCapt-Setup-0.1.0.exe` (per-user installer, about 229 MB), `FrameCapt-0.1.0-full.nupkg`, `RELEASES`; `out/make/zip/win32/x64/FrameCapt-win32-x64-0.1.0.zip` |
+| `npm run record:artifacts` | `out/make/SHA256SUMS.txt` and `docs/evidence/phase10/artifacts.json`                                                                                                                           |
+| FFmpeg                     | `vendor/ffmpeg/win32-x64/` (gitignored)                                                                                                                                                        |
 
 The installer and executables are **unsigned** unless you provide a certificate through `WINDOWS_CERTIFICATE_FILE` and `WINDOWS_CERTIFICATE_PASSWORD`; the build log says which. Builds are not bit-for-bit reproducible (archives embed timestamps).
 

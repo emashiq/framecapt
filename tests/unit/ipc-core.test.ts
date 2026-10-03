@@ -5,7 +5,7 @@ import { checkSender, fail, IpcError, ok, runChannel } from '../../src/main/ipc-
 import type { ChannelDef } from '../../src/shared/ipc-contract';
 
 const origin: AppOriginConfig = {};
-const goodUrl = 'app://framelet/index.html';
+const goodUrl = 'app://framecapt/index.html';
 const trusted = { role: 'main', frameUrl: goodUrl, isTopFrame: true } as const;
 
 describe('checkSender', () => {

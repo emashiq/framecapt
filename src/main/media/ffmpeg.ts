@@ -51,7 +51,7 @@ export function resolveFfmpeg(
   if (!exists(paths.ffmpeg) || !exists(paths.ffprobe)) {
     throw new FfmpegError(
       'FFMPEG_MISSING',
-      'FFmpeg was not found. Run "npm run fetch:ffmpeg" (development) or reinstall Framelet.',
+      'FFmpeg was not found. Run "npm run fetch:ffmpeg" (development) or reinstall FrameCapt.',
     );
   }
   return paths;

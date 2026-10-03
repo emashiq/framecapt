@@ -27,7 +27,7 @@ describe('the app:// protocol handler', () => {
   let renderer: string;
 
   beforeAll(() => {
-    work = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-app-protocol-'));
+    work = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-app-protocol-'));
     renderer = path.join(work, 'renderer');
     fs.mkdirSync(path.join(renderer, 'assets'), { recursive: true });
     fs.writeFileSync(path.join(renderer, 'index.html'), '<!doctype html><title>x</title>');
@@ -52,34 +52,34 @@ describe('the app:// protocol handler', () => {
     ).find((entry) => entry.scheme === 'app');
     expect(app?.privileges).toEqual({ standard: true, secure: true });
     expect((hoisted.privileged as { scheme: string }[]).map((entry) => entry.scheme)).toContain(
-      'framelet-media',
+      'framecapt-media',
     );
   });
 
   it('serves the entry document and assets with MIME type, CSP and nosniff', async () => {
-    const entry = await get('app://framelet/index.html#/overlay');
+    const entry = await get('app://framecapt/index.html#/overlay');
     expect(entry.status).toBe(200);
     expect(entry.headers.get('content-type')).toBe('text/html; charset=utf-8');
     expect(entry.headers.get('content-security-policy')).toContain("default-src 'none'");
     expect(entry.headers.get('x-content-type-options')).toBe('nosniff');
     expect(await entry.text()).toContain('<title>x</title>');
 
-    const script = await get('app://framelet/assets/app.js');
+    const script = await get('app://framecapt/assets/app.js');
     expect(script.status).toBe(200);
     expect(script.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
     expect(await script.text()).toBe('console.log(1)');
 
-    expect((await get('app://framelet/')).status).toBe(200);
+    expect((await get('app://framecapt/')).status).toBe(200);
   });
 
   it('answers 404/400 for anything else and never returns a file outside the directory', async () => {
     const cases: [string, number][] = [
-      ['app://framelet/notes.txt', 404], // exists, but not a served type
-      ['app://framelet/missing.js', 404], // served type, not there
-      ['app://framelet/../secret.js', 400], // traversal
-      ['app://framelet/%2e%2e/secret.js', 400],
-      ['app://framelet/assets/..%2f..%2fsecret.js', 400],
-      ['app://framelet/assets/', 400], // a directory
+      ['app://framecapt/notes.txt', 404], // exists, but not a served type
+      ['app://framecapt/missing.js', 404], // served type, not there
+      ['app://framecapt/../secret.js', 400], // traversal
+      ['app://framecapt/%2e%2e/secret.js', 400],
+      ['app://framecapt/assets/..%2f..%2fsecret.js', 400],
+      ['app://framecapt/assets/', 400], // a directory
       ['app://other/index.html', 404],
     ];
     for (const [url, status] of cases) {

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Framelet does not work as documented
+description: Something in FrameCapt does not work as documented
 labels: [bug]
 body:
   - type: markdown
@@ -9,7 +9,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Framelet version
+      label: FrameCapt version
       description: Settings > About, or the installer file name.
       placeholder: '0.1.0'
     validations:
@@ -26,7 +26,7 @@ body:
     attributes:
       label: How was it installed?
       options:
-        - Installer (Framelet-Setup)
+        - Installer (FrameCapt-Setup)
         - Portable zip
         - Built from source
     validations:
@@ -69,5 +69,5 @@ body:
     id: log
     attributes:
       label: Relevant log lines
-      description: From %APPDATA%\Framelet\logs\main.log. It contains no capture content, but read it before pasting.
+      description: From %APPDATA%\FrameCapt\logs\main.log. It contains no capture content, but read it before pasting.
       render: text

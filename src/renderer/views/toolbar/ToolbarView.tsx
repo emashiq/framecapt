@@ -29,7 +29,7 @@ function useLevels(active: boolean): { mic: number; system: number } {
   const [levels, setLevels] = useState({ mic: 0, system: 0 });
   useEffect(() => {
     if (!active) return;
-    return window.framelet.on('recorder:levels', (next) => setLevels(next));
+    return window.framecapt.on('recorder:levels', (next) => setLevels(next));
   }, [active]);
   return active ? levels : SILENCE;
 }
@@ -75,7 +75,7 @@ function AudioControl({ source, snapshot, level, recording }: AudioControlProps)
         aria-label={`${muted ? 'Unmute' : 'Mute'} ${text.name}`}
         title={`${muted ? 'Unmute' : 'Mute'} ${text.name}`}
         data-testid={`mute-${source}`}
-        onClick={() => void window.framelet.invoke('recorder:toggleMute', { source })}
+        onClick={() => void window.framecapt.invoke('recorder:toggleMute', { source })}
       >
         <Icon className="size-4" aria-hidden="true" />
       </button>
@@ -132,7 +132,7 @@ export function ToolbarView() {
       const width = Math.ceil(pill.getBoundingClientRect().width);
       if (width > 0 && width !== reported) {
         reported = width;
-        void window.framelet.invoke('toolbar:resize', { width });
+        void window.framecapt.invoke('toolbar:resize', { width });
       }
     };
     const observer = new ResizeObserver(report);
@@ -239,7 +239,7 @@ export function ToolbarView() {
             data-testid={paused ? 'toolbar-resume' : 'toolbar-pause'}
             disabled={!recording && !paused}
             onClick={() =>
-              void window.framelet.invoke(paused ? 'recorder:resume' : 'recorder:pause')
+              void window.framecapt.invoke(paused ? 'recorder:resume' : 'recorder:pause')
             }
           >
             {paused ? (
@@ -254,7 +254,7 @@ export function ToolbarView() {
             className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-danger-solid px-3.5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-danger-solid-hover"
             aria-label="Stop recording"
             data-testid="toolbar-stop"
-            onClick={() => void window.framelet.invoke('recorder:stop')}
+            onClick={() => void window.framecapt.invoke('recorder:stop')}
           >
             <Square className="size-3 fill-current" aria-hidden="true" />
             Stop

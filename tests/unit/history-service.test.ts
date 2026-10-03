@@ -10,7 +10,7 @@ import { fakeTools, PLAYABLE } from './fake-tools';
 let dir: string;
 let files: string;
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-hsvc-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-hsvc-'));
   files = path.join(dir, 'files');
   fs.mkdirSync(files);
 });

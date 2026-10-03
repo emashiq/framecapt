@@ -2,11 +2,11 @@
  * Recording workflow end to end, against the E2E build: the mock capture provider supplies the
  * sources and the recorder window draws a synthetic "display" (a moving canvas), so the real
  * pipeline runs (crop/scale canvas, MediaRecorder, chunk upload to main, session files, publish,
- * the framelet-media protocol and a <video> element) without touching a screen. Real capture and
+ * the framecapt-media protocol and a <video> element) without touching a screen. Real capture and
  * real audio are covered by tests/native.
  *
  * Mock displays: A (id 1001) 2560 x 1440 scale 1; B (id 1002) 3440 x 1440 frame, scale 1.5. The
- * single-display launch uses FRAMELET_E2E_MOCK_DISPLAYS=1 (only A).
+ * single-display launch uses FRAMECAPT_E2E_MOCK_DISPLAYS=1 (only A).
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -36,14 +36,14 @@ async function launch(env: Record<string, string> = {}, args: string[] = []): Pr
     fs.existsSync(path.join(projectRoot, '.vite', 'build', 'main.cjs')),
     'Run `npm run package:e2e` first (npm run test:e2e does this).',
   ).toBe(true);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-rec-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-rec-'));
   const app = await electron.launch({
     args: ['.', ...args],
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: dir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_USER_DATA_DIR: dir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
       ...env,
     },
   });
@@ -60,7 +60,7 @@ let page: Page;
 let userDataDir: string;
 
 const recordingsDir = (): string => path.join(userDataDir, 'recordings');
-const videosDir = (): string => path.join(userDataDir, 'videos', 'Framelet');
+const videosDir = (): string => path.join(userDataDir, 'videos', 'FrameCapt');
 /** Live session directories (uuid names); `completed/` holds the small records of finished ones. */
 const sessionDirs = (): string[] =>
   fs.existsSync(recordingsDir())
@@ -131,7 +131,7 @@ async function drag(overlay: Page, from: [number, number], to: [number, number])
 }
 
 async function state() {
-  const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+  const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
   if (!result.ok) throw new Error('recorder:getState failed');
   return result.data;
 }
@@ -162,7 +162,7 @@ async function recorderResources() {
   return recorder.evaluate(() =>
     (
       window as unknown as {
-        __frameletResources: () => {
+        __frameCaptResources: () => {
           liveTracks: number;
           openAudioContexts: number;
           activeLoops: number;
@@ -170,7 +170,7 @@ async function recorderResources() {
           activeRecorders: number;
         };
       }
-    ).__frameletResources(),
+    ).__frameCaptResources(),
   );
 }
 
@@ -191,9 +191,9 @@ async function resetToHome(): Promise<void> {
   await waitForStatus('idle');
 }
 
-/** FRAMELET_DEBUG_LOG=1 prints the main log of the current launch (for diagnosing a failure). */
+/** FRAMECAPT_DEBUG_LOG=1 prints the main log of the current launch (for diagnosing a failure). */
 function printDebugLog(): void {
-  if (!process.env.FRAMELET_DEBUG_LOG || !userDataDir) return;
+  if (!process.env.FRAMECAPT_DEBUG_LOG || !userDataDir) return;
   const file = path.join(userDataDir, 'logs', 'main.log');
   if (fs.existsSync(file)) console.log(fs.readFileSync(file, 'utf8'));
 }
@@ -205,7 +205,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe('one display', () => {
   test.beforeAll(async () => {
     fs.mkdirSync(evidenceDir, { recursive: true });
-    ({ app, page, dir: userDataDir } = await launch({ FRAMELET_E2E_MOCK_DISPLAYS: '1' }));
+    ({ app, page, dir: userDataDir } = await launch({ FRAMECAPT_E2E_MOCK_DISPLAYS: '1' }));
   });
   test.afterAll(async () => {
     printDebugLog();
@@ -293,7 +293,7 @@ test.describe('one display', () => {
     expect(durationMs).toBeGreaterThan(2000);
     expect(durationMs).toBeLessThan(6000);
 
-    // The file exists in Videos/Framelet and its manifest says completed.
+    // The file exists in Videos/FrameCapt and its manifest says completed.
     expect(outputFiles()).toHaveLength(1);
     const file = path.join(videosDir(), outputFiles()[0] ?? '');
     expect(fs.statSync(file).size).toBe(done.result?.bytes);
@@ -320,7 +320,7 @@ test.describe('one display', () => {
     expect(done.result?.durationMs).toBe(Math.round(Number(probed.format?.duration) * 1000));
     expect(fs.readdirSync(videosDir()).filter((name) => name.includes('.partial'))).toEqual([]);
 
-    // The player loads it through framelet-media: and can seek (Range requests work).
+    // The player loads it through framecapt-media: and can seek (Range requests work).
     const video = page.getByTestId('result-video');
     await expect
       .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState), { timeout: 15_000 })
@@ -350,7 +350,7 @@ test.describe('one display', () => {
     await resetToHome();
   });
 
-  test('the media protocol serves only files Framelet produced, with ranges', async () => {
+  test('the media protocol serves only files FrameCapt produced, with ranges', async () => {
     await startScreen();
     const toolbar = await toolbarPage();
     await toolbar.waitForTimeout(1500);
@@ -374,11 +374,11 @@ test.describe('one display', () => {
         };
       };
       return {
-        whole: await read(`framelet-media://${mediaId}`),
-        part: await read(`framelet-media://${mediaId}`, 'bytes=0-99'),
-        tail: await read(`framelet-media://${mediaId}`, 'bytes=-50'),
-        beyond: await read(`framelet-media://${mediaId}`, 'bytes=999999999-'),
-        unknown: await read('framelet-media://00000000-0000-4000-8000-000000000000'),
+        whole: await read(`framecapt-media://${mediaId}`),
+        part: await read(`framecapt-media://${mediaId}`, 'bytes=0-99'),
+        tail: await read(`framecapt-media://${mediaId}`, 'bytes=-50'),
+        beyond: await read(`framecapt-media://${mediaId}`, 'bytes=999999999-'),
+        unknown: await read('framecapt-media://00000000-0000-4000-8000-000000000000'),
       };
     }, id);
     const bytes = result?.bytes ?? 0;
@@ -411,14 +411,14 @@ test.describe('one display', () => {
     const toolbar = await toolbarPage();
     await toolbar.waitForTimeout(1200);
     await Promise.all([
-      toolbar.evaluate(() => window.framelet.invoke('recorder:stop')),
-      page.evaluate(() => window.framelet.invoke('recorder:stop')),
-      toolbar.evaluate(() => window.framelet.invoke('recorder:stop')),
-      page.evaluate(() => window.framelet.invoke('recorder:stop')),
+      toolbar.evaluate(() => window.framecapt.invoke('recorder:stop')),
+      page.evaluate(() => window.framecapt.invoke('recorder:stop')),
+      toolbar.evaluate(() => window.framecapt.invoke('recorder:stop')),
+      page.evaluate(() => window.framecapt.invoke('recorder:stop')),
     ]);
     await finishAndWaitForResult();
     // A late stop after completion changes nothing.
-    await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+    await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
     expect((await state()).status).toBe('completed');
     expect(outputFiles()).toHaveLength(filesBefore + 1);
     await expectResourcesReleased();
@@ -428,14 +428,14 @@ test.describe('one display', () => {
   test('pause and resume commands in the wrong state are ignored', async () => {
     await startScreen();
     const toolbar = await toolbarPage();
-    await page.evaluate(() => window.framelet.invoke('recorder:resume')); // not paused
+    await page.evaluate(() => window.framecapt.invoke('recorder:resume')); // not paused
     expect((await state()).status).toBe('recording');
-    await page.evaluate(() => window.framelet.invoke('recorder:pause'));
-    await page.evaluate(() => window.framelet.invoke('recorder:pause')); // already paused
+    await page.evaluate(() => window.framecapt.invoke('recorder:pause'));
+    await page.evaluate(() => window.framecapt.invoke('recorder:pause')); // already paused
     await expect(toolbar.getByTestId('toolbar')).toHaveAttribute('data-status', 'paused');
     // A new recording or a screenshot cannot start now.
     const again = await page.evaluate(() =>
-      window.framelet.invoke('recorder:start', {
+      window.framecapt.invoke('recorder:start', {
         target: 'screen',
         options: {
           mic: { enabled: false },
@@ -448,7 +448,7 @@ test.describe('one display', () => {
     );
     expect(again).toMatchObject({ ok: false, error: { code: 'BUSY' } });
     const shot = await page.evaluate(() =>
-      window.framelet.invoke('capture:startScreenshot', { target: 'region' }),
+      window.framecapt.invoke('capture:startScreenshot', { target: 'region' }),
     );
     expect(shot).toMatchObject({ ok: false, error: { code: 'BUSY' } });
     await toolbar.getByTestId('toolbar-resume').click();
@@ -491,7 +491,7 @@ test.describe('one display', () => {
     await toolbar.waitForTimeout(1200);
     await expect(pagesOf('#/recorder')).toHaveLength(1);
     await pagesOf('#/recorder')[0]?.evaluate(() =>
-      window.framelet.invoke('recorder:engineEvent', { type: 'sourceLost' }),
+      window.framecapt.invoke('recorder:engineEvent', { type: 'sourceLost' }),
     );
     await finishAndWaitForResult();
     const done = await state();
@@ -506,7 +506,7 @@ test.describe('one display', () => {
     const toolbar = await toolbarPage();
     await toolbar.waitForTimeout(1200);
     await pagesOf('#/recorder')[0]?.evaluate(() =>
-      window.framelet.invoke('recorder:engineEvent', {
+      window.framecapt.invoke('recorder:engineEvent', {
         type: 'error',
         code: 'DISK_FULL',
         message: 'The disk is full. The recording was stopped.',
@@ -541,7 +541,7 @@ test.describe('one display', () => {
     expect((await state()).status).toBe('countdown');
     expect(await mainIsMinimized()).toBe(true);
 
-    await page.evaluate(() => window.framelet.invoke('recorder:cancel'));
+    await page.evaluate(() => window.framecapt.invoke('recorder:cancel'));
     await waitForStatus('idle');
     await expect.poll(() => pagesOf('#/countdown').length).toBe(0);
     expect(await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Escape'))).toBe(
@@ -583,14 +583,14 @@ test.describe('one display', () => {
   test('rapid start and stop never leaves anything running', async () => {
     // Stop requested right after start: a cancel during start-up.
     await startScreen();
-    await page.evaluate(() => window.framelet.invoke('recorder:stop'));
-    await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+    await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
+    await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
     await expect
       .poll(async () => ['idle', 'completed', 'error'].includes((await state()).status))
       .toBe(true);
     // Then start again and stop as soon as the toolbar shows.
     if ((await state()).status !== 'idle')
-      await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+      await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
     await waitForStatus('idle');
     await startScreen();
     const toolbar = await toolbarPage();
@@ -605,7 +605,7 @@ test.describe('one display', () => {
     expect(pagesOf('#/toolbar')).toHaveLength(0);
     await expectResourcesReleased();
     if (done.status === 'completed') await resetToHome();
-    else await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+    else await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
     await waitForStatus('idle');
   });
 
@@ -668,7 +668,7 @@ test.describe('microphone with a fake device', () => {
       app,
       page,
       dir: userDataDir,
-    } = await launch({ FRAMELET_E2E_MOCK_DISPLAYS: '1' }, [
+    } = await launch({ FRAMECAPT_E2E_MOCK_DISPLAYS: '1' }, [
       '--use-fake-device-for-media-stream',
       '--use-fake-ui-for-media-stream',
     ]));
@@ -706,13 +706,13 @@ test.describe('microphone with a fake device', () => {
 
     // The engine reports the microphone gone: video goes on, the toolbar warns, main window toasts.
     await pagesOf('#/recorder')[0]?.evaluate(() =>
-      window.framelet.invoke('recorder:engineEvent', { type: 'trackEnded', source: 'mic' }),
+      window.framecapt.invoke('recorder:engineEvent', { type: 'trackEnded', source: 'mic' }),
     );
     await expect(toolbar.getByTestId('badge-lost-mic')).toHaveText('Microphone disconnected');
     expect((await state()).status).toBe('recording');
     expect((await state()).lost.mic).toBe(true);
     // Mute is no longer possible for a lost source.
-    await page.evaluate(() => window.framelet.invoke('recorder:toggleMute', { source: 'mic' }));
+    await page.evaluate(() => window.framecapt.invoke('recorder:toggleMute', { source: 'mic' }));
     expect((await state()).muted.mic).toBe(false);
 
     // A recording shorter than about a second may hold no data yet.
@@ -728,7 +728,7 @@ test.describe('microphone with a fake device', () => {
     // Pick a device id that does not exist.
     await page.evaluate(() =>
       window.localStorage.setItem(
-        'framelet.recordOptions',
+        'framecapt.recordOptions',
         JSON.stringify({
           mic: { enabled: true, deviceId: 'does-not-exist' },
           systemAudio: false,
@@ -842,7 +842,7 @@ test.describe('two displays', () => {
 
 test.describe('quit during a recording', () => {
   test('quitting finishes the recording first: remuxed, published, session removed, no partial', async () => {
-    ({ app, page, dir: userDataDir } = await launch({ FRAMELET_E2E_MOCK_DISPLAYS: '1' }));
+    ({ app, page, dir: userDataDir } = await launch({ FRAMECAPT_E2E_MOCK_DISPLAYS: '1' }));
     try {
       await setCountdown(false);
       await startScreen();

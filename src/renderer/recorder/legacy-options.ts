@@ -1,7 +1,7 @@
 import { RecordOptionsSchema, type RecordOptions } from '../../shared/recorder-ipc';
 
 /** Phase 05 kept the record options in localStorage under this key; settings.json replaced it. */
-const KEY = 'framelet.recordOptions';
+const KEY = 'framecapt.recordOptions';
 
 /** The old saved options, or null when there are none (or they are unreadable). */
 export function loadLegacyRecordOptions(): RecordOptions | null {

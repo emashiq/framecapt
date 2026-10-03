@@ -20,7 +20,7 @@ export function DisplayPicker({ init }: { init: OverlayInit }) {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        void window.framelet.invoke('overlay:cancel');
+        void window.framecapt.invoke('overlay:cancel');
       } else if (event.key === 'Enter' && document.hasFocus()) {
         event.preventDefault();
         pick();
@@ -46,7 +46,7 @@ export function DisplayPicker({ init }: { init: OverlayInit }) {
     requestAnimationFrame(() =>
       requestAnimationFrame(
         () =>
-          void window.framelet.invoke('overlay:ready').then(() => {
+          void window.framecapt.invoke('overlay:ready').then(() => {
             if (!active) return;
             readyRef.current = true;
             setReady(true);
@@ -61,7 +61,7 @@ export function DisplayPicker({ init }: { init: OverlayInit }) {
   function pick(): void {
     if (picking || !readyRef.current) return;
     setPicking(true);
-    void window.framelet.invoke('overlay:pickDisplay', { displayId: init.displayId });
+    void window.framecapt.invoke('overlay:pickDisplay', { displayId: init.displayId });
   }
 
   const active = hovered || focused;
@@ -86,7 +86,7 @@ export function DisplayPicker({ init }: { init: OverlayInit }) {
       onClick={pick}
       onContextMenu={(event) => {
         event.preventDefault();
-        void window.framelet.invoke('overlay:cancel');
+        void window.framecapt.invoke('overlay:cancel');
       }}
     >
       <div

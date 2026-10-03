@@ -22,7 +22,7 @@ export async function mapLimit<T, R>(
 }
 
 /**
- * What `history:open` may hand to the shell: only the media types Framelet itself produces. A
+ * What `history:open` may hand to the shell: only the media types FrameCapt itself produces. A
  * history entry that points at anything else (an edited history file, a re-linked odd file) is
  * never launched, whatever program Windows would pick for it.
  */
@@ -45,7 +45,7 @@ export async function copyFileAtomic(source: string, target: string): Promise<vo
   if (samePath(source, target)) throw new Error('The copy would overwrite the original.');
   const temp = path.join(
     path.dirname(target),
-    `.framelet-copy-${randomBytes(6).toString('hex')}.partial`,
+    `.framecapt-copy-${randomBytes(6).toString('hex')}.partial`,
   );
   try {
     await fs.promises.copyFile(source, temp, fs.constants.COPYFILE_EXCL);

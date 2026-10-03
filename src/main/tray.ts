@@ -47,14 +47,14 @@ export function trayTooltip(state: Pick<TrayState, 'status' | 'activeMs'>): stri
   const time = formatDuration(state.activeMs);
   switch (state.status) {
     case 'recording':
-      return `Framelet — Recording ${time}`;
+      return `FrameCapt — Recording ${time}`;
     case 'paused':
-      return `Framelet — Paused ${time}`;
+      return `FrameCapt — Paused ${time}`;
     case 'stopping':
     case 'processing':
-      return 'Framelet — Saving the recording…';
+      return 'FrameCapt — Saving the recording…';
     default:
-      return 'Framelet';
+      return 'FrameCapt';
   }
 }
 
@@ -134,11 +134,11 @@ export function buildTrayTemplate(
       }),
     },
     { type: 'separator' },
-    { id: 'open', label: 'Open Framelet', click: handlers.open },
+    { id: 'open', label: 'Open FrameCapt', click: handlers.open },
     { id: 'history', label: 'History', click: () => handlers.openView('history') },
     { id: 'settings', label: 'Settings', click: () => handlers.openView('settings') },
     { type: 'separator' },
-    { id: 'quit', label: 'Quit Framelet', click: handlers.quit },
+    { id: 'quit', label: 'Quit FrameCapt', click: handlers.quit },
   );
   return items;
 }

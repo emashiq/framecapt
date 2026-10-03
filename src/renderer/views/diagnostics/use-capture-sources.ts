@@ -24,8 +24,8 @@ export function useCaptureSources(): { state: SourcesState; reload: () => void }
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const displays = await window.framelet.invoke('capture:listDisplays');
-      const sources = await window.framelet.invoke('capture:listSources', {
+      const displays = await window.framecapt.invoke('capture:listDisplays');
+      const sources = await window.framecapt.invoke('capture:listSources', {
         types: ['screen', 'window'],
         thumbnailWidth: 320,
       });

@@ -7,13 +7,13 @@ import { MEDIA_SCHEME_PRIVILEGES } from './recording/media-protocol';
 
 /**
  * Registers every privileged scheme in one call (Electron allows it once, and only before
- * `app.whenReady()`): `app` (the production renderer) and `framelet-media` (history media).
+ * `app.whenReady()`): `app` (the production renderer) and `framecapt-media` (history media).
  */
 export function registerPrivilegedSchemes(): void {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: APP_SCHEME,
-      // standard + secure: a real origin (app://framelet) with the secure-context APIs the capture
+      // standard + secure: a real origin (app://framecapt) with the secure-context APIs the capture
       // code needs (getDisplayMedia, MediaRecorder, clipboard). Nothing else: no CORS, no
       // fetch-API privilege (the renderer never fetches its own files), never bypassCSP.
       privileges: { standard: true, secure: true },
@@ -29,7 +29,7 @@ const NOT_FOUND = (status: number): Response =>
   });
 
 /**
- * Serves the built renderer at `app://framelet/`. Only files inside `rendererDir` (in the asar of a
+ * Serves the built renderer at `app://framecapt/`. Only files inside `rendererDir` (in the asar of a
  * packaged build) with a known extension are ever returned; everything else is a 404 and never
  * reaches the filesystem (see resolveAppAsset). Call after `app.whenReady()`.
  */

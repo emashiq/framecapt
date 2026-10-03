@@ -2,7 +2,7 @@
 // Usage: node scripts/check-no-mocks.mjs [--expect-mock] [--root <dir>]
 // It scans the main and preload bundles (.vite/build), the renderer bundle (.vite/renderer) and,
 // when one exists, the packaged app.asar (out/<app>/resources/app.asar), because that is the file
-// that ships. --expect-mock is the positive control for builds made with FRAMELET_E2E_BUILD=1: it
+// that ships. --expect-mock is the positive control for builds made with FRAMECAPT_E2E_BUILD=1: it
 // fails when the mock is NOT present in both the main bundle and the renderer.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,15 +19,15 @@ const expectMock = argv.includes('--expect-mock');
 const buildDir = path.join(root, '.vite', 'build');
 const rendererDir = path.join(root, '.vite', 'renderer');
 
-// `FRAMELET_E2E` catches every E2E hook (env switches and the build constant's name) in one
+// `FRAMECAPT_E2E` catches every E2E hook (env switches and the build constant's name) in one
 // marker; the others name the mock modules themselves, which have no such prefix.
 const markers = [
-  'FRAMELET_E2E',
-  '__FRAMELET_E2E__',
+  'FRAMECAPT_E2E',
+  '__FRAMECAPT_E2E__',
   'MockCaptureProvider',
   'mock-provider',
   'Mock display',
-  '__frameletTest',
+  '__frameCaptTest',
   'drawSyntheticFrame',
   'synthetic-frame',
   'createSyntheticDisplayStream',

@@ -6,7 +6,7 @@ import { Logger, redactHome } from '../../src/main/logger';
 
 const dirs: string[] = [];
 function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-log-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-log-'));
   dirs.push(dir);
   return dir;
 }
@@ -39,7 +39,7 @@ describe('Logger', () => {
   it('replaces the home folder in every slash style and case, and leaves other text alone', () => {
     const home = 'C:\\Users\\Jane Doe';
     const text = [
-      'open C:\\Users\\Jane Doe\\Videos\\Framelet\\a.webm failed',
+      'open C:\\Users\\Jane Doe\\Videos\\FrameCapt\\a.webm failed',
       'open C:/Users/Jane Doe/Videos/a.webm failed',
       'json "C:\\\\Users\\\\Jane Doe\\\\x"',
       'c:\\users\\jane doe\\x',
@@ -47,7 +47,7 @@ describe('Logger', () => {
     ].join('\n');
     const out = redactHome(text, home);
     expect(out).not.toMatch(/Jane/i);
-    expect(out).toContain('~\\Videos\\Framelet\\a.webm');
+    expect(out).toContain('~\\Videos\\FrameCapt\\a.webm');
     expect(out).toContain('~/Videos/a.webm');
     expect(out).toContain('D:\\Capture\\clip.webm stays');
     expect(redactHome('nothing here', home)).toBe('nothing here');

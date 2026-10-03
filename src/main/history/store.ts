@@ -21,7 +21,7 @@ export const HistoryItemSchema = z.object({
   id: HistoryIdSchema,
   type: HistoryTypeSchema,
   createdAt: z.number(),
-  /** Absolute path of a file Framelet produced (or the user re-linked). */
+  /** Absolute path of a file FrameCapt produced (or the user re-linked). */
   path: z.string().min(1),
   width: z.number().int().min(0),
   height: z.number().int().min(0),

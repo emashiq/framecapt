@@ -233,7 +233,7 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
     trigger: HTMLElement | null,
     sourceId?: string,
   ): Promise<void> {
-    const result = await window.framelet.invoke('recorder:start', {
+    const result = await window.framecapt.invoke('recorder:start', {
       target,
       ...(sourceId !== undefined && { sourceId }),
       options,
@@ -295,7 +295,7 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
             variant="secondary"
             size="sm"
             data-testid="record-error-dismiss"
-            onClick={() => void window.framelet.invoke('recorder:reset')}
+            onClick={() => void window.framecapt.invoke('recorder:reset')}
           >
             Dismiss
           </Button>

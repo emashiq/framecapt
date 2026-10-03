@@ -17,15 +17,15 @@ const projectRoot = path.resolve(__dirname, '..', '..');
 for (let index = 0; index < 6; index += 1) {
   const pause = index % 2 === 1;
   test(`recording ${index + 1}${pause ? ' (paused once)' : ''}: strictly increasing timestamps, clean decode`, async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-stamps-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-stamps-'));
     const app = await electron.launch({
       args: ['.'],
       cwd: projectRoot,
       env: {
         ...process.env,
-        FRAMELET_USER_DATA_DIR: dir,
-        FRAMELET_E2E_MOCK_CAPTURE: '1',
-        FRAMELET_E2E_MOCK_DISPLAYS: '1',
+        FRAMECAPT_USER_DATA_DIR: dir,
+        FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+        FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
       },
     });
     try {
@@ -33,11 +33,11 @@ for (let index = 0; index < 6; index += 1) {
       await page.waitForLoadState('domcontentloaded');
       await expect(page.getByTestId('record-screen')).toBeVisible();
       const status = async (): Promise<string> => {
-        const state = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+        const state = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
         return state.ok ? state.data.status : 'unknown';
       };
       await page.evaluate(() =>
-        window.framelet.invoke('recorder:start', {
+        window.framecapt.invoke('recorder:start', {
           target: 'screen',
           options: {
             mic: { enabled: false },
@@ -51,15 +51,15 @@ for (let index = 0; index < 6; index += 1) {
       await expect.poll(status, { timeout: 30_000 }).toBe('recording');
       await page.waitForTimeout(1500);
       if (pause) {
-        await page.evaluate(() => window.framelet.invoke('recorder:pause'));
+        await page.evaluate(() => window.framecapt.invoke('recorder:pause'));
         await page.waitForTimeout(700);
-        await page.evaluate(() => window.framelet.invoke('recorder:resume'));
+        await page.evaluate(() => window.framecapt.invoke('recorder:resume'));
       }
       await page.waitForTimeout(1500);
-      await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+      await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
       await expect.poll(status, { timeout: 30_000 }).toBe('completed');
 
-      const videos = path.join(dir, 'videos', 'Framelet');
+      const videos = path.join(dir, 'videos', 'FrameCapt');
       const files = fs.readdirSync(videos).filter((name) => name.endsWith('.webm'));
       expect(files).toHaveLength(1);
       const result = decodesClean(path.join(videos, files[0] ?? ''));

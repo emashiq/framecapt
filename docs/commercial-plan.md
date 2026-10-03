@@ -4,7 +4,7 @@ Status: **proposal only**. Nothing here is on sale. No store, checkout link, pay
 
 ## 1. Principles
 
-- Framelet is **fully open source (GPL-3.0-only)**. The complete source, the free-software license and the right to build and run it are available to everyone, always, at no cost.
+- FrameCapt is **fully open source (GPL-3.0-only)**. The complete source, the free-software license and the right to build and run it are available to everyone, always, at no cost.
 - What a customer pays for is **the official build and service around the software**: a ready-made, **signed** Windows installer (once the owner has a code-signing certificate; today's builds are unsigned), the convenience of not building it themselves, a defined period of updates, and defined support. It is not a license key.
 - **No license keys, no activation, no feature gating, no proprietary premium features, no trial limits.** The app does not check whether you paid. This keeps the product consistent with the GPL.
 - Buyers keep **all GPL rights**: they may run the software for any purpose, study and modify it, and redistribute it (including their own builds) under the GPL. Nothing in the purchase terms may restrict this (see the GNU project's own explanation: https://www.gnu.org/philosophy/selling.html).
@@ -47,7 +47,7 @@ Delivery needs no license key: a **download link** to the official installer (wi
 
 ## 6. Prerequisites before anything is sold
 
-- Name and trademark clearance (Framelet is provisional); final app id and publisher string (changing them later breaks upgrades and taskbar pins).
+- Name and trademark clearance (FrameCapt is provisional); final app id and publisher string (changing them later breaks upgrades and taskbar pins).
 - A code-signing certificate and a verified signed build (the paid offer's main promise is a signed installer; today's installer is unsigned and says so everywhere).
 - FFmpeg corresponding source mirrored alongside each binary release, third-party notices shipped in the installer, and the codec/patent review for H.264/AAC (selling a product that includes encoders is where such licensing questions most often arise).
 - An update feed and a privacy note if in-app updates are offered (the app currently never touches the network).
@@ -57,7 +57,7 @@ Delivery needs no license key: a **download link** to the official installer (wi
 
 ## 7. Risks and honest expectations
 
-- **Anyone can rebuild and give away Framelet for free; the GPL allows it.** The product is therefore trust, convenience, a signed installer, updates and support, not exclusivity. Some users will always take the free route; that is intended and fine.
+- **Anyone can rebuild and give away FrameCapt for free; the GPL allows it.** The product is therefore trust, convenience, a signed installer, updates and support, not exclusivity. Some users will always take the free route; that is intended and fine.
 - Competing forks or resellers may appear. The owner cannot prevent redistribution; they can protect the name and logo through trademark (another reason to clear the name early).
 - A signing certificate has recurring cost; fees per sale are a significant share of a US$15 price (see fees in the checkout document). Revenue may be small; do not plan on it to cover costs without measuring demand.
 - Source-offer duty applies to the owner as a distributor of FFmpeg: it is ongoing work per release.

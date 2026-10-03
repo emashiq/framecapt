@@ -10,7 +10,7 @@ import { copyFileAtomic, mapLimit } from '../../src/main/history/files';
 let dir: string;
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-history-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-history-'));
 });
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
@@ -204,7 +204,7 @@ describe('matchesQuery', () => {
   const base = {
     type: 'screenshot' as const,
     createdAt: new Date(2026, 9, 2, 14, 5).getTime(),
-    path: 'C:\\Users\\x\\Pictures\\Framelet\\Framelet 2026-10-02 at 14.05.09.png',
+    path: 'C:\\Users\\x\\Pictures\\FrameCapt\\FrameCapt 2026-10-02 at 14.05.09.png',
     format: 'png' as const,
     source: 'region' as const,
   };

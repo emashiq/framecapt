@@ -29,11 +29,11 @@ describe('CSP', () => {
   });
 
   it('allows the main-owned media protocol for media and images only', () => {
-    expect(PROD_CSP).toContain("media-src 'self' blob: mediastream: framelet-media:");
+    expect(PROD_CSP).toContain("media-src 'self' blob: mediastream: framecapt-media:");
     // History thumbnails and previews are <img> elements; scripts and fetches stay local.
-    expect(PROD_CSP).toContain("img-src 'self' data: blob: framelet-media:");
-    expect(PROD_CSP).not.toMatch(/(script|connect|style|font)-src[^;]*framelet-media/);
-    expect(devCsp('http://localhost:5173')).toContain('framelet-media:');
+    expect(PROD_CSP).toContain("img-src 'self' data: blob: framecapt-media:");
+    expect(PROD_CSP).not.toMatch(/(script|connect|style|font)-src[^;]*framecapt-media/);
+    expect(devCsp('http://localhost:5173')).toContain('framecapt-media:');
   });
 
   it('meta variant omits frame-ancestors only', () => {

@@ -11,7 +11,7 @@ export interface ThumbProps {
 
 /**
  * The thumbnail of a history item on a neutral background, fitted without cropping. It comes from
- * the main-owned `framelet-media://thumb/<id>` route and loads lazily; without one (video
+ * the main-owned `framecapt-media://thumb/<id>` route and loads lazily; without one (video
  * thumbnails arrive a moment after the recording) a quiet placeholder shows.
  */
 export function Thumb({ item, className }: ThumbProps) {

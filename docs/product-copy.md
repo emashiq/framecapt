@@ -1,26 +1,26 @@
 # Product copy (draft)
 
-Local draft text for a future website or store page. Not published. Name is provisional (Framelet). Only claims backed by [capability-matrix.md](capability-matrix.md) are used; do not add claims without verifying them. Screenshots and a final tagline are owner tasks.
+Local draft text for a future website or store page. Not published. Name is provisional (FrameCapt). Only claims backed by [capability-matrix.md](capability-matrix.md) are used; do not add claims without verifying them. Screenshots and a final tagline are owner tasks.
 
 ## One-line description
 
-Framelet is an offline screenshot and screen recorder for Windows: capture, mark up, redact and share, without an account or the cloud.
+FrameCapt is an offline screenshot and screen recorder for Windows: capture, mark up, redact and share, without an account or the cloud.
 
 ## Short description (about 50 words)
 
-Framelet captures screenshots and screen recordings on Windows with a shortcut, lets you annotate and permanently redact sensitive areas, and saves everything on your own computer. No account, no uploads, no telemetry. Free and open source (GPL-3.0); the official build is intended to add a signed installer (once the owner has a certificate), updates and support.
+FrameCapt captures screenshots and screen recordings on Windows with a shortcut, lets you annotate and permanently redact sensitive areas, and saves everything on your own computer. No account, no uploads, no telemetry. Free and open source (GPL-3.0); the official build is intended to add a signed installer (once the owner has a certificate), updates and support.
 
 ## Long description
 
-Bug reports, support tickets, tutorials and client feedback all start the same way: press a shortcut, grab what is on screen, add a note, send it. Framelet does exactly that and nothing you did not ask for.
+Bug reports, support tickets, tutorials and client feedback all start the same way: press a shortcut, grab what is on screen, add a note, send it. FrameCapt does exactly that and nothing you did not ask for.
 
 Take a screenshot of a screen, a window or a region, then mark it up with arrows, rectangles and text. When something private is in the picture, cover it with the Redact tool: redactions are solid black and are baked into the saved image, the clipboard copy and the history thumbnail, so they cannot be undone by whoever receives the file.
 
 Record your screen, a window or a region at 1080p or full resolution, with your microphone, your system audio or both mixed into one track. A small floating toolbar shows the timer and lets you pause or stop; it is excluded from the recording. Recordings are written to disk while you work, so a long session does not eat your memory, and if the app is interrupted, the next start offers to recover what was saved (best effort). Convert recordings to MP4 when you need to share them.
 
-Your captures are yours. Framelet has no account, makes no network requests of its own and sends no telemetry. History is a local list of your files; removing an entry never deletes a file, and deleting a file goes to the Recycle Bin.
+Your captures are yours. FrameCapt has no account, makes no network requests of its own and sends no telemetry. History is a local list of your files; removing an entry never deletes a file, and deleting a file goes to the Recycle Bin.
 
-Framelet is free software under the GNU GPL v3. You can read, build and change the source. Buying the official build supports development and is intended to give you a signed installer (once signing is in place), a year of updates and email support (see the commercial plan; availability depends on the owner finishing signing and checkout).
+FrameCapt is free software under the GNU GPL v3. You can read, build and change the source. Buying the official build supports development and is intended to give you a signed installer (once signing is in place), a year of updates and email support (see the commercial plan; availability depends on the owner finishing signing and checkout).
 
 ## Feature bullets
 
@@ -46,7 +46,7 @@ Framelet is free software under the GNU GPL v3. You can read, build and change t
 
 ## FAQ
 
-**Is Framelet free?** The software is free and open source (GPL-3.0). You can download the source, build it and use it at no cost. The official signed build with a year of updates and support is a paid, optional purchase (proposal: US$15; see [commercial-plan.md](commercial-plan.md)). Nothing is unlocked by paying: there are no license keys and no locked features.
+**Is FrameCapt free?** The software is free and open source (GPL-3.0). You can download the source, build it and use it at no cost. The official signed build with a year of updates and support is a paid, optional purchase (proposal: US$15; see [commercial-plan.md](commercial-plan.md)). Nothing is unlocked by paying: there are no license keys and no locked features.
 
 **Why pay for GPL software?** Because free software is about freedom, not price: the GPL lets people sell copies and charge for services, and it lets you do whatever you like with the source too. If you buy the official build you pay for the convenience, a signed installer, updates for a set period and support, and you help the project continue. If you would rather build it yourself or use a free copy, you may. The GNU project explains selling free software here: https://www.gnu.org/philosophy/selling.html.
 
@@ -54,9 +54,9 @@ Framelet is free software under the GNU GPL v3. You can read, build and change t
 
 **Can I share or modify what I bought?** Yes. You have all GPL rights: use, study, modify and redistribute (under the GPL, with source).
 
-**Does it upload my screenshots or recordings?** No. It makes no network requests of its own. Files stay in your Pictures and Videos folders and Framelet's data folder.
+**Does it upload my screenshots or recordings?** No. It makes no network requests of its own. Files stay in your Pictures and Videos folders and FrameCapt's data folder.
 
-**Can people see my redacted content?** Redactions are solid black pixels in the saved file, the clipboard image and the thumbnail. The unredacted original exists only inside Framelet's data folder while the editor is open.
+**Can people see my redacted content?** Redactions are solid black pixels in the saved file, the clipboard image and the thumbnail. The unredacted original exists only inside FrameCapt's data folder while the editor is open.
 
 **Does it record system audio and my microphone?** Both, separately switchable, mixed into one track. System audio is whatever Windows plays on the default output.
 

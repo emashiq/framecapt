@@ -129,5 +129,5 @@ export function freshStats(): SessionStats {
 
 /** The name of the temporary remux output: it carries the session id so its owner is provable. */
 export function partialFileName(sessionId: string): string {
-  return `.framelet-${sessionId}.partial.webm`;
+  return `.framecapt-${sessionId}.partial.webm`;
 }

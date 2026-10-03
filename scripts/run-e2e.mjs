@@ -35,7 +35,7 @@ function failures(report) {
   return out;
 }
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-report-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-report-'));
 const jsonFile = path.join(dir, 'report.json');
 let status;
 try {

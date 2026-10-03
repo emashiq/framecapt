@@ -46,7 +46,7 @@ function record(name: string, value: unknown): void {
   writeEvidenceJson(evidenceDir, 'failure-modes-native.json', evidence);
 }
 
-const videosDir = (): string => path.join(userDataDir, 'videos', 'Framelet');
+const videosDir = (): string => path.join(userDataDir, 'videos', 'FrameCapt');
 const recordingsDir = (): string => path.join(userDataDir, 'recordings');
 
 // --- helpers -----------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ async function launchApp(): Promise<void> {
   app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
-    env: { ...process.env, FRAMELET_USER_DATA_DIR: userDataDir },
+    env: { ...process.env, FRAMECAPT_USER_DATA_DIR: userDataDir },
   });
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -134,7 +134,7 @@ async function closeApp(): Promise<void> {
   app = undefined;
 }
 async function snapshot() {
-  const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+  const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
   if (!result.ok) throw new Error('recorder:getState failed');
   return result.data;
 }
@@ -142,7 +142,7 @@ async function waitForStatus(status: string, timeout = 30_000): Promise<void> {
   await expect.poll(async () => (await snapshot()).status, { timeout }).toBe(status);
 }
 async function primaryDisplayId(): Promise<string> {
-  const listed = await page.evaluate(() => window.framelet.invoke('capture:listDisplays'));
+  const listed = await page.evaluate(() => window.framecapt.invoke('capture:listDisplays'));
   if (!listed.ok) throw new Error('capture:listDisplays failed');
   const display = listed.data.find((d) => d.isPrimary) ?? listed.data[0];
   if (!display) throw new Error('no display');
@@ -158,7 +158,7 @@ const recordOptions = (options: StartOptions = {}) => ({
 });
 async function startScreen(options: StartOptions = {}) {
   const displayId = await primaryDisplayId();
-  return page.evaluate((request) => window.framelet.invoke('recorder:start', request), {
+  return page.evaluate((request) => window.framecapt.invoke('recorder:start', request), {
     target: 'screen' as const,
     displayId,
     options: recordOptions(options),
@@ -186,14 +186,14 @@ async function recorderResources() {
   return recorder.evaluate(() =>
     (
       window as unknown as {
-        __frameletResources: () => {
+        __frameCaptResources: () => {
           liveTracks: number;
           openAudioContexts: number;
           activeLoops: number;
           activeRecorders: number;
         };
       }
-    ).__frameletResources(),
+    ).__frameCaptResources(),
   );
 }
 async function expectNothingLeaked(): Promise<Record<string, unknown>> {
@@ -215,7 +215,7 @@ test.beforeAll(() => {
 });
 
 test.beforeEach(() => {
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-fail-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-fail-'));
 });
 test.afterEach(async () => {
   await closeApp();
@@ -238,8 +238,8 @@ test('1. closing the window that is being recorded ends the recording gracefully
   const exe = (await import('node:module')).createRequire(__filename)(
     'electron',
   ) as unknown as string;
-  const title = `Framelet failure fixture ${Date.now()}`;
-  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-fail-fixture-'));
+  const title = `FrameCapt failure fixture ${Date.now()}`;
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-fail-fixture-'));
   const fixture: ChildProcess = spawn(
     exe,
     [path.join(__dirname, 'fixtures', 'color-window.mjs'), title, '300', '200', fixtureDir],
@@ -258,13 +258,13 @@ test('1. closing the window that is being recorded ends the recording gracefully
     });
     const baselineWindows = await windowCount();
     const sources = await page.evaluate(() =>
-      window.framelet.invoke('capture:listSources', { types: ['window'], thumbnailWidth: 0 }),
+      window.framecapt.invoke('capture:listSources', { types: ['window'], thumbnailWidth: 0 }),
     );
     if (!sources.ok) throw new Error('capture:listSources failed');
     const source = sources.data.find((candidate) => candidate.name === title);
     expect(source, 'the fixture window is listed').toBeDefined();
     const started = await page.evaluate(
-      (request) => window.framelet.invoke('recorder:start', request),
+      (request) => window.framecapt.invoke('recorder:start', request),
       { target: 'window' as const, sourceId: source?.id ?? '', options: recordOptions() },
     );
     expect(started.ok).toBe(true);
@@ -292,7 +292,7 @@ test('1. closing the window that is being recorded ends the recording gracefully
     expect(sessionDirs()).toEqual([]);
     expect(partialFiles()).toEqual([]);
     // The toolbar is gone with the recording: only the windows that existed before remain.
-    await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+    await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
     await waitForStatus('idle');
     // The toolbar went with the recording (the hidden recorder window stays by design).
     await expect.poll(recordingUiWindows).toEqual([]);
@@ -344,20 +344,20 @@ test('2. a denied microphone is a visible choice; both answers work and nothing 
   await expect.poll(async () => (await snapshot()).choice, { timeout: 30_000 }).toBe('mic-denied');
   expect((await snapshot()).status).toBe('preflight');
   await page.evaluate(() =>
-    window.framelet.invoke('recorder:resolveChoice', { answer: 'continue-without' }),
+    window.framecapt.invoke('recorder:resolveChoice', { answer: 'continue-without' }),
   );
   await waitForStatus('recording');
   const during = await snapshot();
   expect(during.audio).toEqual({ mic: false, system: false });
   await page.waitForTimeout(3000);
-  await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
   await waitForStatus('completed', 40_000);
   const done = await snapshot();
   const probe = ffprobe(done.result?.path ?? '');
   expect(done.result?.hasAudio).toBe(false);
   expect(probe.streams.filter((s) => s.codec_type === 'audio')).toHaveLength(0);
   expect(probe.streams.filter((s) => s.codec_type === 'video')).toHaveLength(1);
-  await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
   await waitForStatus('idle');
   const afterContinue = await expectNothingLeaked();
 
@@ -366,7 +366,9 @@ test('2. a denied microphone is a visible choice; both answers work and nothing 
   const second = await startScreen({ mic: true });
   expect(second.ok).toBe(true);
   await expect.poll(async () => (await snapshot()).choice, { timeout: 30_000 }).toBe('mic-denied');
-  await page.evaluate(() => window.framelet.invoke('recorder:resolveChoice', { answer: 'cancel' }));
+  await page.evaluate(() =>
+    window.framecapt.invoke('recorder:resolveChoice', { answer: 'cancel' }),
+  );
   await waitForStatus('idle');
   expect(finishedFiles().length).toBe(filesBefore);
   expect(sessionDirs()).toEqual([]);
@@ -398,7 +400,7 @@ test('3. bursts of start, pause, resume, stop and cancel leave exactly one clean
     page.evaluate(
       ([name, body]) =>
         (
-          window.framelet.invoke as unknown as (
+          window.framecapt.invoke as unknown as (
             c: string,
             p?: unknown,
           ) => Promise<{ ok: boolean; error?: { code: string } }>
@@ -494,7 +496,7 @@ test('3. bursts of start, pause, resume, stop and cancel leave exactly one clean
 let bigStream: string | undefined;
 function makeBigStream(): string {
   if (bigStream && fs.existsSync(bigStream)) return bigStream;
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-bigstream-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-bigstream-'));
   const file = path.join(dir, 'big.webm');
   const run = spawnSync(
     FFMPEG,
@@ -610,10 +612,10 @@ async function killDuringRemux(
   const pid = await (app as ElectronApplication).evaluate(() => process.pid);
   // Start recovering without waiting for the answer: the remux runs for seconds.
   await page.evaluate(
-    (id) => void window.framelet.invoke('recovery:recover', { sessionId: id }),
+    (id) => void window.framecapt.invoke('recovery:recover', { sessionId: id }),
     sessionId,
   );
-  const partial = path.join(videosDir(), `.framelet-${sessionId}.partial.webm`);
+  const partial = path.join(videosDir(), `.framecapt-${sessionId}.partial.webm`);
   // A tight synchronous poll (the remux of this file takes a second or two): kill the moment the
   // partial file has a few MB, long before ffmpeg is done.
   const spinUntil = Date.now() + 60_000;
@@ -680,13 +682,13 @@ async function killDuringRemux(
     // The automatic attempt could not finish (the orphan still held the file): the session must
     // still be offered, and Recover must work once the orphan is gone.
     needsManual = true;
-    const listed = await page.evaluate(() => window.framelet.invoke('recovery:list'));
+    const listed = await page.evaluate(() => window.framecapt.invoke('recovery:list'));
     expect(listed.ok && listed.data.candidates.map((c) => c.sessionId)).toContain(sessionId);
     for (let waited = 0; waited < 240 && orphanAlive(); waited += 1) {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
     const recovered = await page.evaluate(
-      (id) => window.framelet.invoke('recovery:recover', { sessionId: id }),
+      (id) => window.framecapt.invoke('recovery:recover', { sessionId: id }),
       sessionId,
     );
     expect(recovered.ok).toBe(true);
@@ -763,7 +765,7 @@ test('5. the output folder refuses writes at finalization: the data is kept, the
     shell: false,
     stdio: 'ignore',
   });
-  await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
   await waitForStatus('error', 60_000);
   const failed = await snapshot();
   expect(failed.error?.code).toBeTruthy();
@@ -779,15 +781,15 @@ test('5. the output folder refuses writes at finalization: the data is kept, the
 
   // The folder is writable again: the recording can be recovered from what was kept.
   execFileSync('icacls', [videosDir(), '/remove:d', '*S-1-1-0'], { shell: false, stdio: 'ignore' });
-  await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
   await waitForStatus('idle');
-  // The error text promises recovery "the next time Framelet starts": restart on the same data.
+  // The error text promises recovery "the next time FrameCapt starts": restart on the same data.
   await closeApp();
   await launchApp();
-  const listed = await page.evaluate(() => window.framelet.invoke('recovery:list'));
+  const listed = await page.evaluate(() => window.framecapt.invoke('recovery:list'));
   expect(listed.ok && listed.data.candidates.map((c) => c.sessionId)).toContain(sessionId);
   const recovered = await page.evaluate(
-    (id) => window.framelet.invoke('recovery:recover', { sessionId: id }),
+    (id) => window.framecapt.invoke('recovery:recover', { sessionId: id }),
     sessionId,
   );
   expect(recovered.ok).toBe(true);

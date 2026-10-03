@@ -34,7 +34,7 @@ describe('parseRange', () => {
 });
 
 describe('mediaContentType', () => {
-  it('maps the containers Framelet produces', () => {
+  it('maps the containers FrameCapt produces', () => {
     expect(mediaContentType('C:\\x\\a.webm')).toBe('video/webm');
     expect(mediaContentType('a.WEBM')).toBe('video/webm');
     expect(mediaContentType('a.mp4')).toBe('video/mp4');

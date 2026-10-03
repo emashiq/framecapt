@@ -1,13 +1,13 @@
 # Presses a key combination with the Win32 SendInput API (real, OS-level keyboard input).
 # Usage: powershell -File send-keys.ps1 ctrl shift 3     (modifiers first, the key last)
-# Only ever used by tests/native to trigger Framelet's own global shortcuts: the caller first checks
-# that Framelet registered the combination, so the keys never reach another application.
+# Only ever used by tests/native to trigger FrameCapt's own global shortcuts: the caller first checks
+# that FrameCapt registered the combination, so the keys never reach another application.
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Keys)
 
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-public static class FrameletKeys {
+public static class FrameCaptKeys {
   [StructLayout(LayoutKind.Sequential)]
   public struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
   [StructLayout(LayoutKind.Explicit, Size = 40)]
@@ -38,12 +38,12 @@ function Get-VirtualKey([string]$name) {
 
 $codes = @($Keys | ForEach-Object { Get-VirtualKey $_ })
 foreach ($code in $codes) {
-  if ([FrameletKeys]::Send([uint16]$code, $false) -ne 1) { throw "SendInput failed (key down)" }
+  if ([FrameCaptKeys]::Send([uint16]$code, $false) -ne 1) { throw "SendInput failed (key down)" }
   Start-Sleep -Milliseconds 30
 }
 Start-Sleep -Milliseconds 60
 [array]::Reverse($codes)
 foreach ($code in $codes) {
-  if ([FrameletKeys]::Send([uint16]$code, $true) -ne 1) { throw "SendInput failed (key up)" }
+  if ([FrameCaptKeys]::Send([uint16]$code, $true) -ne 1) { throw "SendInput failed (key up)" }
   Start-Sleep -Milliseconds 30
 }

@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
-  Framelet nuspec template: electron-winstaller's default (MIT) without <iconUrl>.
+  FrameCapt nuspec template: electron-winstaller's default (MIT) without <iconUrl>.
   With an iconUrl, Squirrel downloads that icon at INSTALL time for Programs and Features. The
   default points at raw.githubusercontent.com, so an offline machine waited ~85 s for a connection
   timeout (measured), and an offline app should not make a request during install. The cost: a

@@ -32,7 +32,7 @@ const MOTION_PAGE = `<!doctype html><meta charset="utf-8">
     g.fillStyle = 'rgba(255,255,255,0.9)'; g.font = '16px monospace';
     for (let i = 0; i < 14; i += 1) {
       const y = ((i * 28 - t * 90) % 392 + 392) % 392 - 16;
-      g.fillText('Framelet benchmark line ' + (i + Math.floor(t * 3.2)) + ' - scrolling text', 16, y);
+      g.fillText('FrameCapt benchmark line ' + (i + Math.floor(t * 3.2)) + ' - scrolling text', 16, y);
     }
     for (const d of dots) {
       d.x += d.vx * dt; d.y += d.vy * dt;
@@ -93,7 +93,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.whenReady().then(() => {
   const display = screen.getPrimaryDisplay();
   const win = new BrowserWindow({
-    title: 'Framelet bench beacon',
+    title: 'FrameCapt bench beacon',
     x: display.bounds.x + Number(x),
     y: display.bounds.y + Number(y),
     width: Number(size),
@@ -128,7 +128,7 @@ app.whenReady().then(() => {
   if (motion === 'motion') {
     // A second window with ordinary on-screen motion, so the encoder has real work to do.
     const panel = new BrowserWindow({
-      title: 'Framelet bench motion',
+      title: 'FrameCapt bench motion',
       x: display.bounds.x + Number(x) + Number(size) + 20,
       y: display.bounds.y + Number(y),
       width: 640,

@@ -8,17 +8,17 @@ import { probeWritable, resolveOutputDirs } from '../../src/main/settings/output
 
 let dir: string;
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-dirs-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-dirs-'));
 });
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
 describe('resolveOutputDirs', () => {
-  it('defaults to Pictures/Framelet and Videos/Framelet', () => {
+  it('defaults to Pictures/FrameCapt and Videos/FrameCapt', () => {
     expect(resolveOutputDirs(DEFAULT_SETTINGS, { pictures: 'P', videos: 'V' })).toEqual({
-      screenshotsDir: path.join('P', 'Framelet'),
-      recordingsDir: path.join('V', 'Framelet'),
+      screenshotsDir: path.join('P', 'FrameCapt'),
+      recordingsDir: path.join('V', 'FrameCapt'),
     });
   });
 
@@ -37,7 +37,7 @@ describe('probeWritable', () => {
     const nested = path.join(dir, 'a', 'b');
     expect(await probeWritable(nested)).toBe(true);
     expect(fs.existsSync(nested)).toBe(true);
-    expect(fs.readdirSync(dir).filter((name) => name.startsWith('.framelet-probe'))).toEqual([]);
+    expect(fs.readdirSync(dir).filter((name) => name.startsWith('.framecapt-probe'))).toEqual([]);
     expect(fs.readdirSync(nested)).toEqual([]);
   });
 
@@ -55,25 +55,25 @@ describe('probeWritable', () => {
 
 describe('loginItemOptions', () => {
   it('off is just off', () => {
-    expect(loginItemOptions(false, { execPath: 'C:\\App\\Framelet.exe' })).toEqual({
+    expect(loginItemOptions(false, { execPath: 'C:\\App\\FrameCapt.exe' })).toEqual({
       openAtLogin: false,
     });
   });
 
   it('a plain install registers the exe itself, starting hidden', () => {
     expect(
-      loginItemOptions(true, { execPath: 'C:\\App\\Framelet.exe', exists: () => false }),
-    ).toEqual({ openAtLogin: true, path: 'C:\\App\\Framelet.exe', args: [HIDDEN_ARG] });
+      loginItemOptions(true, { execPath: 'C:\\App\\FrameCapt.exe', exists: () => false }),
+    ).toEqual({ openAtLogin: true, path: 'C:\\App\\FrameCapt.exe', args: [HIDDEN_ARG] });
   });
 
   it('a Squirrel install goes through Update.exe so updates keep working', () => {
-    const exec = path.join('C:\\Users\\me\\AppData\\Local\\framelet\\app-1.0.0', 'Framelet.exe');
+    const exec = path.join('C:\\Users\\me\\AppData\\Local\\framecapt\\app-1.0.0', 'FrameCapt.exe');
     const update = path.resolve(path.dirname(exec), '..', 'Update.exe');
     const options = loginItemOptions(true, { execPath: exec, exists: (file) => file === update });
     expect(options).toEqual({
       openAtLogin: true,
       path: update,
-      args: ['--processStart', 'Framelet.exe', '--process-start-args', HIDDEN_ARG],
+      args: ['--processStart', 'FrameCapt.exe', '--process-start-args', HIDDEN_ARG],
     });
   });
 });

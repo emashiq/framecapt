@@ -301,7 +301,7 @@ function EditorWorkspace({
     setBusy('copy');
     try {
       const bytes = await (await flattenToBlob(bitmap, exporting, 'png')).arrayBuffer();
-      const result = await window.framelet.invoke('shot:copy', {
+      const result = await window.framecapt.invoke('shot:copy', {
         sessionId: shot.session.id,
         bytes,
       });
@@ -331,7 +331,7 @@ function EditorWorkspace({
         const thumbnail = await flattenThumbnail(bitmap, exporting)
           .then((blob) => (blob.size <= MAX_THUMBNAIL_BYTES ? blob.arrayBuffer() : undefined))
           .catch(() => undefined);
-        const result = await window.framelet.invoke('shot:export', {
+        const result = await window.framecapt.invoke('shot:export', {
           sessionId: shot.session.id,
           format,
           bytes,
@@ -345,7 +345,8 @@ function EditorWorkspace({
           notify.success(`Saved to ${shortPath(saved)}`, {
             action: {
               label: 'Show in folder',
-              onClick: () => void window.framelet.invoke('shell:showItemInFolder', { path: saved }),
+              onClick: () =>
+                void window.framecapt.invoke('shell:showItemInFolder', { path: saved }),
             },
           });
           announce('Image saved');

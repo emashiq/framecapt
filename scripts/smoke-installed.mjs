@@ -3,13 +3,13 @@
 // real screenshot and real recording through the global shortcuts, MP4 auto-export, 60 s without a
 // network connection, silent uninstall. Usage: npm run smoke:installed [-- --setup <Setup.exe>]
 // (after `npm run make`). It changes the machine, so it is careful:
-//   - it refuses to run when Framelet is already installed or running (it never touches that);
-//   - everything it modifies in the real profile (%APPDATA%\Framelet, the Run key, sentinel files in
+//   - it refuses to run when FrameCapt is already installed or running (it never touches that);
+//   - everything it modifies in the real profile (%APPDATA%\FrameCapt, the Run key, sentinel files in
 //     the default output folders) is backed up first and restored / removed in `finally`;
 //   - the capture steps run a SECOND instance with --user-data-dir in a temp folder and the output
-//     folders set there, so no capture lands in Pictures\Framelet or Videos\Framelet;
+//     folders set there, so no capture lands in Pictures\FrameCapt or Videos\FrameCapt;
 //   - it removes only what it created.
-// Real input: Framelet's own global shortcuts are pressed with SendInput (tests/native/fixtures)
+// Real input: FrameCapt's own global shortcuts are pressed with SendInput (tests/native/fixtures)
 // and a display is picked with a real mouse click in the selection overlay.
 // Everything is spawned with argument arrays (shell: false). Evidence (redacted: no user name, no
 // absolute home paths): docs/evidence/phase10/installed-smoke.json. Needs an interactive desktop.
@@ -106,7 +106,7 @@ function redact(text) {
 const processes = () =>
   json(
     powershell(
-      'Get-Process -Name Framelet,Update -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ pid = $_.Id; name = $_.ProcessName; path = $_.Path; title = $_.MainWindowTitle } } | ConvertTo-Json -Compress',
+      'Get-Process -Name FrameCapt,Update -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ pid = $_.Id; name = $_.ProcessName; path = $_.Path; title = $_.MainWindowTitle } } | ConvertTo-Json -Compress',
     ).out,
   );
 const killTree = (pid) => run('taskkill', ['/PID', String(pid), '/T', '/F']);
@@ -117,15 +117,15 @@ const folder = (name) => powershell(`[Environment]::GetFolderPath('${name}')`).o
 const localAppData = process.env.LOCALAPPDATA;
 const appData = process.env.APPDATA;
 if (!localAppData || !appData) throw new Error('LOCALAPPDATA/APPDATA are not set.');
-const installRoot = path.join(localAppData, 'Framelet');
-const userDataReal = path.join(appData, 'Framelet');
+const installRoot = path.join(localAppData, 'FrameCapt');
+const userDataReal = path.join(appData, 'FrameCapt');
 const pictures = folder('MyPictures');
 const videos = folder('MyVideos');
-const defaultShots = path.join(pictures, 'Framelet');
-const defaultVideos = path.join(videos, 'Framelet');
+const defaultShots = path.join(pictures, 'FrameCapt');
+const defaultVideos = path.join(videos, 'FrameCapt');
 const startMenu = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs');
 const desktop = folder('DesktopDirectory');
-const UNINSTALL_KEY = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Framelet';
+const UNINSTALL_KEY = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\FrameCapt';
 const RUN_KEY = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 /** Every value of the per-user Run key (name -> data): where "launch at login" lives. */
 const runValues = () =>
@@ -142,9 +142,9 @@ const setupExe =
     ? (() => {
         const dir = path.join(root, 'out', 'make', 'squirrel.windows', 'x64');
         const found = fs.existsSync(dir)
-          ? fs.readdirSync(dir).find((n) => /^Framelet-Setup-.*\.exe$/.test(n))
+          ? fs.readdirSync(dir).find((n) => /^FrameCapt-Setup-.*\.exe$/.test(n))
           : undefined;
-        if (!found) throw new Error(`No Framelet-Setup-*.exe in ${dir}. Run \`npm run make\`.`);
+        if (!found) throw new Error(`No FrameCapt-Setup-*.exe in ${dir}. Run \`npm run make\`.`);
         return path.join(dir, found);
       })()
     : path.resolve(argv[setupArg + 1] ?? '');
@@ -153,17 +153,17 @@ if (!fs.existsSync(setupExe)) throw new Error(`${setupExe} not found`);
 // --- pre-flight (refuse to disturb an existing install) ------------------------------------
 
 if (processes().length > 0)
-  throw new Error('Framelet is running. Close it first; nothing was changed.');
+  throw new Error('FrameCapt is running. Close it first; nothing was changed.');
 if (fs.existsSync(installRoot)) {
   throw new Error(`${installRoot} exists. Uninstall it first; nothing was changed.`);
 }
 
-const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-installed-'));
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-installed-'));
 const backupDir = path.join(tempRoot, 'userdata-backup');
 const state = {
   appDataExisted: fs.existsSync(userDataReal),
   appDataSnapshot: new Map(), // relative path -> `${size}:${mtimeMs}`
-  companyFolderExisted: fs.existsSync(path.join(startMenu, 'Framelet contributors')),
+  companyFolderExisted: fs.existsSync(path.join(startMenu, 'FrameCapt contributors')),
   picturesExisted: fs.existsSync(defaultShots),
   videosExisted: fs.existsSync(defaultVideos),
   sentinels: [],
@@ -183,7 +183,7 @@ function snapshot(dir) {
   return map;
 }
 
-/** Puts %APPDATA%\Framelet back to the snapshot: restores changed/removed files, removes new ones. */
+/** Puts %APPDATA%\FrameCapt back to the snapshot: restores changed/removed files, removes new ones. */
 function restoreUserData() {
   if (!state.appDataExisted) {
     fs.rmSync(userDataReal, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
@@ -261,7 +261,7 @@ function cleanup() {
     cleanupNotes.push('install dir removed by cleanup (uninstall had left it)');
   }
   // Squirrel makes a Start Menu folder named after the publisher and leaves it, empty, behind.
-  const companyFolder = path.join(startMenu, 'Framelet contributors');
+  const companyFolder = path.join(startMenu, 'FrameCapt contributors');
   if (
     !state.companyFolderExisted &&
     fs.existsSync(companyFolder) &&
@@ -288,8 +288,8 @@ async function main() {
   // Sentinels in the DEFAULT output folders: they must survive the uninstall unchanged.
   fs.mkdirSync(defaultShots, { recursive: true });
   fs.mkdirSync(defaultVideos, { recursive: true });
-  const sentinelPictures = path.join(defaultShots, 'framelet-uninstall-sentinel.txt');
-  const sentinelVideos = path.join(defaultVideos, 'framelet-uninstall-sentinel.txt');
+  const sentinelPictures = path.join(defaultShots, 'framecapt-uninstall-sentinel.txt');
+  const sentinelVideos = path.join(defaultVideos, 'framecapt-uninstall-sentinel.txt');
   fs.writeFileSync(sentinelPictures, `sentinel ${evidence.date}\n`);
   fs.writeFileSync(sentinelVideos, `sentinel ${evidence.date}\n`);
   state.sentinels.push(sentinelPictures, sentinelVideos);
@@ -331,12 +331,14 @@ async function main() {
       fs.existsSync(installRoot) &&
       fs
         .readdirSync(installRoot)
-        .find((n) => /^app-\d/.test(n) && fs.existsSync(path.join(installRoot, n, 'Framelet.exe'))),
+        .find(
+          (n) => /^app-\d/.test(n) && fs.existsSync(path.join(installRoot, n, 'FrameCapt.exe')),
+        ),
     60_000,
   ).then((n) => path.join(installRoot, n));
-  const exe = path.join(appDir, 'Framelet.exe');
+  const exe = path.join(appDir, 'FrameCapt.exe');
   check(
-    'installed to %LOCALAPPDATA%\\Framelet (Update.exe + app-<version>\\Framelet.exe)',
+    'installed to %LOCALAPPDATA%\\FrameCapt (Update.exe + app-<version>\\FrameCapt.exe)',
     fs.existsSync(updateExe) && fs.existsSync(exe),
     redact(appDir),
   );
@@ -359,7 +361,7 @@ async function main() {
     (n) => !fs.existsSync(path.join(appDir, 'resources', n)),
   );
   check(
-    'resources has the Framelet LICENSE and THIRD_PARTY_NOTICES.md',
+    'resources has the FrameCapt LICENSE and THIRD_PARTY_NOTICES.md',
     notices.length === 0,
     notices.join(',') || 'all present',
   );
@@ -377,7 +379,7 @@ async function main() {
   evidence.exeVersionInfo = info;
   check(
     'the exe carries the provisional product name',
-    info?.product === 'Framelet',
+    info?.product === 'FrameCapt',
     JSON.stringify(info),
   );
   try {
@@ -408,7 +410,7 @@ async function main() {
   // --silent installs without launching the app (Squirrel starts it only after an interactive
   // install). Record it, and make sure the install did not stall on the network.
   await sleep(3000);
-  const launchedBySetup = processes().some((p) => p.name === 'Framelet');
+  const launchedBySetup = processes().some((p) => p.name === 'FrameCapt');
   evidence.silentInstallLaunchesApp = launchedBySetup;
   evidence.notes.push(
     'Setup.exe --silent does not start the app afterwards (Squirrel launches it, with --squirrel-firstrun, only for an interactive install).',
@@ -422,7 +424,7 @@ async function main() {
     if (proc.path?.toLowerCase().startsWith(installRoot.toLowerCase())) killTree(proc.pid);
 
   // --- the first run, as Squirrel starts it after an interactive install --------------------
-  // Framelet.exe --squirrel-firstrun must start the app normally (it is not a quit-early hook).
+  // FrameCapt.exe --squirrel-firstrun must start the app normally (it is not a quit-early hook).
   const firstData = path.join(tempRoot, 'userdata-firstrun');
   fs.mkdirSync(firstData, { recursive: true });
   const firstPort = await freePort();
@@ -437,7 +439,7 @@ async function main() {
   state.appProc = firstRun;
   const titled = await waitFor(
     'the first-run window',
-    () => processes().find((p) => p.name === 'Framelet' && p.title)?.title,
+    () => processes().find((p) => p.name === 'FrameCapt' && p.title)?.title,
     40_000,
   ).catch(() => undefined);
   check(
@@ -445,7 +447,7 @@ async function main() {
     titled !== undefined,
     titled ?? 'no window',
   );
-  check('the main window title is "Framelet"', titled === 'Framelet', titled ?? 'none');
+  check('the main window title is "FrameCapt"', titled === 'FrameCapt', titled ?? 'none');
   const firstLog = path.join(firstData, 'logs', 'main.log');
   const logText = await waitFor(
     'the startup self-check in main.log',
@@ -456,7 +458,7 @@ async function main() {
     20_000,
   ).catch(() => (fs.existsSync(firstLog) ? fs.readFileSync(firstLog, 'utf8') : ''));
   const logLines = logText.split(/\r?\n/);
-  const starting = logLines.find((line) => /Framelet \d+\.\d+\.\d+ starting/.test(line));
+  const starting = logLines.find((line) => /FrameCapt \d+\.\d+\.\d+ starting/.test(line));
   const ffok = logLines.find((line) => /ffmpeg ok /.test(line));
   check(
     'main.log shows the startup line',
@@ -490,13 +492,13 @@ async function main() {
         firstBrowser
           .contexts()
           .flatMap((c) => c.pages())
-          .find((p) => p.url().startsWith('app://framelet/index.html')),
+          .find((p) => p.url().startsWith('app://framecapt/index.html')),
       20_000,
     ).catch(() => undefined));
   const enable =
     firstPage &&
     (await firstPage.evaluate(() =>
-      window.framelet.invoke('settings:update', { patch: { general: { launchAtLogin: true } } }),
+      window.framecapt.invoke('settings:update', { patch: { general: { launchAtLogin: true } } }),
     ));
   check(
     'Settings: launch at login can be switched on in the installed app',
@@ -511,17 +513,17 @@ async function main() {
   evidence.launchAtLogin = loginEntry ? { name: loginEntry[0], data: redact(loginEntry[1]) } : null;
   const loginParts = loginEntry ? /^"([^"]+)"\s*(.*)$/.exec(loginEntry[1]) : null;
   check(
-    'the Run entry starts Update.exe --processStart Framelet.exe --process-start-args --hidden (no stray quote characters)',
+    'the Run entry starts Update.exe --processStart FrameCapt.exe --process-start-args --hidden (no stray quote characters)',
     Boolean(loginParts) &&
       loginParts[1].toLowerCase() === updateExe.toLowerCase() &&
-      loginParts[2] === '--processStart Framelet.exe --process-start-args --hidden',
+      loginParts[2] === '--processStart FrameCapt.exe --process-start-args --hidden',
     loginEntry ? redact(loginEntry[1]) : 'no entry',
   );
   await firstBrowser?.close().catch(() => undefined);
   killTree(firstRun.pid);
   await waitFor(
     'the first run to end',
-    () => processes().filter((p) => p.name === 'Framelet').length === 0,
+    () => processes().filter((p) => p.name === 'FrameCapt').length === 0,
     20_000,
   );
   if (loginParts) {
@@ -535,7 +537,7 @@ async function main() {
     const mainCommandLine = () =>
       json(
         powershell(
-          `Get-CimInstance Win32_Process -Filter "Name='Framelet.exe'" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.CommandLine } | ConvertTo-Json -Compress`,
+          `Get-CimInstance Win32_Process -Filter "Name='FrameCapt.exe'" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.CommandLine } | ConvertTo-Json -Compress`,
         ).out,
       )[0];
     const started = await waitFor(
@@ -551,13 +553,13 @@ async function main() {
     await sleep(3000);
     check(
       'a start at login stays in the tray (no window)',
-      !processes().some((p) => p.name === 'Framelet' && p.title),
+      !processes().some((p) => p.name === 'FrameCapt' && p.title),
     );
     for (const proc of processes())
       if (proc.path?.toLowerCase().startsWith(installRoot.toLowerCase())) killTree(proc.pid);
     await waitFor(
       'the login-started app to end',
-      () => processes().filter((p) => p.name === 'Framelet').length === 0,
+      () => processes().filter((p) => p.name === 'FrameCapt').length === 0,
       20_000,
     );
   }
@@ -566,12 +568,12 @@ async function main() {
   // Shortcuts (Start Menu, Desktop) and the AppUserModelID Windows knows.
   const lnks = json(
     powershell(
-      `Get-ChildItem -LiteralPath '${startMenu}' -Recurse -Filter 'Framelet*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | ConvertTo-Json -Compress`,
+      `Get-ChildItem -LiteralPath '${startMenu}' -Recurse -Filter 'FrameCapt*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | ConvertTo-Json -Compress`,
     ).out,
   );
   const desktopLnks = json(
     powershell(
-      `Get-ChildItem -LiteralPath '${desktop}' -Filter 'Framelet*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | ConvertTo-Json -Compress`,
+      `Get-ChildItem -LiteralPath '${desktop}' -Filter 'FrameCapt*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | ConvertTo-Json -Compress`,
     ).out,
   );
   evidence.shortcuts = { startMenu: lnks.map(redact), desktop: desktopLnks.map(redact) };
@@ -582,13 +584,13 @@ async function main() {
   );
   const startApp = json(
     powershell(
-      "Get-StartApps | Where-Object { $_.Name -like 'Framelet*' } | ForEach-Object { [pscustomobject]@{ name = $_.Name; appId = $_.AppID } } | ConvertTo-Json -Compress",
+      "Get-StartApps | Where-Object { $_.Name -like 'FrameCapt*' } | ForEach-Object { [pscustomobject]@{ name = $_.Name; appId = $_.AppID } } | ConvertTo-Json -Compress",
     ).out,
   )[0];
   evidence.startApp = startApp ?? null;
   check(
     'the Start Menu entry carries the Squirrel AppUserModelID the app uses for notifications',
-    startApp?.appId === 'com.squirrel.Framelet.Framelet',
+    startApp?.appId === 'com.squirrel.FrameCapt.FrameCapt',
     startApp?.appId ?? 'none',
   );
 
@@ -600,8 +602,8 @@ async function main() {
   const registered = uninstallEntry();
   evidence.uninstallEntry = redact(registered);
   check(
-    'Programs and Features lists Framelet with an Update.exe --uninstall command',
-    registered.startsWith('Framelet|') &&
+    'Programs and Features lists FrameCapt with an Update.exe --uninstall command',
+    registered.startsWith('FrameCapt|') &&
       registered.includes('Update.exe') &&
       registered.includes('--uninstall'),
     redact(registered),
@@ -634,7 +636,7 @@ async function main() {
     updateExe,
     [
       '--processStart',
-      'Framelet.exe',
+      'FrameCapt.exe',
       '--process-start-args',
       `--remote-debugging-port=${port} --user-data-dir=${userData}`,
     ],
@@ -644,10 +646,10 @@ async function main() {
   const mainPid = () =>
     json(
       powershell(
-        `Get-CimInstance Win32_Process -Filter "Name='Framelet.exe'" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.ProcessId } | ConvertTo-Json -Compress`,
+        `Get-CimInstance Win32_Process -Filter "Name='FrameCapt.exe'" | Where-Object { $_.CommandLine -notmatch '--type=' } | ForEach-Object { $_.ProcessId } | ConvertTo-Json -Compress`,
       ).out,
     )[0];
-  const app = { pid: await waitFor('the Framelet main process', mainPid, 30_000) };
+  const app = { pid: await waitFor('the FrameCapt main process', mainPid, 30_000) };
   check(
     'Update.exe --processStart (the shortcut path) starts the versioned exe',
     Boolean(app.pid),
@@ -668,27 +670,29 @@ async function main() {
     () =>
       pagesOf().find(
         (p) =>
-          p.url().startsWith('app://framelet/index.html') &&
+          p.url().startsWith('app://framecapt/index.html') &&
           !/#\/(overlay|toolbar|recorder|countdown)/.test(p.url()),
       ),
     30_000,
   );
   check(
-    'the renderer loads from app://framelet (installed build, no file://)',
-    main.url().startsWith('app://framelet/'),
+    'the renderer loads from app://framecapt (installed build, no file://)',
+    main.url().startsWith('app://framecapt/'),
     main.url(),
   );
   await main.waitForSelector('text=Capture', { timeout: 20_000 }).catch(() => undefined);
   const facts = await main.evaluate(() => ({
     title: document.title,
     rendered: document.body.innerText.length > 20,
-    api: Object.keys(window.framelet ?? {}).sort(),
+    api: Object.keys(window.framecapt ?? {}).sort(),
   }));
   check(
     'the UI rendered with the secure bridge',
-    facts.rendered && facts.title === 'Framelet' && JSON.stringify(facts.api) === '["invoke","on"]',
+    facts.rendered &&
+      facts.title === 'FrameCapt' &&
+      JSON.stringify(facts.api) === '["invoke","on"]',
   );
-  const appInfo = await main.evaluate(() => window.framelet.invoke('app:getInfo'));
+  const appInfo = await main.evaluate(() => window.framecapt.invoke('app:getInfo'));
   check(
     'app:getInfo: packaged, updates "unconfigured"',
     appInfo.ok && appInfo.data.isPackaged === true && appInfo.data.updates.state === 'unconfigured',
@@ -738,7 +742,7 @@ async function main() {
   const states = await waitFor(
     'global shortcuts',
     async () => {
-      const result = await main.evaluate(() => window.framelet.invoke('shortcuts:status'));
+      const result = await main.evaluate(() => window.framecapt.invoke('shortcuts:status'));
       return result.ok &&
         result.data.screenshotScreen.status === 'ok' &&
         result.data.recordScreen.status === 'ok'
@@ -810,7 +814,7 @@ async function main() {
       isPng && Boolean(match),
       `${width}x${height}`,
     );
-    const listed = await main.evaluate(() => window.framelet.invoke('history:list', {}));
+    const listed = await main.evaluate(() => window.framecapt.invoke('history:list', {}));
     check(
       'the screenshot is in history',
       listed.ok && listed.data.total >= 1,
@@ -946,14 +950,14 @@ async function main() {
   killTree(app.pid);
   await waitFor(
     'the app to end',
-    () => processes().filter((p) => p.name === 'Framelet').length === 0,
+    () => processes().filter((p) => p.name === 'FrameCapt').length === 0,
     20_000,
   ).catch(() => undefined);
   state.appProc = undefined;
 
   // --- uninstall ---------------------------------------------------------------------------------
   fs.mkdirSync(userDataReal, { recursive: true });
-  const userSentinel = path.join(userDataReal, 'framelet-uninstall-sentinel.txt');
+  const userSentinel = path.join(userDataReal, 'framecapt-uninstall-sentinel.txt');
   fs.writeFileSync(
     userSentinel,
     `sentinel ${evidence.date}
@@ -976,13 +980,13 @@ async function main() {
     : [];
   const leftoverBytes = leftovers.reduce((sum, e) => sum + e.bytes, 0);
   const appFilesLeft = leftovers.filter((e) =>
-    /(^|[\\/])(Framelet\.exe|app\.asar|ffmpeg\.exe|ffprobe\.exe)$/i.test(e.name),
+    /(^|[\\/])(FrameCapt\.exe|app\.asar|ffmpeg\.exe|ffprobe\.exe)$/i.test(e.name),
   );
   evidence.uninstall.installDirFullyRemoved = leftovers.length === 0;
   evidence.uninstall.leftovers = leftovers;
   evidence.uninstall.leftoverBytes = leftoverBytes;
   check(
-    'the app files are removed (no Framelet.exe, app.asar or FFmpeg left in the install folder)',
+    'the app files are removed (no FrameCapt.exe, app.asar or FFmpeg left in the install folder)',
     appFilesLeft.length === 0 && leftoverBytes < 6 * 1024 * 1024,
     leftovers.length === 0
       ? 'folder removed'
@@ -991,12 +995,12 @@ async function main() {
   await sleep(1500);
   const lnksAfter = json(
     powershell(
-      `Get-ChildItem -LiteralPath '${startMenu}' -Recurse -Filter 'Framelet*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | ConvertTo-Json -Compress`,
+      `Get-ChildItem -LiteralPath '${startMenu}' -Recurse -Filter 'FrameCapt*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | ConvertTo-Json -Compress`,
     ).out,
   );
   const desktopAfter = json(
     powershell(
-      `Get-ChildItem -LiteralPath '${desktop}' -Filter 'Framelet*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | ConvertTo-Json -Compress`,
+      `Get-ChildItem -LiteralPath '${desktop}' -Filter 'FrameCapt*.lnk' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName } | ConvertTo-Json -Compress`,
     ).out,
   );
   check(
@@ -1015,9 +1019,9 @@ async function main() {
     runLeft.length === 0,
     runLeft.length ? `still set: ${runLeft.join(', ')}` : 'removed',
   );
-  check('no Framelet process is left running', processes().length === 0);
+  check('no FrameCapt process is left running', processes().length === 0);
   check(
-    'the sentinel files in Pictures\\Framelet and Videos\\Framelet are untouched',
+    'the sentinel files in Pictures\\FrameCapt and Videos\\FrameCapt are untouched',
     fs.existsSync(sentinelPictures) &&
       fs.existsSync(sentinelVideos) &&
       sha256(sentinelPictures) === sentinelHashes[0] &&
@@ -1031,7 +1035,7 @@ async function main() {
       fs.existsSync(path.join(videosDir, webm)),
   );
   check(
-    'user data (%APPDATA%\\Framelet) is kept by the uninstall, by design (sentinel survives)',
+    'user data (%APPDATA%\\FrameCapt) is kept by the uninstall, by design (sentinel survives)',
     fs.existsSync(userSentinel),
   );
   evidence.userDataKeptAfterUninstall = fs.existsSync(userDataReal);

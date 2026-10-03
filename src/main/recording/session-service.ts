@@ -182,7 +182,7 @@ export class SessionService {
     if (free !== null && free < MIN_FREE_TO_START) {
       throw new IpcError(
         'LOW_DISK',
-        'There is not enough free disk space to record (Framelet needs at least 1 GB).',
+        'There is not enough free disk space to record (FrameCapt needs at least 1 GB).',
       );
     }
   }
@@ -479,7 +479,7 @@ export class SessionService {
 
   /**
    * Publishes the finished stream: ffmpeg remux (`-c copy`, adds Duration and Cues) into a
-   * partial file in `outputDir`, probe, atomic rename to a free `Framelet YYYY-MM-DD at
+   * partial file in `outputDir`, probe, atomic rename to a free `FrameCapt YYYY-MM-DD at
    * HH.mm.ss.webm`, then the session (including `stream.webm`) is deleted. On a failed remux the
    * stream is kept (manifest `failed`) and, when it shows a video stream, copied raw as a last
    * resort (`unindexed`). Idempotent. An aborted run leaves the manifest `finalizing` so the next
@@ -585,7 +585,7 @@ export class SessionService {
       await this.writeManifest(session).catch(() => undefined);
       throw new IpcError(
         'FINALIZE_FAILED',
-        'The recording could not be finished. The recorded data was kept; you can try to recover it the next time Framelet starts.',
+        'The recording could not be finished. The recorded data was kept; you can try to recover it the next time FrameCapt starts.',
       );
     });
   }

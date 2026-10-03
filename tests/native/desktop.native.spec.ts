@@ -1,13 +1,13 @@
 /**
  * Native verification of the desktop layer on the real host (production build, real Windows
- * shell): real OS-level key presses reach Framelet's global shortcuts, the real tray icon exists,
+ * shell): real OS-level key presses reach FrameCapt's global shortcuts, the real tray icon exists,
  * a hotkey held by another process is reported as a conflict, close-to-tray and the second launch
  * work, and an idle app uses (almost) no CPU. Needs an interactive Windows session. Evidence
  * (redacted JSON) goes to docs/evidence/phase08/.
  *
- * Keyboard safety: the only OS-level key presses are Framelet's own global shortcuts, and each is
+ * Keyboard safety: the only OS-level key presses are FrameCapt's own global shortcuts, and each is
  * sent only after the app reported that exact combination as registered ("ok"); a registered global
- * hotkey is consumed by Framelet and never reaches another application. Everything else is driven
+ * hotkey is consumed by FrameCapt and never reaches another application. Everything else is driven
  * through Playwright, not the keyboard.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -45,14 +45,14 @@ async function launch(options: { dir?: string; settings?: unknown } = {}): Promi
     fs.existsSync(path.join(projectRoot, '.vite', 'build', 'main.cjs')),
     'Run `electron-forge package` first (npm run test:native does this).',
   ).toBe(true);
-  const dir = options.dir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-desktop-'));
+  const dir = options.dir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-desktop-'));
   if (options.settings !== undefined) {
     fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(options.settings));
   }
   const app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
-    env: { ...process.env, FRAMELET_USER_DATA_DIR: dir },
+    env: { ...process.env, FRAMECAPT_USER_DATA_DIR: dir },
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -87,7 +87,7 @@ function sendKeys(...keys: string[]): void {
 }
 
 async function shortcutStates(page: Page) {
-  const result = await page.evaluate(() => window.framelet.invoke('shortcuts:status'));
+  const result = await page.evaluate(() => window.framecapt.invoke('shortcuts:status'));
   if (!result.ok) throw new Error('shortcuts:status failed');
   return result.data;
 }
@@ -165,7 +165,7 @@ test('(a) a real Ctrl+Shift+3 opens the region overlays; Esc closes them and foc
 
   const runs: { overlayMs: number; overlaysAfterEsc: number; stayedMinimized: boolean }[] = [];
   for (let run = 0; run < 3; run += 1) {
-    // Another window in front: the shortcut must work "from anywhere", not only with Framelet focused.
+    // Another window in front: the shortcut must work "from anywhere", not only with FrameCapt focused.
     await (await app.browserWindow(page)).evaluate((w) => w.minimize());
     await expect.poll(async () => (await windowState(app, page)).minimized).toBe(true);
     const t0 = Date.now();
@@ -240,7 +240,7 @@ test('(b) keyboard-only region capture on the real display (arrow keys, Enter) o
 });
 
 test('(c) a hotkey another process holds (RegisterHotKey) is reported as a conflict', async () => {
-  const ready = path.join(os.tmpdir(), `framelet-hotkey-${process.pid}.txt`);
+  const ready = path.join(os.tmpdir(), `framecapt-hotkey-${process.pid}.txt`);
   fs.rmSync(ready, { force: true });
   // Ctrl+Alt+Shift+F12: mask Alt=1 Ctrl=2 Shift=4, virtual key F12 = 0x7B.
   children.push(powershell(path.join(fixtures, 'hold-hotkey.ps1'), [ready, '7', '123']));
@@ -255,7 +255,7 @@ test('(c) a hotkey another process holds (RegisterHotKey) is reported as a confl
   const states = await shortcutStates(page);
   record('conflict', {
     heldByOtherProcess: 'Ctrl+Alt+Shift+F12',
-    framelet: states.recordWindow,
+    framecapt: states.recordWindow,
     others: { screenshotRegion: states.screenshotRegion.status },
   });
   expect(states.recordWindow).toMatchObject({
@@ -272,7 +272,7 @@ test('(c) a hotkey another process holds (RegisterHotKey) is reported as a confl
 
 test('(d) the tray icon exists once; close-to-tray hides the window; a second launch shows it again', async () => {
   const { app, page, dir } = await start();
-  const info = await page.evaluate(() => window.framelet.invoke('app:getInfo'));
+  const info = await page.evaluate(() => window.framecapt.invoke('app:getInfo'));
   if (!info.ok) throw new Error('app:getInfo failed');
   expect(info.data.tray.active).toBe(true);
   const log = fs.readFileSync(path.join(dir, 'logs', 'main.log'), 'utf8');
@@ -292,7 +292,7 @@ test('(d) the tray icon exists once; close-to-tray hides the window; a second la
     .launch({
       args: ['.'],
       cwd: projectRoot,
-      env: { ...process.env, FRAMELET_USER_DATA_DIR: dir },
+      env: { ...process.env, FRAMECAPT_USER_DATA_DIR: dir },
     })
     .catch(() => null);
   await second?.close().catch(() => undefined);
@@ -302,7 +302,7 @@ test('(d) the tray icon exists once; close-to-tray hides the window; a second la
   const logAfter = fs.readFileSync(path.join(dir, 'logs', 'main.log'), 'utf8');
   expect((logAfter.match(/Tray created/g) ?? []).length).toBe(1);
 
-  const stillInfo = await page.evaluate(() => window.framelet.invoke('app:getInfo'));
+  const stillInfo = await page.evaluate(() => window.framecapt.invoke('app:getInfo'));
   record('tray', {
     active: info.ok ? info.data.tray.active : false,
     bounds: info.ok ? info.data.tray.bounds : null,
@@ -317,13 +317,13 @@ test('(d) the tray icon exists once; close-to-tray hides the window; a second la
 test('(e) idle CPU: 30 s of app metrics with every window open and the recorder worker present', async () => {
   const { app, page } = await start();
   // Wake the hidden worker the way a user does (a short real recording), so it exists while idle.
-  const displays = await page.evaluate(() => window.framelet.invoke('capture:listDisplays'));
+  const displays = await page.evaluate(() => window.framecapt.invoke('capture:listDisplays'));
   if (!displays.ok) throw new Error('capture:listDisplays failed');
   const primary = displays.data.find((display) => display.isPrimary) ?? displays.data[0];
   expect(primary).toBeDefined();
   const started = await page.evaluate(
     (displayId) =>
-      window.framelet.invoke('recorder:start', {
+      window.framecapt.invoke('recorder:start', {
         target: 'screen',
         displayId,
         options: {
@@ -340,24 +340,24 @@ test('(e) idle CPU: 30 s of app metrics with every window open and the recorder 
   await expect
     .poll(
       async () => {
-        const state = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+        const state = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
         return state.ok ? state.data.status : 'unknown';
       },
       { timeout: 30_000 },
     )
     .toBe('recording');
   await page.waitForTimeout(1500);
-  await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
   await expect
     .poll(
       async () => {
-        const state = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+        const state = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
         return state.ok ? state.data.status : 'unknown';
       },
       { timeout: 30_000 },
     )
     .toBe('completed');
-  await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
   const windowsOpen = await app.evaluate(
     ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
   );

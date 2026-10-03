@@ -14,20 +14,20 @@ describe('appUserModelId', () => {
     'u',
     'AppData',
     'Local',
-    'Framelet',
+    'FrameCapt',
     'app-0.1.0',
-    'Framelet.exe',
+    'FrameCapt.exe',
   );
   const updateExe = path.resolve(path.dirname(squirrelExe), '..', 'Update.exe');
 
   it('matches the Squirrel shortcut id in a Squirrel install (Update.exe one level up)', () => {
     expect(appUserModelId(squirrelExe, (file) => file === updateExe)).toBe(
-      'com.squirrel.Framelet.Framelet',
+      'com.squirrel.FrameCapt.FrameCapt',
     );
   });
 
   it('is the provisional app id for the portable zip and unpackaged runs', () => {
-    expect(appUserModelId(squirrelExe, () => false)).toBe('com.framelet.app');
+    expect(appUserModelId(squirrelExe, () => false)).toBe('com.framecapt.app');
   });
 });
 
@@ -42,7 +42,7 @@ describe('handleSquirrelEvent', () => {
     }));
     vi.doMock('node:child_process', () => ({ spawn }));
     const original = process.argv;
-    process.argv = ['Framelet.exe', ...(argv1 ? [argv1] : [])];
+    process.argv = ['FrameCapt.exe', ...(argv1 ? [argv1] : [])];
     try {
       const { handleSquirrelEvent } = await import('../../src/main/squirrel');
       return { handled: handleSquirrelEvent(), quit, spawn, setLoginItemSettings };

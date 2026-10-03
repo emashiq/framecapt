@@ -1,13 +1,13 @@
 import path from 'node:path';
 
 /**
- * The production renderer is served from a privileged custom scheme, `app://framelet/`, instead of
+ * The production renderer is served from a privileged custom scheme, `app://framecapt/`, instead of
  * file:// (ADR-033). That lets the GrantFileProtocolExtraPrivileges fuse stay off: nothing loads
  * from file:// any more. This module is the pure part: names, MIME types and the URL -> file
  * resolver with strict containment. No Electron imports, so it is unit-tested directly.
  */
 export const APP_SCHEME = 'app';
-export const APP_HOST = 'framelet';
+export const APP_HOST = 'framecapt';
 export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`;
 /** Production windows load this document; the window role is the location hash. */
 export const APP_ENTRY_URL = `${APP_ORIGIN}/index.html`;
@@ -30,7 +30,7 @@ export type AppAssetResult =
   { ok: true; file: string; contentType: string } | { ok: false; status: 400 | 404 };
 
 /**
- * Maps an `app://framelet/<path>` URL to a file inside `rendererDir`, or says why not. Rejected
+ * Maps an `app://framecapt/<path>` URL to a file inside `rendererDir`, or says why not. Rejected
  * (never resolved): another scheme or host, a port or credentials, `..` or `.` segments (also
  * percent-encoded, even doubly encoded), backslashes, NUL, drive letters / `:`, empty segments
  * (`//`), unknown extensions, and any result that does not stay inside `rendererDir`.

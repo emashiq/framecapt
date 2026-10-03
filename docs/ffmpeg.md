@@ -1,6 +1,6 @@
 # FFmpeg
 
-Framelet finishes every recording with FFmpeg (`-c copy` remux, probing, recovery) and converts recordings to MP4 on request (H.264 + AAC, phase 07). FFmpeg is a **local child process**, started per job with `shell: false` and an argument array, never a server and never found through `PATH`.
+FrameCapt finishes every recording with FFmpeg (`-c copy` remux, probing, recovery) and converts recordings to MP4 on request (H.264 + AAC, phase 07). FFmpeg is a **local child process**, started per job with `shell: false` and an argument array, never a server and never found through `PATH`.
 
 ## The pinned build
 
@@ -21,13 +21,13 @@ Size note: both executables are about 105 MB each (static builds), so an install
 
 `ffmpeg.exe -hide_banner -buildconf` starts with `--enable-gpl --enable-version3 --enable-static ...` and contains **no** `--enable-nonfree`. `ffmpeg.exe -L` prints "ffmpeg is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version." The zip's `LICENSE` file is the GPL version 3 text and its README says "License: GPL v3". Conclusion: this binary is **GPL-3.0-or-later** (GPL because of `--enable-gpl` libraries such as libx264/libx265; version 3 because of `--enable-version3`). `scripts/fetch-ffmpeg.mjs` re-checks all of this on every fetch and refuses a build that is non-free, not GPL/version 3, or whose `-L` text differs.
 
-Framelet is proposed as GPL-3.0-only and runs FFmpeg as a separate program, so this is compatible; the exact FFmpeg source, build options and license must still be part of the third-party notices (phase 11), and the GPL requires offering the corresponding source of the FFmpeg binary that is redistributed (the commit above, and a written offer or hosted copy, are release tasks for the owner). Other FFmpeg builds have other licenses (an LGPL-only build, for example, would have no libx264); do not swap builds without redoing this section.
+FrameCapt is proposed as GPL-3.0-only and runs FFmpeg as a separate program, so this is compatible; the exact FFmpeg source, build options and license must still be part of the third-party notices (phase 11), and the GPL requires offering the corresponding source of the FFmpeg binary that is redistributed (the commit above, and a written offer or hosted copy, are release tasks for the owner). Other FFmpeg builds have other licenses (an LGPL-only build, for example, would have no libx264); do not swap builds without redoing this section.
 
 Build configuration summary (full list in `PROVENANCE.json`, field `buildConfiguration`): static, gcc 16.2.0 (MSYS2), `--disable-autodetect`; libvpx, libaom, libx264, libx265, libxvid, libopus, libvorbis, libmp3lame, libwebp and others; hardware paths (NVENC, AMF, QSV via libvpl, D3D11/D3D12VA); no `--enable-nonfree`.
 
 Codec and patent review for the codecs inside (x264/x265/AAC-related) is an owner action before a commercial release; nothing here is legal clearance. Phase 06 only used stream copy for WebM (VP9/Opus). Since phase 07 the MP4 export encodes H.264 (libx264) and AAC: H.264 and AAC may carry patent licensing obligations in some jurisdictions (patent pool terms, for example, can apply to distributing or selling an H.264/AAC encoder or content), and libx264 is GPL code that is part of this GPL-3.0-or-later build. **Owner review is required before a commercial release; this document does not assert that any of it is cleared.** If the review says no, the product can ship without MP4 export: the capability check below simply reports it unavailable, and WebM stays the deliverable.
 
-## What Framelet runs
+## What FrameCapt runs
 
 All calls are in `src/main/media/ffmpeg.ts`; the binary paths come from `resolveFfmpeg()`:
 
@@ -55,7 +55,7 @@ Code: `src/main/media/export.ts` (`detectMp4Capability`, `mp4Args`, `exportMp4`,
 ```
 ffmpeg -hide_banner -y -i <source.webm> -map 0:v:0 -map 0:a:0? -c:v libx264 -preset veryfast -crf 20
        -pix_fmt yuv420p -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:a aac -b:a 160k
-       -movflags +faststart -progress pipe:1 -nostats <dir>/.framelet-export-<random>.partial.mp4
+       -movflags +faststart -progress pipe:1 -nostats <dir>/.framecapt-export-<random>.partial.mp4
 ```
 
 | Piece                                               | Why                                                                                                                                                                      |
@@ -85,4 +85,4 @@ To update FFmpeg: pick a release at https://github.com/GyanD/codexffmpeg/release
 
 ## Packaging
 
-`forge.config.ts` sets `packagerConfig.extraResource: ['vendor/ffmpeg']`. Electron Packager copies an extra resource into `resources/` under its own **base name**, so the result is `resources/ffmpeg/win32-x64/ffmpeg.exe` (not `resources/ffmpeg/ffmpeg.exe`); `resolveFfmpeg()` uses that exact layout. Verified: `out/Framelet-win32-x64/resources/ffmpeg/win32-x64/{ffmpeg.exe,ffprobe.exe,LICENSE,PROVENANCE.json,README.txt}` exist after `npm run package`, and the packaged exe logs `ffmpeg ok ...` on start (see docs/recording-persistence.md, "Verification").
+`forge.config.ts` sets `packagerConfig.extraResource: ['vendor/ffmpeg']`. Electron Packager copies an extra resource into `resources/` under its own **base name**, so the result is `resources/ffmpeg/win32-x64/ffmpeg.exe` (not `resources/ffmpeg/ffmpeg.exe`); `resolveFfmpeg()` uses that exact layout. Verified: `out/FrameCapt-win32-x64/resources/ffmpeg/win32-x64/{ffmpeg.exe,ffprobe.exe,LICENSE,PROVENANCE.json,README.txt}` exist after `npm run package`, and the packaged exe logs `ffmpeg ok ...` on start (see docs/recording-persistence.md, "Verification").

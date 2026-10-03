@@ -43,21 +43,21 @@ export function useAnyExportActive(): boolean {
 /** Subscribes to main's export events once, for the whole app. Returns the unsubscribe. */
 export function listenToExports(): () => void {
   const offs = [
-    window.framelet.on('export:progress', (event) => {
+    window.framecapt.on('export:progress', (event) => {
       set(event.historyId, { status: 'running', jobId: event.jobId, percent: event.percent });
     }),
-    window.framelet.on('export:done', (event) => {
+    window.framecapt.on('export:done', (event) => {
       set(event.historyId, { status: 'done', path: event.path, itemId: event.itemId });
       notify.success('MP4 saved', {
         action: event.itemId
           ? {
               label: 'Show in folder',
-              onClick: () => void window.framelet.invoke('history:reveal', { id: event.itemId! }),
+              onClick: () => void window.framecapt.invoke('history:reveal', { id: event.itemId! }),
             }
           : undefined,
       });
     }),
-    window.framelet.on('export:failed', (event) => {
+    window.framecapt.on('export:failed', (event) => {
       if (event.cancelled) {
         set(event.historyId, null);
         notify.info('Export cancelled. Your recording was not changed.');
@@ -73,7 +73,7 @@ export function listenToExports(): () => void {
 /** Starts an export: main asks for the destination, then the progress events arrive. */
 export async function startMp4Export(historyId: string): Promise<void> {
   set(historyId, { status: 'starting' });
-  const response = await window.framelet.invoke('export:mp4', { historyId });
+  const response = await window.framecapt.invoke('export:mp4', { historyId });
   if (!response.ok) {
     set(historyId, null);
     notify.error(response.error);
@@ -90,7 +90,7 @@ export async function startMp4Export(historyId: string): Promise<void> {
 export async function cancelMp4Export(historyId: string): Promise<void> {
   const state = states.get(historyId);
   if (state?.status !== 'running') return;
-  const response = await window.framelet.invoke('export:cancel', { jobId: state.jobId });
+  const response = await window.framecapt.invoke('export:cancel', { jobId: state.jobId });
   if (!response.ok) notify.error(response.error);
 }
 

@@ -66,7 +66,7 @@ async function section(name: string): Promise<void> {
 }
 
 async function status(): Promise<string> {
-  const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+  const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
   return result.ok ? result.data.status : 'unknown';
 }
 
@@ -85,7 +85,7 @@ test.beforeAll(async () => {
     const at = now - (i + 1) * 17 * 60_000;
     const file = path.join(
       files,
-      `Framelet 2026-10-02 at 09.${String(10 + i).padStart(2, '0')}.00.png`,
+      `FrameCapt 2026-10-02 at 09.${String(10 + i).padStart(2, '0')}.00.png`,
     );
     fs.writeFileSync(file, mockScreenshotPng(1280, 720, i));
     items.push({
@@ -102,7 +102,7 @@ test.beforeAll(async () => {
       source: i % 3 === 0 ? 'region' : i % 3 === 1 ? 'window' : 'screen',
     });
   }
-  const clip = path.join(files, 'Framelet 2026-10-02 at 09.05.00.webm');
+  const clip = path.join(files, 'FrameCapt 2026-10-02 at 09.05.00.webm');
   makeWebm(clip, 3, { audio: false });
   items.push({
     id: newId(),
@@ -123,11 +123,11 @@ test.beforeAll(async () => {
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: dir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
-      FRAMELET_E2E_MOCK_DISPLAYS: '1',
-      FRAMELET_E2E_FAKE_SHORTCUTS: '1',
-      FRAMELET_E2E_TAKEN_SHORTCUTS: 'Ctrl+Shift+2',
+      FRAMECAPT_USER_DATA_DIR: dir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
+      FRAMECAPT_E2E_FAKE_SHORTCUTS: '1',
+      FRAMECAPT_E2E_TAKEN_SHORTCUTS: 'Ctrl+Shift+2',
     },
   });
   page = await app.firstWindow();
@@ -165,7 +165,7 @@ test('home: balanced cards, shortcut hints (one in conflict), options strip, tip
   await shootPage('home-conflict');
   // Fix the conflict: the first-run tip comes back.
   await page.evaluate(() =>
-    window.framelet.invoke('settings:update', {
+    window.framecapt.invoke('settings:update', {
       patch: { shortcuts: { screenshotWindow: 'Ctrl+Alt+2' } },
     }),
   );
@@ -306,7 +306,7 @@ test('recording: the toolbar fits its content in every state, quit question, res
   await toolbar.getByTestId('toolbar-resume').click();
 
   await pagesOf('#/recorder')[0]?.evaluate(() =>
-    window.framelet.invoke('recorder:engineEvent', { type: 'trackEnded', source: 'mic' }),
+    window.framecapt.invoke('recorder:engineEvent', { type: 'trackEnded', source: 'mic' }),
   );
   await expect(toolbar.getByTestId('badge-lost-mic')).toBeVisible();
   measured.micLost = await expectFits(toolbar, 'microphone lost');
@@ -315,8 +315,8 @@ test('recording: the toolbar fits its content in every state, quit question, res
   // The quit question while recording.
   await app.evaluate(() => {
     (
-      globalThis as unknown as { __frameletTest: { requestQuit(): void } }
-    ).__frameletTest.requestQuit();
+      globalThis as unknown as { __frameCaptTest: { requestQuit(): void } }
+    ).__frameCaptTest.requestQuit();
   });
   await expect(page.getByTestId('confirm-dialog')).toBeVisible();
   await both('quit-while-recording', (file) => page.screenshot({ path: file }));

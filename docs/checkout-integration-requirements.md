@@ -4,20 +4,20 @@ Status: requirements and research only. **No provider is selected.** No account 
 
 ## 1. Requirements
 
-| #   | Requirement                                                                                                                                                                                                           |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1  | One-time purchase (no subscription): US$15 standard, optional US$29 supporter, a future paid major upgrade as a separate product                                                                                      |
-| R2  | **No license keys.** Delivery is a **download link plus the provider's receipt/invoice** (and an email). Nothing in the app checks a purchase. The download page also shows the SHA-256 and the GPL source offer      |
-| R3  | Prefer a **merchant of record** (MoR) so sales tax/VAT/GST collection and remittance for buyers' countries is handled by the provider, not the owner                                                                  |
-| R4  | Refunds: the owner's proposed 14-day policy ([commercial-plan.md](commercial-plan.md)) must be supported by the provider's refund tooling and terms                                                                   |
-| R5  | **Payout to a Bangladesh-based seller**, ideally in BDT to a local bank account (or via a payout method that reaches Bangladesh reliably, such as Payoneer if the provider supports it)                               |
-| R6  | Provider's terms must allow selling GPL/open-source software and a download-only product, with no content restrictions that conflict with the product                                                                 |
-| R7  | Published, understandable fees; minimum payout thresholds and payout schedule known in advance                                                                                                                        |
-| R8  | Buyer-facing: receipts, EU/UK VAT invoices handled by the provider, a way for buyers to re-download after the update term and contact support (support email in the receipt)                                          |
-| R9  | Privacy: collect only what the provider needs (email for the receipt). Supporter name for the list is optional, collected at checkout or by reply. No tracking added by Framelet's own pages; no analytics in the app |
-| R10 | Webhooks or API are **not required**; a hosted checkout page and hosted download are enough. Any future automation (for example emailing a supporter list) must be GPL-compatible and not gate the software           |
-| R11 | Support mailbox and legal pages (terms of sale, refund policy, privacy) published before the first sale; reviewed by the owner or a lawyer                                                                            |
-| R12 | Reproducible, hash-listed installer file hosted where the provider's delivery mechanism or the owner's static host can serve it                                                                                       |
+| #   | Requirement                                                                                                                                                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | One-time purchase (no subscription): US$15 standard, optional US$29 supporter, a future paid major upgrade as a separate product                                                                                       |
+| R2  | **No license keys.** Delivery is a **download link plus the provider's receipt/invoice** (and an email). Nothing in the app checks a purchase. The download page also shows the SHA-256 and the GPL source offer       |
+| R3  | Prefer a **merchant of record** (MoR) so sales tax/VAT/GST collection and remittance for buyers' countries is handled by the provider, not the owner                                                                   |
+| R4  | Refunds: the owner's proposed 14-day policy ([commercial-plan.md](commercial-plan.md)) must be supported by the provider's refund tooling and terms                                                                    |
+| R5  | **Payout to a Bangladesh-based seller**, ideally in BDT to a local bank account (or via a payout method that reaches Bangladesh reliably, such as Payoneer if the provider supports it)                                |
+| R6  | Provider's terms must allow selling GPL/open-source software and a download-only product, with no content restrictions that conflict with the product                                                                  |
+| R7  | Published, understandable fees; minimum payout thresholds and payout schedule known in advance                                                                                                                         |
+| R8  | Buyer-facing: receipts, EU/UK VAT invoices handled by the provider, a way for buyers to re-download after the update term and contact support (support email in the receipt)                                           |
+| R9  | Privacy: collect only what the provider needs (email for the receipt). Supporter name for the list is optional, collected at checkout or by reply. No tracking added by FrameCapt's own pages; no analytics in the app |
+| R10 | Webhooks or API are **not required**; a hosted checkout page and hosted download are enough. Any future automation (for example emailing a supporter list) must be GPL-compatible and not gate the software            |
+| R11 | Support mailbox and legal pages (terms of sale, refund policy, privacy) published before the first sale; reviewed by the owner or a lawyer                                                                             |
+| R12 | Reproducible, hash-listed installer file hosted where the provider's delivery mechanism or the owner's static host can serve it                                                                                        |
 
 ## 2. Provider research (official pages only)
 

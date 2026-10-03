@@ -1,6 +1,6 @@
 import { useId } from 'react';
 
-/** Original Framelet mark: a rounded frame with capture-corner brackets. */
+/** Original FrameCapt mark: a rounded frame with capture-corner brackets. */
 export function Logo({ size = 32 }: { size?: number }) {
   const gradient = useId();
   return (

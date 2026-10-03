@@ -1,12 +1,12 @@
 {
-  "name": "framelet",
-  "productName": "Framelet",
+  "name": "framecapt",
+  "productName": "FrameCapt",
   "version": "0.1.0",
-  "description": "Framelet - an offline, Windows-first screenshot and screen recording app.",
+  "description": "FrameCapt - an offline, Windows-first screenshot and screen recording app.",
   "license": "GPL-3.0-only",
   "private": true,
   "main": ".vite/build/main.cjs",
-  "author": "Framelet contributors",
+  "author": "FrameCapt contributors",
   "scripts": {
     "prestart": "node scripts/fetch-ffmpeg.mjs",
     "start": "electron-forge start",

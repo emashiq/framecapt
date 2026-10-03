@@ -29,7 +29,7 @@ function isTyping(target: EventTarget | null): boolean {
   );
 }
 
-/** "…\Framelet\file.png": the last two path segments, for a toast. */
+/** "…\FrameCapt\file.png": the last two path segments, for a toast. */
 function shortPath(file: string): string {
   const parts = file.split(/[\\/]/).filter(Boolean);
   return parts.length > 2 ? `…\\${parts.slice(-2).join('\\')}` : file;
@@ -81,15 +81,15 @@ export function App() {
 
   useEffect(
     () =>
-      window.framelet.on('shot:ready', ({ session, savedPath }) => {
-        void window.framelet.invoke('shot:get', { sessionId: session.id }).then((response) => {
+      window.framecapt.on('shot:ready', ({ session, savedPath }) => {
+        void window.framecapt.invoke('shot:get', { sessionId: session.id }).then((response) => {
           if (!response.ok) {
             notify.error(response.error);
             return;
           }
           const previous = shotRef.current;
           if (previous) {
-            void window.framelet.invoke('shot:discard', { sessionId: previous.session.id });
+            void window.framecapt.invoke('shot:discard', { sessionId: previous.session.id });
           }
           setShot({
             session: response.data.session,
@@ -103,7 +103,7 @@ export function App() {
               action: {
                 label: 'Show in folder',
                 onClick: () =>
-                  void window.framelet.invoke('shell:showItemInFolder', { path: savedPath }),
+                  void window.framecapt.invoke('shell:showItemInFolder', { path: savedPath }),
               },
             });
           }
@@ -117,7 +117,7 @@ export function App() {
 
   // A damaged history file is set aside at startup; say so once.
   useEffect(() => {
-    void window.framelet.invoke('history:consumeNotice').then((response) => {
+    void window.framecapt.invoke('history:consumeNotice').then((response) => {
       if (response.ok && response.data.reset) {
         notify.info(
           'History was reset because its file was damaged. Your files were not touched.',
@@ -130,15 +130,15 @@ export function App() {
   }, []);
 
   // Main asks before closing the window while the editor has unsaved work.
-  useEffect(() => window.framelet.on('app:confirmClose', () => setPending({ kind: 'close' })), []);
+  useEffect(() => window.framecapt.on('app:confirmClose', () => setPending({ kind: 'close' })), []);
 
   // Quit (tray, menu) while a recording runs: stop and save it first, or keep recording.
-  useEffect(() => window.framelet.on('app:confirmQuit', () => setQuitAsk(true)), []);
+  useEffect(() => window.framecapt.on('app:confirmQuit', () => setQuitAsk(true)), []);
 
   // Messages from shortcuts and the tray (a capture is already running, a start failed).
   useEffect(
     () =>
-      window.framelet.on('app:toast', ({ level, message }) => {
+      window.framecapt.on('app:toast', ({ level, message }) => {
         if (level === 'error') notify.error(message);
         else notify.info(message);
       }),
@@ -147,7 +147,7 @@ export function App() {
 
   // Main needs to know whether closing would lose work, and whether an editor is open at all.
   useEffect(() => {
-    void window.framelet.invoke('editor:setDirty', {
+    void window.framecapt.invoke('editor:setDirty', {
       dirty: shot !== null && dirty,
       open: shot !== null,
     });
@@ -155,7 +155,7 @@ export function App() {
 
   const endSession = useCallback(async () => {
     const current = shotRef.current;
-    if (current) await window.framelet.invoke('shot:discard', { sessionId: current.session.id });
+    if (current) await window.framecapt.invoke('shot:discard', { sessionId: current.session.id });
     setShot(null);
     setDirty(false);
   }, []);
@@ -177,14 +177,14 @@ export function App() {
     if (!request) return;
     await endSession();
     if (request.kind === 'leave') request.then?.();
-    else await window.framelet.invoke('editor:resolveClose', { discard: true });
+    else await window.framecapt.invoke('editor:resolveClose', { discard: true });
   }, [pending, endSession]);
 
   const keepEditing = useCallback(() => {
     const request = pending;
     setPending(null);
     if (request?.kind === 'close') {
-      void window.framelet.invoke('editor:resolveClose', { discard: false });
+      void window.framecapt.invoke('editor:resolveClose', { discard: false });
     }
   }, [pending]);
 
@@ -207,14 +207,14 @@ export function App() {
   });
   useEffect(
     () =>
-      window.framelet.on('app:navigate', (event: NavigateEvent) =>
+      window.framecapt.on('app:navigate', (event: NavigateEvent) =>
         latest.current.navigate(event.view, event.section),
       ),
     [],
   );
   useEffect(
     () =>
-      window.framelet.on('app:startRequest', (request) =>
+      window.framecapt.on('app:startRequest', (request) =>
         latest.current.requestLeave(() => {
           setView('capture');
           requestLaunch(request);
@@ -261,7 +261,7 @@ export function App() {
           <RecordingResultView
             snapshot={recorder}
             result={recorder.result}
-            onNewRecording={() => void window.framelet.invoke('recorder:reset')}
+            onNewRecording={() => void window.framecapt.invoke('recorder:reset')}
             onOpenHistory={() => navigate('history')}
           />
         ) : view === 'capture' ? (
@@ -295,16 +295,16 @@ export function App() {
         confirmLabel="Stop & quit"
         onConfirm={() => {
           setQuitAsk(false);
-          void window.framelet.invoke('app:resolveQuit', { stop: true });
+          void window.framecapt.invoke('app:resolveQuit', { stop: true });
         }}
         onCancel={() => {
           setQuitAsk(false);
-          void window.framelet.invoke('app:resolveQuit', { stop: false });
+          void window.framecapt.invoke('app:resolveQuit', { stop: false });
         }}
       />
       <RecorderChoiceDialog
         snapshot={recorder}
-        onAnswer={(answer) => void window.framelet.invoke('recorder:resolveChoice', { answer })}
+        onAnswer={(answer) => void window.framecapt.invoke('recorder:resolveChoice', { answer })}
       />
       <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <LiveRegion />

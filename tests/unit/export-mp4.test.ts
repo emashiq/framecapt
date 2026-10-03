@@ -19,7 +19,7 @@ import { ENCODERS_WITH_H264, fakeTools, PLAYABLE } from './fake-tools';
 
 let dir: string;
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-mp4-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-mp4-'));
 });
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
@@ -203,7 +203,7 @@ describe('exportMp4', () => {
       probe: probeFor(),
       beforeRun: (args, options) => {
         expect(path.basename(args.at(-1) as string)).toMatch(
-          /^\.framelet-export-[0-9a-f]+\.partial\.mp4$/,
+          /^\.framecapt-export-[0-9a-f]+\.partial\.mp4$/,
         );
         options.onProgress?.({ outTimeUs: 1_000_000, done: false });
         options.onProgress?.({ outTimeUs: 1_000_000, done: false }); // same value: reported once

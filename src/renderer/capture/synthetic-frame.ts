@@ -5,7 +5,7 @@ export const SYNTHETIC_UNCAPTURABLE_SOURCE = 'window:1005:0';
 
 /**
  * Generated frames for E2E builds ONLY (reached through a dynamic import guarded by
- * __FRAMELET_E2E__, and checked out of production bundles by scripts/check-no-mocks.mjs).
+ * __FRAMECAPT_E2E__, and checked out of production bundles by scripts/check-no-mocks.mjs).
  *
  * Every pixel is a pure function of its position so tests can verify a crop exactly:
  *   R = floor(255 * x / (width - 1)),  G = floor(255 * y / (height - 1)),

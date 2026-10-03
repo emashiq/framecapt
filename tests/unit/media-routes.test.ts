@@ -10,53 +10,53 @@ const history = {
   filePathOf: (id: string) => (id === ID ? 'C:/caps/shot.png' : undefined),
 };
 
-describe('framelet-media routes', () => {
+describe('framecapt-media routes', () => {
   const registry = new MediaRegistry();
-  const rec = registry.register('C:/Videos/Framelet/a.webm');
+  const rec = registry.register('C:/Videos/FrameCapt/a.webm');
   const resolve = (url: string, withHistory = true) =>
     resolveMediaUrl(new URL(url), registry, withHistory ? history : undefined);
 
   it('serves the three known shapes', () => {
-    expect(resolve(`framelet-media://${rec}`)).toBe('C:/Videos/Framelet/a.webm');
-    expect(resolve(`framelet-media://${rec}/`)).toBe('C:/Videos/Framelet/a.webm');
-    expect(resolve(`framelet-media://thumb/${ID}`)).toBe('C:/data/thumbs/t.png');
-    expect(resolve(`framelet-media://file/${ID}`)).toBe('C:/caps/shot.png');
+    expect(resolve(`framecapt-media://${rec}`)).toBe('C:/Videos/FrameCapt/a.webm');
+    expect(resolve(`framecapt-media://${rec}/`)).toBe('C:/Videos/FrameCapt/a.webm');
+    expect(resolve(`framecapt-media://thumb/${ID}`)).toBe('C:/data/thumbs/t.png');
+    expect(resolve(`framecapt-media://file/${ID}`)).toBe('C:/caps/shot.png');
   });
 
   it('accepts one lowercase alphanumeric nonce segment on the history routes (cache busting only)', () => {
-    expect(resolve(`framelet-media://file/${ID}/k3j9x0ab`)).toBe('C:/caps/shot.png');
-    expect(resolve(`framelet-media://thumb/${ID}/a`)).toBe('C:/data/thumbs/t.png');
+    expect(resolve(`framecapt-media://file/${ID}/k3j9x0ab`)).toBe('C:/caps/shot.png');
+    expect(resolve(`framecapt-media://thumb/${ID}/a`)).toBe('C:/data/thumbs/t.png');
     for (const bad of ['/UPPER', '/a-b', '/a.b', '/..', '/a/b', '/', `/${'a'.repeat(25)}`]) {
-      expect(resolve(`framelet-media://file/${ID}${bad}`), bad).toBeUndefined();
+      expect(resolve(`framecapt-media://file/${ID}${bad}`), bad).toBeUndefined();
     }
   });
 
   it('serves nothing else: unknown ids, extra segments, queries, traversal, other hosts', () => {
     const unknown = '55555555-5555-4555-8555-555555555555';
     for (const url of [
-      `framelet-media://thumb/${unknown}`,
-      `framelet-media://file/${unknown}`,
-      `framelet-media://thumb/${ID}/extra/more`,
-      `framelet-media://thumb/${ID}/`,
-      `framelet-media://thumb/${ID}?x=1`,
-      `framelet-media://thumb/${ID}#frag`,
-      'framelet-media://thumb/',
-      'framelet-media://thumb',
-      'framelet-media://file/..%2F..%2Fsecret',
-      'framelet-media://file/C:/Windows/win.ini',
-      `framelet-media://${rec}/more`,
-      `framelet-media://${rec}?x=1`,
-      'framelet-media://nope',
-      `framelet-media://user@file/${ID}`,
-      `framelet-media://file:99/${ID}`,
+      `framecapt-media://thumb/${unknown}`,
+      `framecapt-media://file/${unknown}`,
+      `framecapt-media://thumb/${ID}/extra/more`,
+      `framecapt-media://thumb/${ID}/`,
+      `framecapt-media://thumb/${ID}?x=1`,
+      `framecapt-media://thumb/${ID}#frag`,
+      'framecapt-media://thumb/',
+      'framecapt-media://thumb',
+      'framecapt-media://file/..%2F..%2Fsecret',
+      'framecapt-media://file/C:/Windows/win.ini',
+      `framecapt-media://${rec}/more`,
+      `framecapt-media://${rec}?x=1`,
+      'framecapt-media://nope',
+      `framecapt-media://user@file/${ID}`,
+      `framecapt-media://file:99/${ID}`,
     ]) {
       expect(resolve(url), url).toBeUndefined();
     }
   });
 
   it('has no history routes without history', () => {
-    expect(resolve(`framelet-media://thumb/${ID}`, false)).toBeUndefined();
-    expect(resolve(`framelet-media://${rec}`, false)).toBe('C:/Videos/Framelet/a.webm');
+    expect(resolve(`framecapt-media://thumb/${ID}`, false)).toBeUndefined();
+    expect(resolve(`framecapt-media://${rec}`, false)).toBe('C:/Videos/FrameCapt/a.webm');
   });
 
   it('knows the content types it may serve', () => {

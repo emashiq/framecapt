@@ -178,7 +178,7 @@ export function registerShotHandlers(
   handle('shell:showItemInFolder', { roles: ['main'] }, (request) => {
     const resolved = path.resolve(request.path);
     if (!wasExported(resolved)) {
-      throw new IpcError('FORBIDDEN', 'Only files saved by Framelet can be shown.');
+      throw new IpcError('FORBIDDEN', 'Only files saved by FrameCapt can be shown.');
     }
     shell.showItemInFolder(resolved);
   });

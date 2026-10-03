@@ -47,8 +47,8 @@ const SOURCES: SourceInfo[] = [
  * fails if this class name appears in the production bundle.
  */
 export class MockCaptureProvider implements CaptureProvider {
-  /** FRAMELET_E2E_MOCK_DISPLAYS=1 limits the mock to the first display (single-monitor flow). */
-  private readonly single = process.env.FRAMELET_E2E_MOCK_DISPLAYS === '1';
+  /** FRAMECAPT_E2E_MOCK_DISPLAYS=1 limits the mock to the first display (single-monitor flow). */
+  private readonly single = process.env.FRAMECAPT_E2E_MOCK_DISPLAYS === '1';
 
   listDisplays(): DisplayInfo[] {
     return structuredClone(this.single ? DISPLAYS.slice(0, 1) : DISPLAYS);

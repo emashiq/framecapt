@@ -42,15 +42,15 @@ async function launch(extraArgs: string[] = []): Promise<{
   page: Page;
   dir: string;
 }> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-editor-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-editor-'));
   const electronApp = await electron.launch({
     args: ['.', ...extraArgs],
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: dir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
-      FRAMELET_E2E_MOCK_DISPLAYS: '1',
+      FRAMECAPT_USER_DATA_DIR: dir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
     },
   });
   const first = await electronApp.firstWindow();
@@ -64,7 +64,7 @@ test.beforeAll(async () => {
     fs.existsSync(path.join(projectRoot, '.vite', 'build', 'main.cjs')),
     'Run `npm run package:e2e` first (npm run test:e2e does this).',
   ).toBe(true);
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-editor-out-'));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-editor-out-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
   ({ app, page, dir: userDataDir } = await launch());
 });
@@ -787,7 +787,7 @@ test('unsaved changes: the discard dialog on Done, Discard and a tab change; sav
 /** Close-to-tray is on by default (closing hides the window); these tests are about really closing it. */
 async function closeInsteadOfHiding(target: Page): Promise<void> {
   const result = await target.evaluate(() =>
-    window.framelet.invoke('settings:update', { patch: { general: { closeToTray: false } } }),
+    window.framecapt.invoke('settings:update', { patch: { general: { closeToTray: false } } }),
   );
   expect(result.ok).toBe(true);
 }

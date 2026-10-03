@@ -9,28 +9,28 @@ import {
 const prod: AppOriginConfig = {};
 const dev: AppOriginConfig = { devServerUrl: 'http://localhost:5173' };
 
-const appFile = (...segments: string[]): string => `app://framelet/${segments.join('/')}`;
+const appFile = (...segments: string[]): string => `app://framecapt/${segments.join('/')}`;
 
-describe('isAppUrl (production, app://framelet)', () => {
+describe('isAppUrl (production, app://framecapt)', () => {
   it('accepts the app origin, with or without a role hash', () => {
     expect(isAppUrl(appFile('index.html'), prod)).toBe(true);
     expect(isAppUrl(`${appFile('index.html')}#/overlay`, prod)).toBe(true);
     expect(isAppUrl(appFile('assets', 'app.js'), prod)).toBe(true);
-    expect(isAppUrl('app://FRAMELET/index.html', prod)).toBe(true);
+    expect(isAppUrl('app://FRAMECAPT/index.html', prod)).toBe(true);
   });
 
   it('rejects other hosts of the app scheme, lookalikes, ports and credentials', () => {
     expect(isAppUrl('app://other/index.html', prod)).toBe(false);
-    expect(isAppUrl('app://framelet.evil.example/index.html', prod)).toBe(false);
-    expect(isAppUrl('app://evil.example@framelet/index.html', prod)).toBe(false);
-    expect(isAppUrl('app://framelet:8080/index.html', prod)).toBe(false);
+    expect(isAppUrl('app://framecapt.evil.example/index.html', prod)).toBe(false);
+    expect(isAppUrl('app://evil.example@framecapt/index.html', prod)).toBe(false);
+    expect(isAppUrl('app://framecapt:8080/index.html', prod)).toBe(false);
     expect(isAppUrl('app:///index.html', prod)).toBe(false);
-    expect(isAppUrl('framelet-media://framelet/index.html', prod)).toBe(false);
+    expect(isAppUrl('framecapt-media://framecapt/index.html', prod)).toBe(false);
   });
 
   it('rejects file://, every other scheme, and the dev server in production', () => {
     expect(isAppUrl('file:///C:/app/.vite/renderer/main_window/index.html', prod)).toBe(false);
-    expect(isAppUrl('http://framelet/', prod)).toBe(false);
+    expect(isAppUrl('http://framecapt/', prod)).toBe(false);
     expect(isAppUrl('http://evil.example/', prod)).toBe(false);
     expect(isAppUrl('https://localhost:5173/', prod)).toBe(false);
     expect(isAppUrl('about:blank', prod)).toBe(false);

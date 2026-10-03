@@ -39,7 +39,7 @@ describe('UpdateService: unconfigured (the default for every build)', () => {
     const { updater } = fakeUpdater();
     const getAutoUpdater = vi.fn(() => updater);
     const service = new UpdateService({
-      feedUrl: 'https://updates.example.com/framelet',
+      feedUrl: 'https://updates.example.com/framecapt',
       getAutoUpdater,
       isSquirrelInstall: () => true,
     });
@@ -50,7 +50,7 @@ describe('UpdateService: unconfigured (the default for every build)', () => {
 });
 
 describe('UpdateService: configured (future)', () => {
-  const feedUrl = 'https://updates.example.com/framelet/win32/x64';
+  const feedUrl = 'https://updates.example.com/framecapt/win32/x64';
   function configured(isSquirrelInstall = true) {
     const fake = fakeUpdater();
     const service = new UpdateService({

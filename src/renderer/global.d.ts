@@ -1,9 +1,9 @@
-import type { FrameletApi } from '../shared/types';
+import type { FrameCaptApi } from '../shared/types';
 
 declare global {
   interface Window {
     /** Exposed by the preload script via contextBridge. */
-    framelet: FrameletApi;
+    framecapt: FrameCaptApi;
   }
 }
 

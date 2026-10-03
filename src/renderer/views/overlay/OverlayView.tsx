@@ -15,12 +15,12 @@ export function OverlayView() {
   useEffect(() => {
     document.documentElement.classList.add('overlay-root');
     let active = true;
-    void window.framelet.invoke('overlay:getInit').then((result) => {
+    void window.framecapt.invoke('overlay:getInit').then((result) => {
       if (!active) return;
       if (result.ok) setInit(result.data);
       else {
         setFailed(true);
-        void window.framelet.invoke('overlay:cancel');
+        void window.framecapt.invoke('overlay:cancel');
       }
     });
     return () => {

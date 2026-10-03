@@ -19,7 +19,7 @@ import { startTestTone, type TestTone } from './test-tone';
 /** Diagnostics-only orchestration of the capture library. Not the production recorder. */
 
 async function save(blob: Blob, ext: 'png' | 'webm' | 'mp4' | 'mkv'): Promise<string> {
-  const saved = await window.framelet.invoke('diagnostics:saveRecording', {
+  const saved = await window.framecapt.invoke('diagnostics:saveRecording', {
     ext,
     data: await blob.arrayBuffer(),
   });
@@ -372,7 +372,7 @@ export async function runDenialProbes(
 ): Promise<DenialProbeResult[]> {
   const results: DenialProbeResult[] = [];
 
-  const bogus = await window.framelet.invoke('capture:grant', {
+  const bogus = await window.framecapt.invoke('capture:grant', {
     sourceId: 'screen:987654:0',
     systemAudio: false,
   });

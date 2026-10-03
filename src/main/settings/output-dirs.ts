@@ -12,7 +12,7 @@ export interface DefaultFolders {
   videos: string;
 }
 
-/** The folders in use: the chosen one, or `Pictures/Framelet` and `Videos/Framelet`. */
+/** The folders in use: the chosen one, or `Pictures/FrameCapt` and `Videos/FrameCapt`. */
 export function resolveOutputDirs(settings: Settings, defaults: DefaultFolders): EffectiveSettings {
   return {
     screenshotsDir:
@@ -29,7 +29,7 @@ export function resolveOutputDirs(settings: Settings, defaults: DefaultFolders):
  */
 export async function probeWritable(dir: string): Promise<boolean> {
   if (!path.isAbsolute(dir)) return false;
-  const probe = path.join(dir, `.framelet-probe-${randomBytes(4).toString('hex')}.tmp`);
+  const probe = path.join(dir, `.framecapt-probe-${randomBytes(4).toString('hex')}.tmp`);
   try {
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(probe, 'probe');

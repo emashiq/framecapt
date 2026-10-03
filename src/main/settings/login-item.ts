@@ -17,8 +17,8 @@ export const HIDDEN_ARG = '--hidden';
  *
  * The arguments are passed WITHOUT quote characters. The Electron docs show `"${exeName}"` and
  * `'"--hidden"'`, but Electron 44 quotes and escapes every argument itself when it writes the Run
- * entry, so those literal quotes ended up inside the value (`--processStart "\"Framelet.exe\""`)
- * and Update.exe was asked to start a file named `"Framelet.exe"` (with the quotes): nothing
+ * entry, so those literal quotes ended up inside the value (`--processStart "\"FrameCapt.exe\""`)
+ * and Update.exe was asked to start a file named `"FrameCapt.exe"` (with the quotes): nothing
  * started at login. Found and measured by `npm run smoke:installed` (phase 10); the plain form
  * starts the app (a value that needs quoting, such as a name with a space, is quoted by Electron).
  */

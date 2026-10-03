@@ -1,8 +1,8 @@
-# Framelet 0.1.0 (beta) - release notes
+# FrameCapt 0.1.0 (beta) - release notes
 
-Status: draft for an unreleased beta. Nothing has been published; the installer is **unsigned**. Framelet is a provisional name.
+Status: draft for an unreleased beta. Nothing has been published; the installer is **unsigned**. FrameCapt is a provisional name.
 
-Framelet is an offline screenshot and screen-recording app for Windows. No account, no cloud, no telemetry: nothing leaves your computer. It is free software (GPL-3.0-only).
+FrameCapt is an offline screenshot and screen-recording app for Windows. No account, no cloud, no telemetry: nothing leaves your computer. It is free software (GPL-3.0-only).
 
 ## Highlights
 
@@ -15,8 +15,8 @@ Framelet is an offline screenshot and screen-recording app for Windows. No accou
 
 ## Installing
 
-- `Framelet-Setup-0.1.0.exe`: per-user installer, no administrator rights, installs to `%LOCALAPPDATA%\Framelet`. **It is not code-signed, so Windows SmartScreen will show a warning.** Check the SHA-256 on the release page against the file you downloaded before running it.
-- `Framelet-win32-x64-0.1.0.zip`: portable build (unzip and run `Framelet.exe`).
+- `FrameCapt-Setup-0.1.0.exe`: per-user installer, no administrator rights, installs to `%LOCALAPPDATA%\FrameCapt`. **It is not code-signed, so Windows SmartScreen will show a warning.** Check the SHA-256 on the release page against the file you downloaded before running it.
+- `FrameCapt-win32-x64-0.1.0.zip`: portable build (unzip and run `FrameCapt.exe`).
 - Uninstalling keeps your settings, history and captures.
 - About 229 MB, mostly the bundled FFmpeg.
 
@@ -39,8 +39,8 @@ On one Windows 11 x64 machine with two monitors: real screenshots of both screen
 
 ## Source and licenses
 
-Framelet is GPL-3.0-only. The installer includes FFmpeg 9.0.2 (Gyan "essentials" build, GPL-3.0-or-later) and Electron/Chromium; see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). The corresponding source for the binaries is `[OWNER: add source and written-offer location for this release]`.
+FrameCapt is GPL-3.0-only. The installer includes FFmpeg 9.0.2 (Gyan "essentials" build, GPL-3.0-or-later) and Electron/Chromium; see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). The corresponding source for the binaries is `[OWNER: add source and written-offer location for this release]`.
 
 ## Checksums
 
-`[OWNER: paste SHA-256 values from SHA256SUMS.txt of the release build]`. (The final local build on 2026-10-03 produced `Framelet-Setup-0.1.0.exe` with a SHA-256 beginning `d7b52327`; builds are not bit-for-bit reproducible, so use the checksum of the file you publish.)
+`[OWNER: paste SHA-256 values from SHA256SUMS.txt of the release build]`. (The final local build on 2026-10-03 produced `FrameCapt-Setup-0.1.0.exe` with a SHA-256 beginning `d7b52327`; builds are not bit-for-bit reproducible, so use the checksum of the file you publish.)

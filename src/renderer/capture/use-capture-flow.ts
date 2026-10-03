@@ -20,7 +20,7 @@ export function useCaptureFlow(): CaptureFlow {
 
   useEffect(
     () =>
-      window.framelet.on('capture:flowEnded', (event) => {
+      window.framecapt.on('capture:flowEnded', (event) => {
         setRunning(null);
         if (event.outcome === 'error') {
           notify.error({ code: event.code, message: event.message ?? 'The capture failed.' });
@@ -42,7 +42,7 @@ export function useCaptureFlow(): CaptureFlow {
   const start = useCallback<CaptureFlow['start']>(async (target, trigger, sourceId) => {
     triggerRef.current = trigger;
     setRunning(target);
-    const result = await window.framelet.invoke('capture:startScreenshot', {
+    const result = await window.framecapt.invoke('capture:startScreenshot', {
       target,
       ...(sourceId !== undefined && { sourceId }),
     });

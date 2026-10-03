@@ -1,6 +1,8 @@
-# Release readiness — Framelet 0.1.0
+# Release readiness — FrameCapt 0.1.0
 
 Date: 2026-10-03 · Branch `main` (local only, never pushed) · Lead: final validation (phase 12).
+
+> **Rename note (2026-10-03):** the product was renamed from the working name Framelet to FrameCapt. Evidence files under `docs/evidence/` recorded before 2026-10-03 use the old name and are kept as recorded; artifacts named `Framelet-*` in that evidence correspond to `FrameCapt-*` in current builds.
 
 ## Verdict
 
@@ -25,7 +27,7 @@ Date: 2026-10-03 · Branch `main` (local only, never pushed) · Lead: final vali
 - **History**: local JSON store and thumbnails. Missing or moved files can be re-linked. "Remove from history" and "Delete file" (to the Recycle Bin, with confirmation) are separate actions.
 - **Desktop integration**: versioned settings with corruption repair, configurable global shortcuts with conflict detection, tray, close-to-tray, opt-in launch at login, light/dark theme, keyboard-accessible UI (axe: 0 serious/critical issues), and a help dialog.
 - **Security**:
-  - Electron sandbox, context isolation and fuses (including `GrantFileProtocolExtraPrivileges` off); the UI is served from `app://framelet`.
+  - Electron sandbox, context isolation and fuses (including `GrantFileProtocolExtraPrivileges` off); the UI is served from `app://framecapt`.
   - Strict zod IPC with role and origin checks; strict CSP; a network blocker; no telemetry; zero network traffic measured.
 - **Packaging and docs**: Squirrel per-user installer and portable zip, CI and draft-release workflows (files only), and an update adapter that is safely unconfigured. GPL-3.0 license, third-party notices, user/build/testing docs and the commercial plan are included.
 
@@ -46,7 +48,7 @@ npm run smoke:packaged    # checks the packaged exe
 npm run smoke:installed   # silent install → real capture/record/export → uninstall (modifies the user profile temporarily; backs up/restores)
 ```
 
-Install: run `Framelet-Setup-0.1.0.exe` (per-user, `%LOCALAPPDATA%\Framelet`; SmartScreen warns because it is unsigned). Uninstall: Windows Settings → Apps, or `%LOCALAPPDATA%\Framelet\Update.exe --uninstall`.
+Install: run `FrameCapt-Setup-0.1.0.exe` (per-user, `%LOCALAPPDATA%\FrameCapt`; SmartScreen warns because it is unsigned). Uninstall: Windows Settings → Apps, or `%LOCALAPPDATA%\FrameCapt\Update.exe --uninstall`.
 
 ## Verified environment
 
@@ -75,12 +77,12 @@ Not available, so never verified: Windows 10, arm64, mixed-DPI, negative-origin 
 
 ## Artifacts (UNSIGNED; `Get-AuthenticodeSignature` = NotSigned)
 
-| File                                                      | Bytes       | SHA-256                                                            |
-| --------------------------------------------------------- | ----------- | ------------------------------------------------------------------ |
-| `out/make/squirrel.windows/x64/Framelet-Setup-0.1.0.exe`  | 229,001,728 | `d7b52327b5c7017850dc655a0ac9b108ded8f78176e1ffc4f7f0330c1268bce9` |
-| `out/make/squirrel.windows/x64/Framelet-0.1.0-full.nupkg` | 228,412,674 | `4311d0672b129f6cf01c34e88dedc78c5dd80ea18a00cbd999803233f69a2c3f` |
-| `out/make/squirrel.windows/x64/RELEASES`                  | 79          | `12243c5d957b809a34c881c5402dcc30618380436f583158b6d0a1dba447b5ab` |
-| `out/make/zip/win32/x64/Framelet-win32-x64-0.1.0.zip`     | 236,143,000 | `55d2b87899bc6647fb2edc1bc5ab777bab21ee032f205fa58b570d298ff0cf4b` |
+| File                                                       | Bytes       | SHA-256                                                            |
+| ---------------------------------------------------------- | ----------- | ------------------------------------------------------------------ |
+| `out/make/squirrel.windows/x64/FrameCapt-Setup-0.1.0.exe`  | 229,001,728 | `d7b52327b5c7017850dc655a0ac9b108ded8f78176e1ffc4f7f0330c1268bce9` |
+| `out/make/squirrel.windows/x64/FrameCapt-0.1.0-full.nupkg` | 228,412,674 | `4311d0672b129f6cf01c34e88dedc78c5dd80ea18a00cbd999803233f69a2c3f` |
+| `out/make/squirrel.windows/x64/RELEASES`                   | 79          | `12243c5d957b809a34c881c5402dcc30618380436f583158b6d0a1dba447b5ab` |
+| `out/make/zip/win32/x64/FrameCapt-win32-x64-0.1.0.zip`     | 236,143,000 | `55d2b87899bc6647fb2edc1bc5ab777bab21ee032f205fa58b570d298ff0cf4b` |
 
 Builds are not bit-for-bit reproducible; publish the checksums of the files you actually release ([evidence/phase10/artifacts.json](evidence/phase10/artifacts.json)).
 
@@ -100,7 +102,7 @@ Legend:
 | Clean install with the lockfile; lint, typecheck and meaningful tests    | PASS           | Clean clone below; 762 unit, 152 e2e and 46 native tests                                                                                                          |
 | App starts from source and from the packaged Windows install             | PASS (NATIVE)  | e2e launches; `smoke:packaged`; `smoke:installed`                                                                                                                 |
 | Install, launch, uninstall; user captures preserved on uninstall         | PASS (NATIVE)  | installed-smoke: sentinels and captures in Pictures, Videos and AppData survive; Squirrel leaves its 3.8 MB stub (documented)                                     |
-| Production preload, resources, FFmpeg and renderer assets resolve        | PASS (NATIVE)  | installed app logs `ffmpeg ok 9.0.2`, UI loads from app://framelet, `LICENSE`/`THIRD_PARTY_NOTICES.md` present                                                    |
+| Production preload, resources, FFmpeg and renderer assets resolve        | PASS (NATIVE)  | installed app logs `ffmpeg ok 9.0.2`, UI loads from app://framecapt, `LICENSE`/`THIRD_PARTY_NOTICES.md` present                                                   |
 | Update checks inactive without configuration; configured path documented | PASS / BLOCKED | state `unconfigured`, no autoUpdater calls, 0 network requests; a real feed cannot be tested until the owner hosts one ([release-process.md](release-process.md)) |
 
 ### Screenshot
@@ -144,7 +146,7 @@ Legend:
 | ------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Canonical project license and dependency notices                          | PASS                                              | `LICENSE` (gnu.org text), `THIRD_PARTY_NOTICES.md`, both shipped inside the package                                    |
 | Exact bundled FFmpeg licensing and source obligations recorded            | PASS (recorded); source mirroring BLOCKED (owner) | [ffmpeg.md](ffmpeg.md), [licensing.md](licensing.md)                                                                   |
-| Working name, branding and release identity resolved by owner             | BLOCKED (owner)                                   | Provisional name `Framelet` and app id `com.framelet.app`                                                              |
+| Working name, branding and release identity resolved by owner             | BLOCKED (owner)                                   | Provisional name `FrameCapt` and app id `com.framecapt.app`                                                            |
 | Certificates, accounts and payment eligibility resolved; no fake checkout | BLOCKED (owner); no fake checkout PASS            | Provider research only; nothing created ([checkout-integration-requirements.md](checkout-integration-requirements.md)) |
 | Paid-offer terms state update/support scope and open-source rights        | PASS (draft for owner review)                     | [commercial-plan.md](commercial-plan.md)                                                                               |
 | All blockers shown prominently here                                       | PASS                                              | This document                                                                                                          |

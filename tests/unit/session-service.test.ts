@@ -40,8 +40,8 @@ let root: string;
 let out: string;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-sessions-'));
-  out = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-out-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-sessions-'));
+  out = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-out-'));
 });
 afterEach(async () => {
   await Promise.all(created.splice(0).map((service) => service.closeAll()));
@@ -332,7 +332,7 @@ describe('SessionService: write errors', () => {
 
   it('maps EACCES and EIO to WRITE_FAILED', async () => {
     for (const code of ['EACCES', 'EIO', 'EPERM']) {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-w-'));
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-w-'));
       try {
         const service = new TrackedService(dir, { fs: failingFs(code, 1) });
         await service.create(CONFIG, ID);
@@ -637,13 +637,13 @@ describe('SessionService: finalization', () => {
         // while ffmpeg runs the manifest already says finalizing, with the partial path
         expect(readManifest()).toMatchObject({ state: 'finalizing' });
         expect(readManifest().finalize?.partialPath).toBe(
-          path.join(out, `.framelet-${ID}.partial.webm`),
+          path.join(out, `.framecapt-${ID}.partial.webm`),
         );
       },
     });
     const done = await service.finalize(ID, { outputDir: out, tools, date: DATE });
 
-    expect(path.basename(done.outputPath)).toBe('Framelet 2026-10-02 at 14.05.09.webm');
+    expect(path.basename(done.outputPath)).toBe('FrameCapt 2026-10-02 at 14.05.09.webm');
     expect(path.dirname(done.outputPath)).toBe(out);
     expect(done).toMatchObject({ bytes: 500, durationMs: 5000, unindexed: false });
     expect(Buffer.compare(fs.readFileSync(done.outputPath), Buffer.concat(parts))).toBe(0);
@@ -651,7 +651,7 @@ describe('SessionService: finalization', () => {
     const args = tools.runs[0] ?? [];
     expect(args.slice(args.indexOf('-c'), args.indexOf('-c') + 2)).toEqual(['-c', 'copy']);
     expect(args[args.indexOf('-i') + 1]).toBe(path.join(root, ID, 'stream.webm'));
-    expect(args.at(-1)).toBe(path.join(out, `.framelet-${ID}.partial.webm`));
+    expect(args.at(-1)).toBe(path.join(out, `.framecapt-${ID}.partial.webm`));
 
     // No duplicate stream: the session directory is gone, only the small record remains.
     expect(fs.existsSync(path.join(root, ID))).toBe(false);
@@ -661,17 +661,17 @@ describe('SessionService: finalization', () => {
       mainQueueHighWater: expect.any(Number),
       maxWriteMs: expect.any(Number),
     });
-    expect(fs.readdirSync(out)).toEqual(['Framelet 2026-10-02 at 14.05.09.webm']); // no partial left
+    expect(fs.readdirSync(out)).toEqual(['FrameCapt 2026-10-02 at 14.05.09.webm']); // no partial left
   });
 
   it('never overwrites an existing file: a number is added', async () => {
     const service = new TrackedService(root);
     await recorded(service);
-    fs.writeFileSync(path.join(out, 'Framelet 2026-10-02 at 14.05.09.webm'), 'precious');
-    fs.writeFileSync(path.join(out, 'Framelet 2026-10-02 at 14.05.09 (2).webm'), 'also precious');
+    fs.writeFileSync(path.join(out, 'FrameCapt 2026-10-02 at 14.05.09.webm'), 'precious');
+    fs.writeFileSync(path.join(out, 'FrameCapt 2026-10-02 at 14.05.09 (2).webm'), 'also precious');
     const done = await service.finalize(ID, { outputDir: out, tools: fakeTools(), date: DATE });
-    expect(path.basename(done.outputPath)).toBe('Framelet 2026-10-02 at 14.05.09 (3).webm');
-    expect(fs.readFileSync(path.join(out, 'Framelet 2026-10-02 at 14.05.09.webm'), 'utf8')).toBe(
+    expect(path.basename(done.outputPath)).toBe('FrameCapt 2026-10-02 at 14.05.09 (3).webm');
+    expect(fs.readFileSync(path.join(out, 'FrameCapt 2026-10-02 at 14.05.09.webm'), 'utf8')).toBe(
       'precious',
     );
   });
@@ -679,7 +679,7 @@ describe('SessionService: finalization', () => {
   it('creates the output folder and is idempotent', async () => {
     const service = new TrackedService(root);
     await recorded(service);
-    const nested = path.join(out, 'Videos', 'Framelet');
+    const nested = path.join(out, 'Videos', 'FrameCapt');
     const tools = fakeTools();
     const first = await service.finalize(ID, { outputDir: nested, tools, date: DATE });
     const second = await service.finalize(ID, {
@@ -779,7 +779,7 @@ describe('SessionService: finalization', () => {
       outputPath: done.outputPath,
     });
     expect(fs.existsSync(path.join(root, ID, 'stream.webm'))).toBe(true);
-    expect(fs.readdirSync(out)).toEqual(['Framelet 2026-10-02 at 14.05.09.webm']);
+    expect(fs.readdirSync(out)).toEqual(['FrameCapt 2026-10-02 at 14.05.09.webm']);
   });
 
   it('a remux that "succeeds" but yields no duration is a failure, not a published file', async () => {
@@ -805,7 +805,7 @@ describe('SessionService: finalization', () => {
     const controller = new AbortController();
     const tools = fakeTools({
       beforeRun: async (_args, options) => {
-        fs.writeFileSync(path.join(out, `.framelet-${ID}.partial.webm`), 'half');
+        fs.writeFileSync(path.join(out, `.framecapt-${ID}.partial.webm`), 'half');
         await new Promise<void>((resolve) => {
           options.signal?.addEventListener('abort', () => resolve());
           setTimeout(() => controller.abort(), 10);

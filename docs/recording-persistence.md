@@ -4,7 +4,7 @@ Status: phase 06. Written before the implementation; the "Measured limits" secti
 
 ## 1. Why chunks are not files
 
-`MediaRecorder` with a `timeslice` (Framelet uses 1 s) emits **one continuous WebM byte stream, cut at arbitrary points**.
+`MediaRecorder` with a `timeslice` (FrameCapt uses 1 s) emits **one continuous WebM byte stream, cut at arbitrary points**.
 
 - The first `dataavailable` blob carries the EBML header, `Info`, `Tracks` and the first `Cluster` (partially).
 - Every later blob is a continuation: a piece of a `Cluster`, sometimes ending in the middle of a `SimpleBlock`.
@@ -27,9 +27,9 @@ Consequences, which the code follows:
     stream.webm              append-only live stream (one fsync when the session stops)
     finalize.log             last 64 KB of ffmpeg stderr, only after a failed remux
   completed/<sessionId>.json small record (output path, duration, size) kept for history linking
-<Videos>/Framelet/
-  Framelet 2026-10-02 at 14.05.09.webm        the finished, remuxed recording
-  .framelet-<sessionId>.partial.webm          temporary remux output (app-owned, see 4.3)
+<Videos>/FrameCapt/
+  FrameCapt 2026-10-02 at 14.05.09.webm        the finished, remuxed recording
+  .framecapt-<sessionId>.partial.webm          temporary remux output (app-owned, see 4.3)
 ```
 
 After a successful finalization the session directory is deleted (`stream.webm` is **not** kept as a duplicate); only `completed/<id>.json` stays.
@@ -81,14 +81,14 @@ The manifest is rewritten every 5 s or 10 chunks and at every state change. A st
 1. `stopping`: stop the recorder; the renderer flushes its last chunk and every acknowledgement, then calls `session:finish` (main verifies the last sequence number).
 2. `stopped`: the file is fsynced and closed.
 3. `finalizing`: the manifest records the output directory, final file name and partial path, then
-   `ffmpeg -hide_banner -nostats -progress pipe:1 -y -i stream.webm -c copy -map 0 -f webm <outputDir>/.framelet-<id>.partial.webm`.
+   `ffmpeg -hide_banner -nostats -progress pipe:1 -y -i stream.webm -c copy -map 0 -f webm <outputDir>/.framecapt-<id>.partial.webm`.
 4. The partial file is probed (`ffprobe -show_streams -show_format`): it must contain a video stream and a duration greater than 0.
-5. It is renamed to the final name (`Framelet YYYY-MM-DD at HH.mm.ss.webm`, with ` (2)`, ` (3)` ... on a collision; an existing file is never overwritten). The final size is compared with the partial size.
+5. It is renamed to the final name (`FrameCapt YYYY-MM-DD at HH.mm.ss.webm`, with ` (2)`, ` (3)` ... on a collision; an existing file is never overwritten). The final size is compared with the partial size.
 6. Only then: manifest `completed` (with `outputPath`), `completed/<id>.json` written, session directory (including `stream.webm`) deleted.
 
 If the remux or the probe fails: `stream.webm` is kept, the manifest becomes `failed` (`REMUX_FAILED`, ffmpeg stderr tail in `finalize.log`). If the raw stream itself probes with a video stream, it is copied to the output folder as a last resort and the result says honestly "Saved without a seeking index". The stream is kept in that case too (a raw copy is not a successful finalization), so the next start offers Recover again. Otherwise the user is told the data was kept for recovery.
 
-`finalizing` that was interrupted (crash, kill, quit past the 15 s cap): on the next start the matching partial file is deleted and the remux runs again once. "Matching" means: the manifest's `finalize.partialPath` equals `<finalize.outputDir>/.framelet-<manifest.sessionId>.partial.webm` and the directory name equals the manifest's `sessionId`. Nothing else is ever deleted from the output folder.
+`finalizing` that was interrupted (crash, kill, quit past the 15 s cap): on the next start the matching partial file is deleted and the remux runs again once. "Matching" means: the manifest's `finalize.partialPath` equals `<finalize.outputDir>/.framecapt-<manifest.sessionId>.partial.webm` and the directory name equals the manifest's `sessionId`. Nothing else is ever deleted from the output folder.
 
 ## 6. Recovery
 
@@ -158,4 +158,4 @@ A stream cut inside a block or cluster is repaired up to the last complete clust
 
 ## 9. Verification
 
-Unit and integration (`npm test`, including the real-ffmpeg tests, skipped with a message when `vendor/ffmpeg` is absent), `npm run test:e2e` (banner, Recover/Discard, quit cap and resume, low-disk start refusal and stop, normal finalization probes) and `npm run test:native` (normal recording probes, forced kill and recovery on the real host). The packaged app was started once from `out/Framelet-win32-x64/Framelet.exe`; its `main.log` showed `ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev ...` (the packaged path `resources/ffmpeg/win32-x64` resolves).
+Unit and integration (`npm test`, including the real-ffmpeg tests, skipped with a message when `vendor/ffmpeg` is absent), `npm run test:e2e` (banner, Recover/Discard, quit cap and resume, low-disk start refusal and stop, normal finalization probes) and `npm run test:native` (normal recording probes, forced kill and recovery on the real host). The packaged app was started once from `out/FrameCapt-win32-x64/FrameCapt.exe`; its `main.log` showed `ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev ...` (the packaged path `resources/ffmpeg/win32-x64` resolves).

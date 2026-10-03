@@ -264,7 +264,7 @@ function pagesOf(hash: string): Page[] {
 }
 
 async function snapshot() {
-  const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+  const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
   if (!result.ok) throw new Error('recorder:getState failed');
   return result.data;
 }
@@ -302,7 +302,7 @@ async function recorderResources() {
   return recorder.evaluate(() =>
     (
       window as unknown as {
-        __frameletResources: () => {
+        __frameCaptResources: () => {
           liveTracks: number;
           openAudioContexts: number;
           activeLoops: number;
@@ -310,7 +310,7 @@ async function recorderResources() {
           activeRecorders: number;
         };
       }
-    ).__frameletResources(),
+    ).__frameCaptResources(),
   );
 }
 
@@ -433,7 +433,7 @@ async function recordWithToolbar(
   const packets = packetCount(result.path);
   const resources = await expectResourcesReleased();
   // Back to the home view (the result view replaces it after a recording).
-  await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
   await waitForStatus('idle');
   return {
     sessionId: done.sessionId ?? '',
@@ -528,18 +528,18 @@ test.beforeAll(async () => {
     fs.existsSync(path.join(projectRoot, '.vite', 'build', 'main.cjs')),
     'Run `electron-forge package` first (npm run test:native does this).',
   ).toBe(true);
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-rec-'));
-  workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-rec-work-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-rec-'));
+  workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-rec-work-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
   app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
-    env: { ...process.env, FRAMELET_USER_DATA_DIR: userDataDir },
+    env: { ...process.env, FRAMECAPT_USER_DATA_DIR: userDataDir },
   });
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('record-screen')).toBeVisible();
-  const listed = await page.evaluate(() => window.framelet.invoke('capture:listDisplays'));
+  const listed = await page.evaluate(() => window.framecapt.invoke('capture:listDisplays'));
   if (!listed.ok) throw new Error('capture:listDisplays failed');
   displays = listed.data;
   expect(displays.length).toBeGreaterThan(0);
@@ -553,7 +553,7 @@ test.afterAll(async () => {
 });
 
 test('host and displays', async () => {
-  const info = await page.evaluate(() => window.framelet.invoke('app:getInfo'));
+  const info = await page.evaluate(() => window.framecapt.invoke('app:getInfo'));
   const mics = await page.evaluate(
     async () =>
       (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput')
@@ -588,7 +588,7 @@ test('(a) no audio: 6 s, 1080p preset, no audio stream, toolbar excluded', async
   const outcome = await recordWithToolbar(
     'a-no-audio',
     () =>
-      page.evaluate((request) => window.framelet.invoke('recorder:start', request), {
+      page.evaluate((request) => window.framecapt.invoke('recorder:start', request), {
         ...primaryTarget(),
         options: options({ mic: false, system: false }),
       }),
@@ -653,7 +653,7 @@ test('toolbar exclusion control: with protection switched off the same detector 
   const outcome = await recordWithToolbar(
     'control-unprotected',
     () =>
-      page.evaluate((request) => window.framelet.invoke('recorder:start', request), {
+      page.evaluate((request) => window.framecapt.invoke('recorder:start', request), {
         ...primaryTarget(),
         options: options({ mic: false, system: false }),
       }),
@@ -703,7 +703,7 @@ test('(b) system audio + test tone: 6 s active with a 2 s pause in the middle', 
     outcome = await recordWithToolbar(
       'b-system-audio',
       () =>
-        page.evaluate((request) => window.framelet.invoke('recorder:start', request), {
+        page.evaluate((request) => window.framecapt.invoke('recorder:start', request), {
           ...primaryTarget(),
           options: options({ mic: false, system: true }),
         }),
@@ -758,7 +758,7 @@ test('(c) microphone only: 6 s (skipped when the host has no microphone)', async
   const outcome = await recordWithToolbar(
     'c-mic',
     () =>
-      page.evaluate((request) => window.framelet.invoke('recorder:start', request), {
+      page.evaluate((request) => window.framecapt.invoke('recorder:start', request), {
         ...primaryTarget(),
         options: options({ mic: true, system: false }),
       }),
@@ -806,7 +806,7 @@ test('(d) microphone + system audio: 6 s mixed into one audio track', async () =
     outcome = await recordWithToolbar(
       'd-mic-and-system',
       () =>
-        page.evaluate((request) => window.framelet.invoke('recorder:start', request), {
+        page.evaluate((request) => window.framecapt.invoke('recorder:start', request), {
           ...primaryTarget(),
           options: options({ mic: true, system: true }),
         }),
@@ -935,7 +935,7 @@ test('Source preset: native resolution of the primary display', async () => {
   const outcome = await recordWithToolbar(
     'source-preset',
     () =>
-      page.evaluate((request) => window.framelet.invoke('recorder:start', request), {
+      page.evaluate((request) => window.framecapt.invoke('recorder:start', request), {
         ...primaryTarget(),
         options: options({ mic: false, system: false, quality: 'source' }),
       }),
@@ -959,8 +959,8 @@ test('Source preset: native resolution of the primary display', async () => {
 // --- a window ------------------------------------------------------------------------------
 
 test('window recording of a framed fixture window', async () => {
-  const title = `framelet-native-fixture-${Date.now()}`;
-  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-fixture-'));
+  const title = `framecapt-native-fixture-${Date.now()}`;
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-fixture-'));
   const electronPath = (await import('node:module')).createRequire(__filename)(
     'electron',
   ) as unknown as string;
@@ -1029,7 +1029,7 @@ test('window recording of a framed fixture window', async () => {
 test('how short can a recording be? (informational, nothing asserted about the minimum)', async () => {
   const results: Record<string, unknown>[] = [];
   for (const ms of [300, 700, 1200]) {
-    await page.evaluate((request) => window.framelet.invoke('recorder:start', request), {
+    await page.evaluate((request) => window.framecapt.invoke('recorder:start', request), {
       ...primaryTarget(),
       options: options({ mic: false, system: false }),
     });
@@ -1048,7 +1048,7 @@ test('how short can a recording be? (informational, nothing asserted about the m
       bytes: done.result?.bytes ?? null,
       error: done.error?.code ?? null,
     });
-    await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+    await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
     await waitForStatus('idle');
   }
   record('shortRecordings', results);
@@ -1059,8 +1059,8 @@ test('how short can a recording be? (informational, nothing asserted about the m
 
 test('the log and the evidence contain no window titles and no home paths', async () => {
   const log = fs.readFileSync(path.join(userDataDir, 'logs', 'main.log'), 'utf8');
-  expect(log).not.toContain('framelet-native-fixture');
+  expect(log).not.toContain('framecapt-native-fixture');
   const written = fs.readFileSync(path.join(evidenceDir, 'recordings-native.json'), 'utf8');
-  expect(written).not.toContain('framelet-native-fixture');
+  expect(written).not.toContain('framecapt-native-fixture');
   expect(written.toLowerCase()).not.toContain(os.userInfo().username.toLowerCase());
 });

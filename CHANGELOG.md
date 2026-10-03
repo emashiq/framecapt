@@ -1,8 +1,10 @@
 # Changelog
 
-All notable changes to Framelet are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project intends to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The name Framelet is provisional.
+All notable changes to FrameCapt are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project intends to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The name FrameCapt is provisional.
 
 ## [Unreleased]
+
+- Renamed from the working name Framelet to FrameCapt (2026-10-03). The name is still provisional; trademark clearance is pending. Nothing was released under the old name, so no user-data migration is needed: the user data folder follows the product name (`%APPDATA%FrameCapt`).
 
 ### 0.1.0 (beta, not yet released)
 
@@ -15,7 +17,7 @@ All notable changes to Framelet are recorded here. The format follows [Keep a Ch
 - MP4 export (H.264 + AAC) with progress and cancel, using a bundled FFmpeg 9.0.2 (Gyan "essentials" build, GPL-3.0-or-later).
 - Local capture history with search, thumbnails from flattened output, missing-file handling, and delete-to-Recycle-Bin.
 - Settings, configurable global shortcuts with conflict detection, tray icon, close-to-tray, launch-at-login option, light/dark theme following Windows, keyboard-accessible UI.
-- Windows installer (Squirrel, per-user, **unsigned**) and portable zip; production UI served from the local `app://framelet` scheme; update adapter present but disabled until an update source exists.
+- Windows installer (Squirrel, per-user, **unsigned**) and portable zip; production UI served from the local `app://framecapt` scheme; update adapter present but disabled until an update source exists.
 - No telemetry, no uploads, no network requests of its own (measured).
 - Open-source documentation: README, user guide, build guide, contributing guide, code of conduct, security policy, privacy statement, third-party notices, GPL-3.0-only license.
 

@@ -19,7 +19,7 @@ const COPY = {
   'mic-denied': {
     title: 'Microphone access is blocked',
     description:
-      'Framelet cannot use the microphone. Allow microphone access in Windows Settings (Privacy & security, Microphone), or record without it.',
+      'FrameCapt cannot use the microphone. Allow microphone access in Windows Settings (Privacy & security, Microphone), or record without it.',
     without: 'Record without microphone',
   },
   'mic-unavailable': {

@@ -2,7 +2,7 @@ import { registerLoop, registerStream } from './resource-registry';
 
 /**
  * A generated "display" for E2E builds ONLY (reached through a dynamic import guarded by
- * __FRAMELET_E2E__ and checked out of production bundles by scripts/check-no-mocks.mjs). It is a
+ * __FRAMECAPT_E2E__ and checked out of production bundles by scripts/check-no-mocks.mjs). It is a
  * canvas stream of the requested size with moving content, so the recorder pipeline (crop, scale,
  * MediaRecorder, chunk upload) runs for real without touching a screen.
  */

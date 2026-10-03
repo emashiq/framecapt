@@ -45,7 +45,7 @@ interface TestHooks {
 
 const hooks = <T>(app: ElectronApplication, fn: (h: TestHooks) => T): Promise<T> =>
   app.evaluate((_electron, source) => {
-    const h = (globalThis as unknown as { __frameletTest: TestHooks }).__frameletTest;
+    const h = (globalThis as unknown as { __frameCaptTest: TestHooks }).__frameCaptTest;
     return new Function('h', `return (${source})(h)`)(h) as never;
   }, fn.toString());
 
@@ -61,7 +61,7 @@ async function launch(
     fs.existsSync(path.join(projectRoot, '.vite', 'build', 'main.cjs')),
     'Run `npm run package:e2e` first (npm run test:e2e does this).',
   ).toBe(true);
-  const dir = options.dir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-desktop-'));
+  const dir = options.dir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-desktop-'));
   if (options.rawSettings !== undefined)
     fs.writeFileSync(path.join(dir, 'settings.json'), options.rawSettings);
   else if (options.settings !== undefined) {
@@ -72,9 +72,9 @@ async function launch(
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: dir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
-      FRAMELET_E2E_FAKE_SHORTCUTS: '1',
+      FRAMECAPT_USER_DATA_DIR: dir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_E2E_FAKE_SHORTCUTS: '1',
       ...options.env,
     },
   });
@@ -161,7 +161,7 @@ test.afterEach(async () => {
 test.describe('settings', () => {
   test('defaults on a first run; changes are written once, validated, and survive a relaunch', async () => {
     const first = await start();
-    const state = await first.page.evaluate(() => window.framelet.invoke('settings:get'));
+    const state = await first.page.evaluate(() => window.framecapt.invoke('settings:get'));
     expect(state).toMatchObject({
       ok: true,
       data: {
@@ -196,13 +196,13 @@ test.describe('settings', () => {
 
     // The app answers on the bridge with the invalid patch refused, and nothing was written for it.
     const bad = await first.page.evaluate(() =>
-      (window.framelet.invoke as (c: string, p: unknown) => Promise<unknown>)('settings:update', {
+      (window.framecapt.invoke as (c: string, p: unknown) => Promise<unknown>)('settings:update', {
         patch: { general: { theme: 'neon' } },
       }),
     );
     expect(bad).toMatchObject({ ok: false, error: { code: 'INVALID_PAYLOAD' } });
     const dup = await first.page.evaluate(() =>
-      window.framelet.invoke('settings:update', {
+      window.framecapt.invoke('settings:update', {
         patch: { shortcuts: { recordRegion: 'Ctrl+Shift+3' } },
       }),
     );
@@ -214,7 +214,7 @@ test.describe('settings', () => {
 
     const second = await start({ dir });
     await expect(second.page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    const again = await second.page.evaluate(() => window.framelet.invoke('settings:get'));
+    const again = await second.page.evaluate(() => window.framecapt.invoke('settings:get'));
     expect(again).toMatchObject({
       ok: true,
       data: {
@@ -234,10 +234,10 @@ test.describe('settings', () => {
     expect(fs.readFileSync(path.join(dir, aside[0] ?? ''), 'utf8')).toBe(
       '{ "version": 1, "general": ',
     );
-    const state = await page.evaluate(() => window.framelet.invoke('settings:get'));
+    const state = await page.evaluate(() => window.framecapt.invoke('settings:get'));
     expect(state).toMatchObject({ ok: true, data: { settings: { general: { theme: 'system' } } } });
     // Said once: asking again finds nothing to report.
-    const again = await page.evaluate(() => window.framelet.invoke('settings:consumeNotice'));
+    const again = await page.evaluate(() => window.framecapt.invoke('settings:consumeNotice'));
     expect(again).toMatchObject({ ok: true, data: { reset: false } });
   });
 
@@ -265,7 +265,7 @@ test.describe('settings', () => {
     const { app, page, dir } = await start();
     await page.evaluate(() => {
       localStorage.setItem(
-        'framelet.recordOptions',
+        'framecapt.recordOptions',
         JSON.stringify({
           mic: { enabled: false },
           systemAudio: true,
@@ -285,13 +285,13 @@ test.describe('settings', () => {
       .toMatchObject({
         recording: { quality: 'source', fps: 60, systemAudio: true, countdown: false },
       });
-    expect(await page.evaluate(() => localStorage.getItem('framelet.recordOptions'))).toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem('framecapt.recordOptions'))).toBeNull();
     void app;
   });
 
   test('output folders are chosen through a main dialog and must be writable', async () => {
     const { app, page, dir } = await start();
-    const good = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-out-'));
+    const good = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-out-'));
     const blocker = path.join(good, 'a-file');
     fs.writeFileSync(blocker, 'x');
     const stubOpen = (target: string) =>
@@ -319,13 +319,13 @@ test.describe('settings', () => {
     await stubOpen(path.join(blocker, 'nested'));
     await page.getByTestId('folder-change-screenshots').click();
     await expect(
-      page.getByText("Framelet can't save to that folder.", { exact: false }),
+      page.getByText("FrameCapt can't save to that folder.", { exact: false }),
     ).toBeVisible();
     await expect(page.getByTestId('folder-path-screenshots')).toContainText('(default)');
 
     // The channel has no way to carry a path in a patch: it is refused outright (not ignored).
     const sneaky = await page.evaluate(() =>
-      (window.framelet.invoke as (c: string, p: unknown) => Promise<unknown>)('settings:update', {
+      (window.framecapt.invoke as (c: string, p: unknown) => Promise<unknown>)('settings:update', {
         patch: { recording: { outputDir: 'C:\\Windows' } },
       }),
     );
@@ -339,7 +339,7 @@ test.describe('settings', () => {
 
   test('a screenshot saves into the chosen folder and the Save dialog opens there', async () => {
     const { app, page, dir } = await start();
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-shots-'));
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-shots-'));
     await app.evaluate(({ dialog }, folder) => {
       dialog.showOpenDialog = (() =>
         Promise.resolve({ canceled: false, filePaths: [folder] })) as typeof dialog.showOpenDialog;
@@ -389,7 +389,7 @@ test.describe('settings', () => {
     await overlay.keyboard.press('Enter').catch(() => undefined);
     await expect(page.getByTestId('editor-view')).toBeVisible();
     await expect(page.getByText('Saved to', { exact: false })).toBeVisible();
-    const folder = path.join(dir, 'pictures', 'Framelet');
+    const folder = path.join(dir, 'pictures', 'FrameCapt');
     await expect.poll(() => fs.existsSync(folder) && fs.readdirSync(folder).length).toBe(1);
     expect(fs.readdirSync(folder)[0]).toMatch(/\.jpg$/);
     // Nothing is unsaved yet: leaving the editor does not ask.
@@ -503,7 +503,7 @@ test.describe('shortcuts', () => {
   });
 
   test('a shortcut another app holds is reported as a conflict, in Settings and on the home view', async () => {
-    const { app, page } = await start({ env: { FRAMELET_E2E_TAKEN_SHORTCUTS: 'Ctrl+Shift+1' } });
+    const { app, page } = await start({ env: { FRAMECAPT_E2E_TAKEN_SHORTCUTS: 'Ctrl+Shift+1' } });
     const states = await hooks(app, (h) => h.shortcutStates());
     expect(states.screenshotScreen).toMatchObject({
       accelerator: 'Ctrl+Shift+1',
@@ -527,7 +527,7 @@ test.describe('shortcuts', () => {
   });
 
   test('tray and shortcut actions share the flows: region screenshot, busy refusal, record toggle', async () => {
-    const { app, page } = await start({ env: { FRAMELET_E2E_MOCK_DISPLAYS: '1' } });
+    const { app, page } = await start({ env: { FRAMECAPT_E2E_MOCK_DISPLAYS: '1' } });
     // A shortcut starts the real region flow.
     await hooks(app, (h) => h.runAction('screenshotRegion'));
     const overlay = await overlayFor(app, '1001');
@@ -541,7 +541,7 @@ test.describe('shortcuts', () => {
     // A record shortcut starts a recording and the same shortcut stops it.
     await hooks(app, (h) => h.runAction('recordScreen'));
     const recorderStatus = async (): Promise<string> => {
-      const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+      const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
       return result.ok ? result.data.status : 'unknown';
     };
     await expect.poll(recorderStatus, { timeout: 30_000 }).toBe('recording');
@@ -551,16 +551,16 @@ test.describe('shortcuts', () => {
       'Pause recording',
       'Stop recording',
     ]);
-    expect(await hooks(app, (h) => h.trayTooltip())).toMatch(/^Framelet — Recording \d\d:\d\d$/);
+    expect(await hooks(app, (h) => h.trayTooltip())).toMatch(/^FrameCapt — Recording \d\d:\d\d$/);
     await hooks(app, (h) => h.runAction('pauseRecording'));
     await expect.poll(recorderStatus).toBe('paused');
-    expect(await hooks(app, (h) => h.trayTooltip())).toMatch(/^Framelet — Paused/);
+    expect(await hooks(app, (h) => h.trayTooltip())).toMatch(/^FrameCapt — Paused/);
     await hooks(app, (h) => h.runAction('pauseRecording'));
     await expect.poll(recorderStatus).toBe('recording');
     await hooks(app, (h) => h.runAction('recordScreen')); // toggles: stops
     await expect.poll(recorderStatus, { timeout: 30_000 }).toBe('completed');
     await expect(page.getByTestId('recording-result')).toBeVisible();
-    expect(await hooks(app, (h) => h.trayTooltip())).toBe('Framelet');
+    expect(await hooks(app, (h) => h.trayTooltip())).toBe('FrameCapt');
   });
 });
 
@@ -580,7 +580,7 @@ test.describe('tray and quitting', () => {
     expect(await hooks(app, (h) => h.trayInstances())).toBe(1);
     await expect.poll(() => readSettings(dir).notices?.trayHintShown).toBe(true);
 
-    // Reopening (tray click / "Open Framelet" / a second launch) shows the same window again.
+    // Reopening (tray click / "Open FrameCapt" / a second launch) shows the same window again.
     await hooks(app, (h) => h.openFromTray());
     await expect.poll(async () => (await mainWindowState(app, page)).visible).toBe(true);
     // Closing again does not repeat the hint.
@@ -633,7 +633,7 @@ test.describe('tray and quitting', () => {
       .launch({
         args: ['.'],
         cwd: projectRoot,
-        env: { ...process.env, FRAMELET_USER_DATA_DIR: dir, FRAMELET_E2E_MOCK_CAPTURE: '1' },
+        env: { ...process.env, FRAMECAPT_USER_DATA_DIR: dir, FRAMECAPT_E2E_MOCK_CAPTURE: '1' },
       })
       .catch(() => null);
     await second?.close().catch(() => undefined);
@@ -641,10 +641,10 @@ test.describe('tray and quitting', () => {
   });
 
   test('quitting during a recording asks first; Keep recording keeps it, Stop & quit saves and exits', async () => {
-    const { app, page, dir } = await start({ env: { FRAMELET_E2E_MOCK_DISPLAYS: '1' } });
+    const { app, page, dir } = await start({ env: { FRAMECAPT_E2E_MOCK_DISPLAYS: '1' } });
     await hooks(app, (h) => h.runAction('recordScreen'));
     const status = async (): Promise<string> => {
-      const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+      const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
       return result.ok ? result.data.status : 'unknown';
     };
     await expect.poll(status, { timeout: 30_000 }).toBe('recording');
@@ -672,7 +672,7 @@ test.describe('tray and quitting', () => {
       ),
     ]);
     // The recording was finished before the app went away.
-    const videos = path.join(dir, 'videos', 'Framelet');
+    const videos = path.join(dir, 'videos', 'FrameCapt');
     expect(
       fs.existsSync(videos) ? fs.readdirSync(videos).filter((f) => f.endsWith('.webm')) : [],
     ).toHaveLength(1);
@@ -904,7 +904,7 @@ test.describe('keyboard and focus', () => {
 
 test.describe('errors and devices', () => {
   test('starting a recording into a folder that cannot be written says what to do', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-bad-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-bad-'));
     const blocker = path.join(dir, 'file');
     fs.writeFileSync(blocker, 'x');
     const { page } = await start({
@@ -913,7 +913,7 @@ test.describe('errors and devices', () => {
     });
     await page.getByTestId('record-screen').click();
     await expect(
-      page.getByText("Framelet can't save to that folder. Choose a folder you can write to", {
+      page.getByText("FrameCapt can't save to that folder. Choose a folder you can write to", {
         exact: false,
       }),
     ).toBeVisible();
@@ -930,7 +930,7 @@ test.describe('errors and devices', () => {
     await openSettings(page, 'recording');
     await expect(page.getByTestId('mic-missing')).toBeVisible();
     // The saved id is still there: nothing was silently rewritten.
-    const state = await page.evaluate(() => window.framelet.invoke('settings:get'));
+    const state = await page.evaluate(() => window.framecapt.invoke('settings:get'));
     expect(state).toMatchObject({
       ok: true,
       data: { settings: { recording: { micDeviceId: 'device-that-is-gone' } } },
@@ -1005,7 +1005,7 @@ test.describe('idle', () => {
   });
 
   test('the hidden worker window idles: no loops, and next to no CPU time in any window', async () => {
-    const { app, page } = await start({ env: { FRAMELET_E2E_MOCK_DISPLAYS: '1' } });
+    const { app, page } = await start({ env: { FRAMECAPT_E2E_MOCK_DISPLAYS: '1' } });
     // A screenshot flow wakes the worker (it grabs the frozen frame); then everything is idle.
     await page.getByTestId('shot-region').click();
     const overlay = await overlayFor(app, '1001');
@@ -1017,8 +1017,8 @@ test.describe('idle', () => {
 
     const loops = await worker.evaluate(() =>
       (
-        window as unknown as { __frameletResources: () => Record<string, number> }
-      ).__frameletResources(),
+        window as unknown as { __frameCaptResources: () => Record<string, number> }
+      ).__frameCaptResources(),
     );
     expect(loops).toMatchObject({ liveTracks: 0, openAudioContexts: 0, activeLoops: 0 });
 

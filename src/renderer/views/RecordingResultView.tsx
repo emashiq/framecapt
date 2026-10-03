@@ -64,7 +64,7 @@ export interface RecordingResultViewProps {
 
 /**
  * Shown in the Capture tab after a recording is finished and saved: a player for the file (served
- * by the main-owned `framelet-media:` protocol), its facts, and what to do next.
+ * by the main-owned `framecapt-media:` protocol), its facts, and what to do next.
  */
 export function RecordingResultView({
   snapshot,
@@ -76,7 +76,7 @@ export function RecordingResultView({
   const headingRef = useRef<HTMLDivElement>(null);
   const notice = earlyStopNotice(snapshot);
   const unindexedNotice = result.unindexed
-    ? 'Saved without a seeking index: the video plays, but jumping to a time may not work. The original data was kept; Framelet will offer to repair it the next time it starts.'
+    ? 'Saved without a seeking index: the video plays, but jumping to a time may not work. The original data was kept; FrameCapt will offer to repair it the next time it starts.'
     : null;
 
   useEffect(() => {
@@ -132,7 +132,7 @@ export function RecordingResultView({
         <video
           ref={videoRef}
           data-testid="result-video"
-          src={`framelet-media://${result.id}`}
+          src={`framecapt-media://${result.id}`}
           controls
           preload="metadata"
           onLoadedMetadata={(event) => revealDuration(event.currentTarget)}
@@ -179,7 +179,7 @@ export function RecordingResultView({
           icon={<FolderOpen className="size-4" aria-hidden="true" />}
           data-testid="result-show"
           onClick={() =>
-            run(window.framelet.invoke('recorder:showInFolder', { resultId: result.id }))
+            run(window.framecapt.invoke('recorder:showInFolder', { resultId: result.id }))
           }
         >
           Show in folder
@@ -189,7 +189,10 @@ export function RecordingResultView({
           icon={<Copy className="size-4" aria-hidden="true" />}
           data-testid="result-copy-path"
           onClick={() =>
-            run(window.framelet.invoke('recorder:copyPath', { resultId: result.id }), 'Path copied')
+            run(
+              window.framecapt.invoke('recorder:copyPath', { resultId: result.id }),
+              'Path copied',
+            )
           }
         >
           Copy path

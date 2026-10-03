@@ -104,12 +104,12 @@ describe('formatDuration', () => {
 });
 
 describe('output file names', () => {
-  it('formats "Framelet YYYY-MM-DD at HH.mm.ss.webm" in local time', () => {
+  it('formats "FrameCapt YYYY-MM-DD at HH.mm.ss.webm" in local time', () => {
     expect(defaultRecordingFileName(new Date(2026, 9, 2, 14, 5, 9))).toBe(
-      'Framelet 2026-10-02 at 14.05.09.webm',
+      'FrameCapt 2026-10-02 at 14.05.09.webm',
     );
     expect(defaultRecordingFileName(new Date(2026, 0, 3, 0, 0, 0), 'mp4')).toBe(
-      'Framelet 2026-01-03 at 00.00.00.mp4',
+      'FrameCapt 2026-01-03 at 00.00.00.mp4',
     );
   });
 
@@ -120,10 +120,10 @@ describe('output file names', () => {
   });
 
   it('adds a collision suffix before the extension', () => {
-    const name = 'Framelet 2026-10-02 at 14.05.09.webm';
+    const name = 'FrameCapt 2026-10-02 at 14.05.09.webm';
     expect(withCollisionSuffix(name, 0)).toBe(name);
-    expect(withCollisionSuffix(name, 1)).toBe('Framelet 2026-10-02 at 14.05.09 (2).webm');
-    expect(withCollisionSuffix(name, 2)).toBe('Framelet 2026-10-02 at 14.05.09 (3).webm');
+    expect(withCollisionSuffix(name, 1)).toBe('FrameCapt 2026-10-02 at 14.05.09 (2).webm');
+    expect(withCollisionSuffix(name, 2)).toBe('FrameCapt 2026-10-02 at 14.05.09 (3).webm');
     expect(withCollisionSuffix('noext', 1)).toBe('noext (2)');
   });
 });

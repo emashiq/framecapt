@@ -27,7 +27,7 @@ export function useHistory(request: HistoryListRequest): HistoryList {
     sequence.current += 1;
     const mine = sequence.current;
     const current = JSON.parse(key) as HistoryListRequest;
-    void window.framelet.invoke('history:list', current).then((response) => {
+    void window.framecapt.invoke('history:list', current).then((response) => {
       if (mine !== sequence.current || !response.ok) return;
       setState({ items: response.data.items, total: response.data.total, loaded: true });
     });
@@ -38,7 +38,7 @@ export function useHistory(request: HistoryListRequest): HistoryList {
   }, [reload]);
 
   useEffect(() => {
-    const off = window.framelet.on('history:changed', reload);
+    const off = window.framecapt.on('history:changed', reload);
     window.addEventListener('focus', reload);
     return () => {
       off();

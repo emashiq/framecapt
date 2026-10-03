@@ -1,5 +1,5 @@
 # Holds a system-wide hotkey the way another application would (RegisterHotKey), so the native test
-# can check that Framelet reports the combination as "used by another app". Writes "ok" or "fail"
+# can check that FrameCapt reports the combination as "used by another app". Writes "ok" or "fail"
 # to the ready file, then waits (message loop) until the process is killed.
 # Usage: powershell -File hold-hotkey.ps1 <ready-file> <modifiers-mask> <virtual-key>
 #   mask: 1 = Alt, 2 = Ctrl, 4 = Shift
@@ -9,7 +9,7 @@ Add-Type -TypeDefinition @"
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-public static class FrameletHotkey {
+public static class FrameCaptHotkey {
   [StructLayout(LayoutKind.Sequential)]
   public struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public int x; public int y; }
   [DllImport("user32.dll", SetLastError = true)]
@@ -26,4 +26,4 @@ public static class FrameletHotkey {
 }
 "@
 
-[FrameletHotkey]::Run($ReadyFile, $Modifiers, $VirtualKey)
+[FrameCaptHotkey]::Run($ReadyFile, $Modifiers, $VirtualKey)

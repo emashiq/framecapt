@@ -30,7 +30,7 @@ export interface HistoryViewProps {
 }
 
 /**
- * Everything Framelet captured, newest first: filter, search, a keyboard-navigable grid and a
+ * Everything FrameCapt captured, newest first: filter, search, a keyboard-navigable grid and a
  * details view with a preview and every action. Entries come from main by id; moved or deleted
  * files stay listed in a calm "File moved or deleted" state until the user re-links or removes
  * them. Removing an entry never touches its file; deleting a file is a separate confirmed action.
@@ -151,14 +151,14 @@ export function HistoryView({ focusId = null, onFocusConsumed }: HistoryViewProp
   };
 
   const startScreenshot = (): void => {
-    void window.framelet
+    void window.framecapt
       .invoke('capture:startScreenshot', { target: 'region' })
       .then((response) => {
         if (!response.ok) notify.error(response.error);
       });
   };
   const startRecording = (): void => {
-    void window.framelet
+    void window.framecapt
       .invoke('recorder:start', {
         target: 'screen',
         options: recordOptionsFromSettings(getSettings().recording),
@@ -270,7 +270,7 @@ export function HistoryView({ focusId = null, onFocusConsumed }: HistoryViewProp
                 variant="ghost"
                 data-testid="history-clear-missing"
                 onClick={() =>
-                  void window.framelet.invoke('history:clearMissing').then((response) => {
+                  void window.framecapt.invoke('history:clearMissing').then((response) => {
                     if (!response.ok) notify.error(response.error);
                     else {
                       notify.info(

@@ -55,15 +55,15 @@ export function writeEvidenceJson(dir: string, name: string, value: unknown): vo
 
 /**
  * Evidence hygiene: committed evidence (docs/evidence/phaseNN: screenshots, JSON, media samples)
- * is only rewritten when FRAMELET_WRITE_EVIDENCE=1. Otherwise the tests still write and assert on
+ * is only rewritten when FRAMECAPT_WRITE_EVIDENCE=1. Otherwise the tests still write and assert on
  * their evidence, but into a scratch directory under the OS temp dir, so an ordinary run never
  * touches files that earlier phases committed.
  */
-export const WRITE_EVIDENCE = process.env.FRAMELET_WRITE_EVIDENCE === '1';
+export const WRITE_EVIDENCE = process.env.FRAMECAPT_WRITE_EVIDENCE === '1';
 
-/** docs/evidence/<phase> when FRAMELET_WRITE_EVIDENCE=1, otherwise a scratch directory. */
+/** docs/evidence/<phase> when FRAMECAPT_WRITE_EVIDENCE=1, otherwise a scratch directory. */
 export function evidenceDirFor(repoRoot: string, phase: string): string {
   return WRITE_EVIDENCE
     ? path.join(repoRoot, 'docs', 'evidence', phase)
-    : path.join(os.tmpdir(), 'framelet-evidence-scratch', phase);
+    : path.join(os.tmpdir(), 'framecapt-evidence-scratch', phase);
 }

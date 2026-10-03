@@ -11,7 +11,7 @@ export function useAppInfo(): { state: AppInfoState; reload: () => void } {
 
   useEffect(() => {
     let cancelled = false;
-    window.framelet
+    window.framecapt
       .invoke('app:getInfo')
       .then((result) => {
         if (cancelled) return;

@@ -59,7 +59,7 @@ export function registerSettingsHandlers(settings: AppSettings, shortcuts: Short
       log.warn('A chosen output folder was refused: not writable');
       throw new IpcError(
         'OUTPUT_DIR_UNWRITABLE',
-        "Framelet can't save to that folder. Choose a folder you can write to.",
+        "FrameCapt can't save to that folder. Choose a folder you can write to.",
       );
     }
     store.setOutputDir(request.target, picked);

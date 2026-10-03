@@ -173,7 +173,7 @@ function failure(code: Mp4FailureCode, message: string, stderrTail = ''): Mp4Res
 /** The temporary output: next to the destination (one volume, so the rename is atomic) and unique. */
 export function partialPathFor(destPath: string): string {
   const token = randomBytes(6).toString('hex');
-  return path.join(path.dirname(destPath), `.framelet-export-${token}.partial.mp4`);
+  return path.join(path.dirname(destPath), `.framecapt-export-${token}.partial.mp4`);
 }
 
 /** Case-insensitive path equality (Windows file names). */

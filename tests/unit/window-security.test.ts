@@ -1,5 +1,5 @@
 /**
- * Window and session hardening, as configured in main: the preferences every Framelet window gets
+ * Window and session hardening, as configured in main: the preferences every FrameCapt window gets
  * and the policies installed on the session (navigation, permissions, devices, network). Electron
  * is replaced by recorders; what matters is what the app asks Electron to do.
  */
@@ -186,7 +186,7 @@ describe('session policies', () => {
       callback: (allowed: boolean) => void,
       details: { requestingUrl: string; mediaTypes?: string[] },
     ) => void;
-    const app = 'app://framelet/index.html';
+    const app = 'app://framecapt/index.html';
     const ask = (permission: string, requestingUrl: string, mediaTypes?: string[]) => {
       const callback = vi.fn();
       decide({}, permission, callback, { requestingUrl, ...(mediaTypes && { mediaTypes }) });

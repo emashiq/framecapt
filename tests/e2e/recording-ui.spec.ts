@@ -1,6 +1,6 @@
 /**
  * Takes the Phase 05 UI screenshots (docs/evidence/phase05/ui-*.png) from the E2E build, in light
- * and dark. They show only Framelet's own UI over the mock/synthetic content, never a real
+ * and dark. They show only FrameCapt's own UI over the mock/synthetic content, never a real
  * desktop, so they are safe to keep in the repository. The toolbar and the countdown are separate
  * transparent windows; they are captured as their own pages.
  */
@@ -45,7 +45,7 @@ async function both(name: string, shoot: (file: string) => Promise<unknown>): Pr
 }
 
 async function state() {
-  const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+  const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
   if (!result.ok) throw new Error('getState failed');
   return result.data;
 }
@@ -67,15 +67,15 @@ test.beforeAll(async () => {
     'Run `npm run package:e2e` first (npm run test:e2e does this).',
   ).toBe(true);
   fs.mkdirSync(evidenceDir, { recursive: true });
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-ui-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-ui-'));
   app = await electron.launch({
     args: ['.', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: userDataDir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
-      FRAMELET_E2E_MOCK_DISPLAYS: '1',
+      FRAMECAPT_USER_DATA_DIR: userDataDir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
     },
   });
   page = await app.firstWindow();
@@ -117,7 +117,7 @@ test('toolbar while recording, paused, and with a lost microphone', async () => 
   await toolbar.getByTestId('toolbar-resume').click();
 
   await pagesOf('#/recorder')[0]?.evaluate(() =>
-    window.framelet.invoke('recorder:engineEvent', { type: 'trackEnded', source: 'mic' }),
+    window.framecapt.invoke('recorder:engineEvent', { type: 'trackEnded', source: 'mic' }),
   );
   await expect(toolbar.getByTestId('badge-lost-mic')).toBeVisible();
   // The toolbar grows to make room for the warning; give the window a moment.
@@ -155,7 +155,7 @@ test('countdown window', async () => {
   await both('countdown', (file) =>
     countdown.getByTestId('countdown').screenshot({ path: file, omitBackground: true }),
   );
-  await page.evaluate(() => window.framelet.invoke('recorder:cancel'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:cancel'));
   await expect.poll(async () => (await state()).status).toBe('idle');
 });
 

@@ -96,7 +96,7 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
   const selected = selection !== null && interaction.kind === 'none';
 
   const cancel = useCallback(() => {
-    void window.framelet.invoke('overlay:cancel');
+    void window.framecapt.invoke('overlay:cancel');
   }, []);
 
   const confirm = useCallback(async () => {
@@ -107,7 +107,7 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
       return;
     }
     submitting.current = true;
-    const result = await window.framelet.invoke('overlay:confirm', {
+    const result = await window.framecapt.invoke('overlay:confirm', {
       displayId: init.displayId,
       rect,
     });
@@ -149,7 +149,7 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
   // Main clears this overlay when a selection is started on another display.
   useEffect(
     () =>
-      window.framelet.on('overlay:clearSelection', () => {
+      window.framecapt.on('overlay:clearSelection', () => {
         setSelection(null);
         setInteraction({ kind: 'none' });
       }),
@@ -181,7 +181,7 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
     requestAnimationFrame(() =>
       requestAnimationFrame(
         () =>
-          void window.framelet.invoke('overlay:ready').then(() => {
+          void window.framecapt.invoke('overlay:ready').then(() => {
             if (!active) return;
             readyRef.current = true;
             setReady(true);
@@ -221,7 +221,7 @@ export function RegionSelector({ init }: { init: OverlayInit }) {
     setHintUsed(true);
     setSelection(null);
     setInteraction({ kind: 'drawing', origin: clamped });
-    void window.framelet.invoke('overlay:selectionStarted');
+    void window.framecapt.invoke('overlay:selectionStarted');
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>): void => {

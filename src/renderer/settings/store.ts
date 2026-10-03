@@ -104,7 +104,7 @@ function markSaved(): void {
 export async function updateSettings(patch: SettingsPatch): Promise<boolean> {
   const before = state;
   if (before) setState({ ...before, settings: applyPatch(before.settings, patch) });
-  const response = await window.framelet.invoke('settings:update', { patch });
+  const response = await window.framecapt.invoke('settings:update', { patch });
   if (!response.ok) {
     if (before) setState(before);
     failed(response.error);
@@ -116,21 +116,21 @@ export async function updateSettings(patch: SettingsPatch): Promise<boolean> {
 }
 
 export async function resetSettings(section?: ResetSection): Promise<void> {
-  const response = await window.framelet.invoke('settings:reset', section ? { section } : {});
+  const response = await window.framecapt.invoke('settings:reset', section ? { section } : {});
   if (!response.ok) return failed(response.error);
   setState(response.data);
   markSaved();
 }
 
 export async function chooseOutputDir(target: OutputTarget): Promise<void> {
-  const response = await window.framelet.invoke('settings:chooseOutputDir', { target });
+  const response = await window.framecapt.invoke('settings:chooseOutputDir', { target });
   if (!response.ok) return failed(response.error);
   setState(response.data.state);
   if (response.data.changed) markSaved();
 }
 
 export async function resetOutputDir(target: OutputTarget): Promise<void> {
-  const response = await window.framelet.invoke('settings:useDefaultOutputDir', { target });
+  const response = await window.framecapt.invoke('settings:useDefaultOutputDir', { target });
   if (!response.ok) return failed(response.error);
   setState(response.data);
   markSaved();
@@ -140,7 +140,7 @@ export async function resetOutputDir(target: OutputTarget): Promise<void> {
 async function migrateLegacyRecordOptions(): Promise<void> {
   const legacy = loadLegacyRecordOptions();
   if (!legacy) return;
-  const response = await window.framelet.invoke('settings:update', {
+  const response = await window.framecapt.invoke('settings:update', {
     patch: patchFromRecordOptions(legacy),
   });
   if (response.ok) {
@@ -153,25 +153,25 @@ async function migrateLegacyRecordOptions(): Promise<void> {
 export function startSettingsSync(): () => void {
   let live = true;
   const offs = [
-    window.framelet.on('settings:changed', (next) => setState(next)),
-    window.framelet.on('shortcuts:changed', (next) => {
+    window.framecapt.on('settings:changed', (next) => setState(next)),
+    window.framecapt.on('shortcuts:changed', (next) => {
       shortcutStates = next;
       emit();
     }),
   ];
-  void window.framelet.invoke('settings:get').then(async (response) => {
+  void window.framecapt.invoke('settings:get').then(async (response) => {
     if (!live) return;
     if (!response.ok) return failed(response.error);
     setState(response.data);
     await migrateLegacyRecordOptions();
   });
-  void window.framelet.invoke('shortcuts:status').then((response) => {
+  void window.framecapt.invoke('shortcuts:status').then((response) => {
     if (live && response.ok) {
       shortcutStates = response.data;
       emit();
     }
   });
-  void window.framelet.invoke('settings:consumeNotice').then((response) => {
+  void window.framecapt.invoke('settings:consumeNotice').then((response) => {
     if (live && response.ok && response.data.reset) {
       toast('Settings were reset because the file was damaged. Your captures were not touched.', {
         duration: 10_000,

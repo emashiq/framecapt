@@ -34,14 +34,14 @@ import { handle } from './ipc';
 import { log } from './logger';
 
 /** Build-time constant of vite.main.config.ts: the literal `false` in every normal build. */
-declare const __FRAMELET_E2E__: boolean;
+declare const __FRAMECAPT_E2E__: boolean;
 
 /**
- * E2E builds only: a file (FRAMELET_E2E_FREE_BYTES_FILE) holds the "free disk space" the service
+ * E2E builds only: a file (FRAMECAPT_E2E_FREE_BYTES_FILE) holds the "free disk space" the service
  * sees, so tests can run the low-disk paths without filling a disk. Removed from normal builds.
  */
 function e2eDiskFs(): { fs: SessionFs; diskCheckEveryMs: number } | undefined {
-  const file = __FRAMELET_E2E__ ? process.env.FRAMELET_E2E_FREE_BYTES_FILE : undefined;
+  const file = __FRAMECAPT_E2E__ ? process.env.FRAMECAPT_E2E_FREE_BYTES_FILE : undefined;
   if (!file) return undefined;
   return {
     fs: {
@@ -53,12 +53,12 @@ function e2eDiskFs(): { fs: SessionFs; diskCheckEveryMs: number } | undefined {
 }
 
 /**
- * E2E builds only (FRAMELET_E2E_FFMPEG_DELAY_MS): the remux starts that many ms late (and can be
+ * E2E builds only (FRAMECAPT_E2E_FFMPEG_DELAY_MS): the remux starts that many ms late (and can be
  * aborted meanwhile), to exercise the quit cap and interrupted finalization. Removed from normal
  * builds.
  */
 function withE2eRemuxDelay(tools: MediaTools): MediaTools {
-  const delay = __FRAMELET_E2E__ ? Number(process.env.FRAMELET_E2E_FFMPEG_DELAY_MS) : 0;
+  const delay = __FRAMECAPT_E2E__ ? Number(process.env.FRAMECAPT_E2E_FFMPEG_DELAY_MS) : 0;
   if (!delay) return tools;
   return {
     ...tools,
@@ -160,9 +160,9 @@ export function registerHandlers(
     },
   });
   // Capability is asked once, at startup, and cached (the answer cannot change while running).
-  // E2E builds only (FRAMELET_E2E_NO_H264=1): behave like a build without an H.264 encoder.
+  // E2E builds only (FRAMECAPT_E2E_NO_H264=1): behave like a build without an H.264 encoder.
   const detected: Promise<Mp4Capability> =
-    __FRAMELET_E2E__ && process.env.FRAMELET_E2E_NO_H264 === '1'
+    __FRAMECAPT_E2E__ && process.env.FRAMECAPT_E2E_NO_H264 === '1'
       ? Promise.resolve({ available: false, reason: MP4_UNAVAILABLE_MESSAGE })
       : detectMp4Capability(tools);
   const mp4Capability: Promise<Mp4Capability> = detected.then((capability) => {
@@ -214,7 +214,7 @@ export function registerHandlers(
       if (!(await probeWritable(outputDir()))) {
         throw new IpcError(
           'OUTPUT_DIR_UNWRITABLE',
-          "Framelet can't save recordings to the chosen folder. Choose another one in Settings → Storage.",
+          "FrameCapt can't save recordings to the chosen folder. Choose another one in Settings → Storage.",
         );
       }
     },
@@ -224,9 +224,9 @@ export function registerHandlers(
       }
     },
     // E2E builds only: a short cap to test quitting while finalizing takes too long.
-    ...(__FRAMELET_E2E__ &&
-      Number(process.env.FRAMELET_E2E_QUIT_CAP_MS) > 0 && {
-        quitCapMs: Number(process.env.FRAMELET_E2E_QUIT_CAP_MS),
+    ...(__FRAMECAPT_E2E__ &&
+      Number(process.env.FRAMECAPT_E2E_QUIT_CAP_MS) > 0 && {
+        quitCapMs: Number(process.env.FRAMECAPT_E2E_QUIT_CAP_MS),
       }),
   });
   const flow = new CaptureFlow({

@@ -1,6 +1,6 @@
 /**
  * A standalone Electron process that shows one framed window filled with solid #FF00FF, for the
- * native window-capture test (an in-process window would be excluded from Framelet's own window
+ * native window-capture test (an in-process window would be excluded from FrameCapt's own window
  * list). Not part of the app. Usage: electron color-window.mjs <title> <x> <y> <userDataDir>
  *
  * stdout: `READY {"bounds":{...},"contentBounds":{...}}` once painted.

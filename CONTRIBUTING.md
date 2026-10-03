@@ -1,6 +1,6 @@
-# Contributing to Framelet
+# Contributing to FrameCapt
 
-Thanks for your interest. Framelet is a Windows-first, offline screenshot and screen-recording app (Electron, TypeScript, React, Vite) licensed under GPL-3.0-only. By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+Thanks for your interest. FrameCapt is a Windows-first, offline screenshot and screen-recording app (Electron, TypeScript, React, Vite) licensed under GPL-3.0-only. By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Licensing of contributions
 

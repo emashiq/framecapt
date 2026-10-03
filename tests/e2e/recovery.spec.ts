@@ -33,7 +33,7 @@ let page: Page;
 let userDataDir: string;
 
 const recordingsDir = (): string => path.join(userDataDir, 'recordings');
-const videosDir = (): string => path.join(userDataDir, 'videos', 'Framelet');
+const videosDir = (): string => path.join(userDataDir, 'videos', 'FrameCapt');
 const outputFiles = (): string[] =>
   fs.existsSync(videosDir()) ? fs.readdirSync(videosDir()).filter((f) => f.endsWith('.webm')) : [];
 const liveSessionDirs = (): string[] =>
@@ -101,9 +101,9 @@ async function launch(dir: string, env: Record<string, string> = {}): Promise<vo
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: dir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
-      FRAMELET_E2E_MOCK_DISPLAYS: '1',
+      FRAMECAPT_USER_DATA_DIR: dir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
       ...env,
     },
   });
@@ -112,10 +112,10 @@ async function launch(dir: string, env: Record<string, string> = {}): Promise<vo
   await expect(page.getByTestId('record-screen')).toBeVisible();
 }
 
-const tempDir = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-recovery-'));
+const tempDir = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-recovery-'));
 
 async function recorderState() {
-  const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+  const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
   if (!result.ok) throw new Error('recorder:getState failed');
   return result.data;
 }
@@ -172,16 +172,16 @@ test('unfinished recordings from an earlier run: banner, details, Recover, Disca
     error: { code: 'WRITE_FAILED', message: 'x' },
   });
   // C: an interrupted finalization (kill during the remux): resumed automatically on start
-  const partial = path.join(dir, 'videos', 'Framelet', `.framelet-${ID_FINALIZING}.partial.webm`);
+  const partial = path.join(dir, 'videos', 'FrameCapt', `.framecapt-${ID_FINALIZING}.partial.webm`);
   fs.mkdirSync(path.dirname(partial), { recursive: true });
   fs.writeFileSync(partial, 'half a remux from the dead process');
-  fs.writeFileSync(path.join(dir, 'videos', 'Framelet', 'my own notes.webm'), 'a user file');
+  fs.writeFileSync(path.join(dir, 'videos', 'FrameCapt', 'my own notes.webm'), 'a user file');
   seedSession(dir, ID_FINALIZING, live, {
     state: 'finalizing',
     createdAt: Date.UTC(2026, 9, 2, 9, 0, 0),
     finalize: {
-      outputDir: path.join(dir, 'videos', 'Framelet'),
-      fileName: 'Framelet 2026-10-02 at 09.00.05.webm',
+      outputDir: path.join(dir, 'videos', 'FrameCapt'),
+      fileName: 'FrameCapt 2026-10-02 at 09.00.05.webm',
       partialPath: partial,
       startedAt: 1,
     },
@@ -193,12 +193,14 @@ test('unfinished recordings from an earlier run: banner, details, Recover, Disca
 
   // C was finished without asking: its export exists, the partial file is gone, the user file stays.
   await expect
-    .poll(() => outputFiles().includes('Framelet 2026-10-02 at 09.00.05.webm'), { timeout: 30_000 })
+    .poll(() => outputFiles().includes('FrameCapt 2026-10-02 at 09.00.05.webm'), {
+      timeout: 30_000,
+    })
     .toBe(true);
   expect(fs.existsSync(partial)).toBe(false);
   expect(fs.readFileSync(path.join(videosDir(), 'my own notes.webm'), 'utf8')).toBe('a user file');
   expect(fs.existsSync(path.join(recordingsDir(), ID_FINALIZING))).toBe(false);
-  const resumed = probeFile(path.join(videosDir(), 'Framelet 2026-10-02 at 09.00.05.webm'));
+  const resumed = probeFile(path.join(videosDir(), 'FrameCapt 2026-10-02 at 09.00.05.webm'));
   expect(Number(resumed.format?.duration)).toBeGreaterThan(4.9);
 
   // The banner offers A, B and D (oldest first); not C.
@@ -277,14 +279,14 @@ test('a manual banner never appears while recording, and Recover is refused duri
   await startScreen();
   await toolbarPage();
   const refused = await page.evaluate(
-    (id) => window.framelet.invoke('recovery:recover', { sessionId: id }),
+    (id) => window.framecapt.invoke('recovery:recover', { sessionId: id }),
     ID_TRUNCATED,
   );
   expect(refused).toMatchObject({ ok: false, error: { code: 'BUSY' } });
-  const listed = await page.evaluate(() => window.framelet.invoke('recovery:list'));
+  const listed = await page.evaluate(() => window.framecapt.invoke('recovery:list'));
   expect(listed).toMatchObject({ ok: true, data: { candidates: [] } });
   const discardRefused = await page.evaluate(
-    (id) => window.framelet.invoke('recovery:discard', { sessionId: id }),
+    (id) => window.framecapt.invoke('recovery:discard', { sessionId: id }),
     ID_TRUNCATED,
   );
   expect(discardRefused).toMatchObject({ ok: false, error: { code: 'BUSY' } });
@@ -299,7 +301,7 @@ test('recovery IPC refuses ids that are not session uuids (no path ever comes fr
   await launch(dir);
   for (const sessionId of ['../..', '..\\recordings', 'C:\\Windows', ID_TRUNCATED + '/..', '']) {
     const result = await page.evaluate(
-      (id) => window.framelet.invoke('recovery:discard', { sessionId: id }),
+      (id) => window.framecapt.invoke('recovery:discard', { sessionId: id }),
       sessionId,
     );
     expect(result, sessionId).toMatchObject({ ok: false, error: { code: 'INVALID_PAYLOAD' } });
@@ -308,7 +310,7 @@ test('recovery IPC refuses ids that are not session uuids (no path ever comes fr
   expect(fs.existsSync(path.join(recordingsDir(), ID_TRUNCATED))).toBe(true);
   // a valid-looking id of a session that does not exist
   const unknown = await page.evaluate(() =>
-    window.framelet.invoke('recovery:discard', {
+    window.framecapt.invoke('recovery:discard', {
       sessionId: '4f4e4d4c-4b4a-4948-8746-454443424140',
     }),
   );
@@ -317,7 +319,7 @@ test('recovery IPC refuses ids that are not session uuids (no path ever comes fr
 
 test('quit while finalizing takes too long: the cap kills the remux, the session stays "finalizing", the next start finishes it', async () => {
   const dir = tempDir();
-  await launch(dir, { FRAMELET_E2E_FFMPEG_DELAY_MS: '60000', FRAMELET_E2E_QUIT_CAP_MS: '1500' });
+  await launch(dir, { FRAMECAPT_E2E_FFMPEG_DELAY_MS: '60000', FRAMECAPT_E2E_QUIT_CAP_MS: '1500' });
   await startScreen();
   const toolbar = await toolbarPage();
   await toolbar.waitForTimeout(1500);
@@ -364,7 +366,7 @@ test.describe('disk pressure', () => {
     const dir = tempDir();
     const freeFile = path.join(dir, 'free-bytes.txt');
     fs.writeFileSync(freeFile, String(GB - 1));
-    await launch(dir, { FRAMELET_E2E_FREE_BYTES_FILE: freeFile });
+    await launch(dir, { FRAMECAPT_E2E_FREE_BYTES_FILE: freeFile });
     await startScreen();
     await expect(
       page.getByText(
@@ -387,7 +389,7 @@ test.describe('disk pressure', () => {
     const dir = tempDir();
     const freeFile = path.join(dir, 'free-bytes.txt');
     fs.writeFileSync(freeFile, String(50 * GB));
-    await launch(dir, { FRAMELET_E2E_FREE_BYTES_FILE: freeFile });
+    await launch(dir, { FRAMECAPT_E2E_FREE_BYTES_FILE: freeFile });
     await startScreen();
     const toolbar = await toolbarPage();
     await toolbar.waitForTimeout(2000);

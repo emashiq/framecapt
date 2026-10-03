@@ -65,7 +65,7 @@ export function AppShell({
         <div className={cn('mb-6 flex items-center gap-2.5', !editor && 'px-2')}>
           <Logo size={30} />
           {!editor && (
-            <span className="text-[17px] font-semibold tracking-tight text-fg">Framelet</span>
+            <span className="text-[17px] font-semibold tracking-tight text-fg">FrameCapt</span>
           )}
         </div>
         <nav aria-label="Primary" className={cn('flex flex-col gap-1', editor && 'items-center')}>

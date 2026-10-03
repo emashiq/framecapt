@@ -6,7 +6,7 @@ import type {
   IpcResponse,
 } from './ipc-contract';
 
-/** Roles a Framelet window can have. One renderer bundle serves every role (see main.tsx). */
+/** Roles a FrameCapt window can have. One renderer bundle serves every role (see main.tsx). */
 export const ROLES = ['main', 'overlay', 'toolbar', 'recorder', 'countdown'] as const;
 export type Role = (typeof ROLES)[number];
 
@@ -51,8 +51,8 @@ export type InvokeArgs<C extends IpcChannel> = [IpcRequest<C>] extends [undefine
   ? [payload?: undefined]
   : [payload: IpcRequest<C>];
 
-/** The only surface exposed to the renderer as `window.framelet`. */
-export interface FrameletApi {
+/** The only surface exposed to the renderer as `window.framecapt`. */
+export interface FrameCaptApi {
   invoke<C extends IpcChannel>(
     channel: C,
     ...args: InvokeArgs<C>

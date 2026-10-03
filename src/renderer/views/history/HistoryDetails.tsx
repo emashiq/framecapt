@@ -137,8 +137,8 @@ export function HistoryDetails({
                   <FileX2 className="size-6 text-fg-subtle" aria-hidden="true" />
                   <p className="text-sm font-medium text-fg">File moved or deleted</p>
                   <p className="max-w-xs text-[13px] text-fg-muted">
-                    Framelet can no longer find this file. Nothing else was changed. If you moved
-                    it, point Framelet to its new place.
+                    FrameCapt can no longer find this file. Nothing else was changed. If you moved
+                    it, point FrameCapt to its new place.
                   </p>
                 </div>
               </div>

@@ -85,7 +85,7 @@ export class OverlaySet {
       y: bounds.y,
       width: bounds.width,
       height: bounds.height,
-      title: 'Framelet selection',
+      title: 'FrameCapt selection',
       frame: false,
       show: false,
       resizable: false,

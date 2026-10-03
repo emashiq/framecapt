@@ -28,14 +28,14 @@ let dir: string;
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-a11y-'));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-a11y-'));
   // A little history so the History view is scanned with real cards.
   const files = path.join(dir, 'files');
   fs.mkdirSync(files, { recursive: true });
   const now = Date.now();
-  const shot = path.join(files, 'Framelet 2026-10-02 at 10.00.00.png');
+  const shot = path.join(files, 'FrameCapt 2026-10-02 at 10.00.00.png');
   fs.writeFileSync(shot, mockScreenshotPng(640, 360, 1));
-  const clip = path.join(files, 'Framelet 2026-10-02 at 10.05.00.webm');
+  const clip = path.join(files, 'FrameCapt 2026-10-02 at 10.05.00.webm');
   makeWebm(clip, 2, { audio: false });
   seedHistory(dir, [
     {
@@ -70,10 +70,10 @@ test.beforeAll(async () => {
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: dir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
-      FRAMELET_E2E_MOCK_DISPLAYS: '1',
-      FRAMELET_E2E_FAKE_SHORTCUTS: '1',
+      FRAMECAPT_USER_DATA_DIR: dir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
+      FRAMECAPT_E2E_FAKE_SHORTCUTS: '1',
     },
   });
   page = await app.firstWindow();
@@ -88,7 +88,7 @@ test.afterAll(async () => {
 
 async function setTheme(theme: (typeof THEMES)[number]): Promise<void> {
   const result = await page.evaluate(
-    (value) => window.framelet.invoke('settings:update', { patch: { general: { theme: value } } }),
+    (value) => window.framecapt.invoke('settings:update', { patch: { general: { theme: value } } }),
     theme,
   );
   expect(result.ok).toBe(true);

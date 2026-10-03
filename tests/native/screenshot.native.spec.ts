@@ -62,18 +62,18 @@ test.beforeAll(async () => {
     fs.existsSync(path.join(projectRoot, '.vite', 'build', 'main.cjs')),
     'Run `electron-forge package` first (npm run test:native does this).',
   ).toBe(true);
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-shots-'));
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-out-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-shots-'));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-out-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
   app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
-    env: { ...process.env, FRAMELET_USER_DATA_DIR: userDataDir },
+    env: { ...process.env, FRAMECAPT_USER_DATA_DIR: userDataDir },
   });
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('shot-region')).toBeVisible();
-  const listed = await page.evaluate(() => window.framelet.invoke('capture:listDisplays'));
+  const listed = await page.evaluate(() => window.framecapt.invoke('capture:listDisplays'));
   if (!listed.ok) throw new Error('capture:listDisplays failed');
   displays = listed.data;
   expect(displays.length).toBeGreaterThan(0);
@@ -644,9 +644,9 @@ test('region selection can be dragged past the screen edge and is clamped to the
 });
 
 test('(c) Window screenshot of a real external window; minimized and vanished windows', async () => {
-  const title = `framelet-native-fixture-${Date.now()}`;
+  const title = `framecapt-native-fixture-${Date.now()}`;
   const primary = displays.find((d) => d.isPrimary) ?? (displays[0] as Display);
-  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-fixture-'));
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-fixture-'));
   const fixture: ChildProcess = spawn(
     electronPath,
     [
@@ -765,7 +765,8 @@ test('(c) Window screenshot of a real external window; minimized and vanished wi
       setTimeout(resolve, 5000);
     });
     const gone = await page.evaluate(
-      (id) => window.framelet.invoke('capture:startScreenshot', { target: 'window', sourceId: id }),
+      (id) =>
+        window.framecapt.invoke('capture:startScreenshot', { target: 'window', sourceId: id }),
       sourceId,
     );
     expect(gone).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } });
@@ -824,7 +825,7 @@ test('(e) Cancel leaves no overlay, no session and no dangling window', async ()
 
 test('main log has no capture content and no window titles; evidence is redacted', async () => {
   const log = fs.readFileSync(path.join(userDataDir, 'logs', 'main.log'), 'utf8');
-  expect(log).not.toContain('framelet-native-fixture');
+  expect(log).not.toContain('framecapt-native-fixture');
   expect(log).not.toMatch(/data:image|base64/i);
   evidence.logLines = log
     .split('\n')
@@ -907,6 +908,6 @@ test('main log has no capture content and no window titles; evidence is redacted
 
   const written = fs.readFileSync(path.join(evidenceDir, 'screenshots-native.json'), 'utf8');
   expect(written).not.toContain(os.homedir());
-  expect(written).not.toContain('framelet-native-fixture');
+  expect(written).not.toContain('framecapt-native-fixture');
   expect(redactPaths(written)).toBe(written);
 });

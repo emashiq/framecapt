@@ -108,7 +108,7 @@ export function Mp4Export({ historyId, className }: Mp4ExportProps) {
               onClick={() => {
                 const id = state.itemId;
                 if (!id) return;
-                void window.framelet.invoke('history:reveal', { id }).then((response) => {
+                void window.framecapt.invoke('history:reveal', { id }).then((response) => {
                   if (!response.ok) notify.error(response.error);
                 });
               }}

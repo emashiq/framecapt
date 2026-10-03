@@ -33,10 +33,10 @@ export function useRecorderState(): RecorderSnapshot {
   const [snapshot, setSnapshot] = useState<RecorderSnapshot>(IDLE_SNAPSHOT);
   useEffect(() => {
     let active = true;
-    const off = window.framelet.on('recorder:state', (next) => {
+    const off = window.framecapt.on('recorder:state', (next) => {
       if (active) setSnapshot(next);
     });
-    void window.framelet.invoke('recorder:getState').then((result) => {
+    void window.framecapt.invoke('recorder:getState').then((result) => {
       if (active && result.ok)
         setSnapshot((current) => (current === IDLE_SNAPSHOT ? result.data : current));
     });

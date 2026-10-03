@@ -1,6 +1,6 @@
 /* global window, document */
-// Smoke test of the PACKAGED app (out/Framelet-win32-x64/Framelet.exe, fuses on): it starts, the
-// renderer loads from the asar through the app://framelet scheme (not file://), the CSP meta tag is there, the bridge exposes only invoke/on, and
+// Smoke test of the PACKAGED app (out/FrameCapt-win32-x64/FrameCapt.exe, fuses on): it starts, the
+// renderer loads from the asar through the app://framecapt scheme (not file://), the CSP meta tag is there, the bridge exposes only invoke/on, and
 // a payload with an extra key is refused. Usage: npm run smoke:packaged (after `npm run package`).
 // The app runs with a temporary --user-data-dir and a DevTools port that only listens on loopback.
 import { spawn, spawnSync } from 'node:child_process';
@@ -13,7 +13,7 @@ import { chromium } from '@playwright/test';
 import { FuseState, FuseV1Options, getCurrentFuseWire } from '@electron/fuses';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const exe = path.join(root, 'out', 'Framelet-win32-x64', 'Framelet.exe');
+const exe = path.join(root, 'out', 'FrameCapt-win32-x64', 'FrameCapt.exe');
 if (!fs.existsSync(exe)) throw new Error(`${exe} not found. Run \`npm run package\` first.`);
 
 const wire = await getCurrentFuseWire(exe);
@@ -25,7 +25,7 @@ const port = await new Promise((resolve) => {
     server.close(() => resolve(free));
   });
 });
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-smoke-'));
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-smoke-'));
 const child = spawn(exe, [`--remote-debugging-port=${port}`, `--user-data-dir=${userData}`], {
   stdio: 'ignore',
   shell: false,
@@ -52,37 +52,37 @@ try {
     page = browser
       .contexts()
       .flatMap((c) => c.pages())
-      .find((p) => p.url().startsWith('app://framelet/index.html'));
+      .find((p) => p.url().startsWith('app://framecapt/index.html'));
     if (!page) await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  check('the renderer loads from the packaged app via app://framelet', page !== undefined);
+  check('the renderer loads from the packaged app via app://framecapt', page !== undefined);
   if (page) {
     await page.waitForSelector('text=Capture', { timeout: 15_000 }).catch(() => undefined);
     const facts = await page.evaluate(() => ({
       title: document.title,
       rendered: document.body.innerText.length > 20,
       csp: document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.content ?? '',
-      api: Object.keys(window.framelet ?? {}).sort(),
+      api: Object.keys(window.framecapt ?? {}).sort(),
       node: typeof window.require !== 'undefined' || typeof window.process !== 'undefined',
     }));
-    check('the UI rendered', facts.rendered && facts.title === 'Framelet', facts.title);
+    check('the UI rendered', facts.rendered && facts.title === 'FrameCapt', facts.title);
     check("CSP meta tag with default-src 'none'", facts.csp.startsWith("default-src 'none'"));
     check(
       'the bridge exposes exactly invoke and on',
       JSON.stringify(facts.api) === '["invoke","on"]',
     );
     check('no Node globals in the page', facts.node === false);
-    const info = await page.evaluate(() => window.framelet.invoke('app:getInfo'));
+    const info = await page.evaluate(() => window.framecapt.invoke('app:getInfo'));
     check('app:getInfo answers, packaged', info.ok && info.data.isPackaged === true);
     check(
       'updates are unconfigured in this build',
       info.ok && info.data.updates.state === 'unconfigured',
     );
     const extra = await page.evaluate(() =>
-      window.framelet.invoke('history:list', { path: 'C:/x' }),
+      window.framecapt.invoke('history:list', { path: 'C:/x' }),
     );
     check('an extra key is refused', !extra.ok && extra.error.code === 'INVALID_PAYLOAD');
-    const unknown = await page.evaluate(() => window.framelet.invoke('shell:openExternal', {}));
+    const unknown = await page.evaluate(() => window.framecapt.invoke('shell:openExternal', {}));
     check('an unknown channel is refused', !unknown.ok && unknown.error.code === 'UNKNOWN_CHANNEL');
     const remote = await page.evaluate(() =>
       fetch('https://example.com/', { mode: 'no-cors' }).then(

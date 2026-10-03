@@ -37,16 +37,16 @@ test.beforeAll(async () => {
     fs.existsSync(path.join(projectRoot, '.vite', 'build', 'main.cjs')),
     'Run `npm run package:e2e` first (npm run test:e2e does this).',
   ).toBe(true);
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-shots-'));
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-out-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-shots-'));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-out-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
   app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: userDataDir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_USER_DATA_DIR: userDataDir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
     },
   });
   page = await app.firstWindow();
@@ -56,7 +56,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (app) await exitApp(app);
-  if (process.env.FRAMELET_DEBUG_LOG)
+  if (process.env.FRAMECAPT_DEBUG_LOG)
     console.log(fs.readFileSync(path.join(userDataDir, 'logs', 'main.log'), 'utf8'));
   for (const dir of [userDataDir, outDir])
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
@@ -347,7 +347,7 @@ test('a second capture while overlays are open is rejected with BUSY', async () 
   await page.getByTestId('shot-region').click();
   const a = await overlayFor('1001', 'overlay-region');
   const second = await page.evaluate(() =>
-    window.framelet.invoke('capture:startScreenshot', { target: 'region' }),
+    window.framecapt.invoke('capture:startScreenshot', { target: 'region' }),
   );
   expect(second).toMatchObject({ ok: false, error: { code: 'BUSY' } });
   // The original flow is still alive and cancellable.
@@ -355,7 +355,7 @@ test('a second capture while overlays are open is rejected with BUSY', async () 
   await expectNoOverlays();
   // Idempotent cancel: nothing breaks and a new flow can start.
   const third = await page.evaluate(() =>
-    window.framelet.invoke('capture:startScreenshot', { target: 'region' }),
+    window.framecapt.invoke('capture:startScreenshot', { target: 'region' }),
   );
   expect(third).toMatchObject({ ok: true });
   const again = await overlayFor('1001', 'overlay-region');
@@ -511,13 +511,13 @@ test('saving JPEG writes a real JPEG with the right size', async () => {
 test('export and clipboard channels validate their input in main', async () => {
   const wrongMagic = await page.evaluate(async () => {
     const bytes = new Uint8Array([1, 2, 3, 4, 5]).buffer;
-    return window.framelet.invoke('shot:copy', { sessionId: 'x', bytes });
+    return window.framecapt.invoke('shot:copy', { sessionId: 'x', bytes });
   });
   expect(wrongMagic).toMatchObject({ ok: false });
 
-  // shell:showItemInFolder only accepts paths Framelet exported itself.
+  // shell:showItemInFolder only accepts paths FrameCapt exported itself.
   const showForeign = await page.evaluate(() =>
-    window.framelet.invoke('shell:showItemInFolder', {
+    window.framecapt.invoke('shell:showItemInFolder', {
       path: 'C:\\Windows\\System32\\notepad.exe',
     }),
   );
@@ -525,11 +525,11 @@ test('export and clipboard channels validate their input in main', async () => {
 
   // Overlay and worker channels are closed to the main window.
   const overlayFromMain = await page.evaluate(() =>
-    (window.framelet.invoke as (c: string) => Promise<unknown>)('overlay:getInit'),
+    (window.framecapt.invoke as (c: string) => Promise<unknown>)('overlay:getInit'),
   );
   expect(overlayFromMain).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
   const workerFromMain = await page.evaluate(() =>
-    (window.framelet.invoke as (c: string) => Promise<unknown>)('worker:ready'),
+    (window.framecapt.invoke as (c: string) => Promise<unknown>)('worker:ready'),
   );
   expect(workerFromMain).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
 });
@@ -599,15 +599,15 @@ test('UI evidence: overlay, picker and result in both themes', async () => {
 
 test.describe('single display', () => {
   test('Screenshot > Screen skips the overlays and captures immediately', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-single-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-single-'));
     const single = await electron.launch({
       args: ['.'],
       cwd: projectRoot,
       env: {
         ...process.env,
-        FRAMELET_USER_DATA_DIR: dir,
-        FRAMELET_E2E_MOCK_CAPTURE: '1',
-        FRAMELET_E2E_MOCK_DISPLAYS: '1',
+        FRAMECAPT_USER_DATA_DIR: dir,
+        FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+        FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
       },
     });
     try {

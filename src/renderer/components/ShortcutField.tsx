@@ -27,7 +27,7 @@ export interface ShortcutFieldProps {
 
 /** Global shortcuts must not fire while a combination is being recorded (they would eat it). */
 function setShortcutsPaused(paused: boolean): void {
-  void window.framelet.invoke('shortcuts:setPaused', { paused });
+  void window.framecapt.invoke('shortcuts:setPaused', { paused });
 }
 
 /**
@@ -92,7 +92,7 @@ export function ShortcutField({ action, accelerator, state, onChange, label }: S
       setProblem(result.reason);
       return;
     }
-    const verdict = await window.framelet.invoke('shortcuts:validate', {
+    const verdict = await window.framecapt.invoke('shortcuts:validate', {
       action,
       accelerator: result.accelerator,
     });

@@ -117,13 +117,13 @@ describe('resolveAppAsset: unknown files, hosts and schemes', () => {
   it('refuses other hosts, ports, credentials and schemes', () => {
     for (const url of [
       'app://other/index.html',
-      'app://framelet.evil.example/index.html',
-      'app://framelet:81/index.html',
-      'app://user@framelet/index.html',
+      'app://framecapt.evil.example/index.html',
+      'app://framecapt:81/index.html',
+      'app://user@framecapt/index.html',
       'app:///index.html',
       'file:///C:/app/index.html',
-      'https://framelet/index.html',
-      'framelet-media://framelet/index.html',
+      'https://framecapt/index.html',
+      'framecapt-media://framecapt/index.html',
     ]) {
       expect(resolve(url).ok, url).toBe(false);
     }

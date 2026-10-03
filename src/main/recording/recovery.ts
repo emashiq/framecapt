@@ -25,7 +25,7 @@ export interface RecoveryDeps {
   rootDir: string;
   fs: SessionFs;
   tools: MediaTools;
-  /** Where finished recordings go (`Videos/Framelet`). */
+  /** Where finished recordings go (`Videos/FrameCapt`). */
   outputDir: () => string;
   /** Sessions main is writing right now: never touched. */
   isActive: (sessionId: string) => boolean;
@@ -388,7 +388,7 @@ export class RecoveryService {
     return { outcome: 'unrecoverable', keptAt: path.join(dir, STREAM_FILE) };
   }
 
-  /** User asked to recover: remux what the stream holds into `Framelet ... (recovered).webm`. */
+  /** User asked to recover: remux what the stream holds into `FrameCapt ... (recovered).webm`. */
   async recover(sessionId: string): Promise<RecoverOutcome> {
     if (this.deps.isActive(sessionId))
       throw new IpcError('BUSY', 'That recording is still running.');

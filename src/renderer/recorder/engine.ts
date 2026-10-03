@@ -20,7 +20,7 @@ export interface EngineDeps {
   /** Reports to main (`recorder:engineEvent`). */
   send: (event: EngineEvent) => void;
   /** `session:appendChunk` and `session:finish` go through this. */
-  invoke: typeof window.framelet.invoke;
+  invoke: typeof window.framecapt.invoke;
 }
 
 interface Prepared {
@@ -229,7 +229,7 @@ export class RecorderEngine {
   }
 
   private async acquireDisplay(command: EnginePrepareCommand): Promise<MediaStream> {
-    if (__FRAMELET_E2E__ && command.synthetic) {
+    if (__FRAMECAPT_E2E__ && command.synthetic) {
       const { createSyntheticDisplayStream } = await import('../capture/synthetic-stream');
       if (command.options.systemAudio) {
         // The mock has no loopback audio: exercises the "system audio isn't available" choice.

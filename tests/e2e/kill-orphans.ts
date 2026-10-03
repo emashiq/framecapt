@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
  * repository are touched, so a developer's own `npm start` is left alone.
  */
 const FIND = `
-$root = $env:FRAMELET_REPO_ROOT
+$root = $env:FRAMECAPT_REPO_ROOT
 Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'" |
   Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($root, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
     $_.CommandLine.IndexOf('playwright-core', [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
@@ -21,7 +21,7 @@ export function killOrphanElectron(root: string): number[] {
   if (process.platform !== 'win32') return [];
   const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', FIND], {
     encoding: 'utf8',
-    env: { ...process.env, FRAMELET_REPO_ROOT: root },
+    env: { ...process.env, FRAMECAPT_REPO_ROOT: root },
     windowsHide: true,
   });
   const pids = out

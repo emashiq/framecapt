@@ -43,7 +43,7 @@ const two = (value: number): string => String(value).padStart(2, '0');
 
 function captureName(at: number, extension: string): string {
   const d = new Date(at);
-  return `Framelet ${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} at ${two(d.getHours())}.${two(d.getMinutes())}.${two(d.getSeconds())}.${extension}`;
+  return `FrameCapt ${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} at ${two(d.getHours())}.${two(d.getMinutes())}.${two(d.getSeconds())}.${extension}`;
 }
 
 async function launch(dir: string): Promise<void> {
@@ -52,9 +52,9 @@ async function launch(dir: string): Promise<void> {
     cwd: projectRoot,
     env: {
       ...process.env,
-      FRAMELET_USER_DATA_DIR: dir,
-      FRAMELET_E2E_MOCK_CAPTURE: '1',
-      FRAMELET_E2E_MOCK_DISPLAYS: '1',
+      FRAMECAPT_USER_DATA_DIR: dir,
+      FRAMECAPT_E2E_MOCK_CAPTURE: '1',
+      FRAMECAPT_E2E_MOCK_DISPLAYS: '1',
     },
   });
   page = await app.firstWindow();
@@ -345,7 +345,7 @@ test('UI evidence: the home view with Recent captures, light and dark', async ()
 
 test('UI evidence: the empty History, light and dark', async () => {
   await exitApp(app);
-  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-e2e-hist-empty-'));
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-hist-empty-'));
   try {
     await launch(empty);
     await goTo('History');

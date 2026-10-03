@@ -18,7 +18,7 @@ async function grabSource(
   source: GrabFramesEvent['sources'][number],
   synthetic: boolean,
 ): Promise<GrabbedFrame> {
-  if (__FRAMELET_E2E__ && synthetic && source.syntheticSize) {
+  if (__FRAMECAPT_E2E__ && synthetic && source.syntheticSize) {
     const { drawSyntheticFrame } = await import('../capture/synthetic-frame');
     const { width, height } = source.syntheticSize;
     return {
@@ -53,11 +53,11 @@ async function handleGrab(request: GrabFramesEvent): Promise<void> {
     for (const source of request.sources) {
       frames.push(await grabSource(source, request.synthetic === true));
     }
-    await window.framelet.invoke('worker:frameResult', { requestId: request.requestId, frames });
+    await window.framecapt.invoke('worker:frameResult', { requestId: request.requestId, frames });
   } catch (error) {
     const code = error instanceof CaptureError ? error.code : 'unknown';
     const message = error instanceof Error ? error.message : String(error);
-    await window.framelet.invoke('worker:frameError', {
+    await window.framecapt.invoke('worker:frameError', {
       requestId: request.requestId,
       code,
       message: message.slice(0, 500),
@@ -73,22 +73,22 @@ async function handleGrab(request: GrabFramesEvent): Promise<void> {
 export function RecorderWorker() {
   useEffect(() => {
     let queue: Promise<void> = Promise.resolve();
-    const offFrames = window.framelet.on('worker:grabFrames', (request) => {
+    const offFrames = window.framecapt.on('worker:grabFrames', (request) => {
       queue = queue.then(() => handleGrab(request)).catch(() => undefined);
     });
     const engine = new RecorderEngine({
-      send: (event) => void window.framelet.invoke('recorder:engineEvent', event),
-      invoke: window.framelet.invoke,
+      send: (event) => void window.framecapt.invoke('recorder:engineEvent', event),
+      invoke: window.framecapt.invoke,
     });
-    const offCommands = window.framelet.on('recorder:engineCommand', (command) => {
+    const offCommands = window.framecapt.on('recorder:engineCommand', (command) => {
       void engine.handle(command);
     });
     // Read-only debug counters (live tracks, audio contexts, timers, recorders) for the tests.
-    Object.defineProperty(window, '__frameletResources', {
+    Object.defineProperty(window, '__frameCaptResources', {
       value: getResourceSnapshot,
       configurable: true,
     });
-    void window.framelet.invoke('worker:ready');
+    void window.framecapt.invoke('worker:ready');
     return () => {
       offFrames();
       offCommands();

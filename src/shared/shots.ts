@@ -57,11 +57,11 @@ export function validateImageBytes(
 
 const two = (value: number): string => String(value).padStart(2, '0');
 
-/** "Framelet 2026-10-02 at 14.05.09.png" in local time (colons are not allowed in file names). */
+/** "FrameCapt 2026-10-02 at 14.05.09.png" in local time (colons are not allowed in file names). */
 export function defaultShotFileName(date: Date, format: ImageFormat): string {
   const day = `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`;
   const time = `${two(date.getHours())}.${two(date.getMinutes())}.${two(date.getSeconds())}`;
-  return `Framelet ${day} at ${time}.${format === 'png' ? 'png' : 'jpg'}`;
+  return `FrameCapt ${day} at ${time}.${format === 'png' ? 'png' : 'jpg'}`;
 }
 
 /**

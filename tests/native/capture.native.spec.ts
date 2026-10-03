@@ -257,11 +257,11 @@ test.beforeAll(async () => {
     fs.existsSync(path.join(projectRoot, '.vite', 'build', 'main.cjs')),
     'Run `electron-forge package` first (npm run test:native does this).',
   ).toBe(true);
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-'));
   app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
-    env: { ...process.env, FRAMELET_USER_DATA_DIR: userDataDir },
+    env: { ...process.env, FRAMECAPT_USER_DATA_DIR: userDataDir },
   });
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');

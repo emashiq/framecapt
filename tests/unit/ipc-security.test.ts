@@ -18,7 +18,7 @@ import { MAX_EXPORT_BYTES } from '../../src/shared/shots';
 import { ROLES } from '../../src/shared/types';
 
 const origin: AppOriginConfig = {};
-const goodUrl = 'app://framelet/index.html';
+const goodUrl = 'app://framecapt/index.html';
 const defOf = (channel: IpcChannel): ChannelDef => ipcContract[channel];
 const mainSources = path.resolve(__dirname, '..', '..', 'src', 'main');
 
@@ -444,10 +444,10 @@ describe('preload: the only bridge', () => {
     return { exposed, listeners, invoked };
   }
 
-  it('exposes one object, `framelet`, with exactly invoke and on', async () => {
+  it('exposes one object, `framecapt`, with exactly invoke and on', async () => {
     const { exposed } = await loadPreload();
     expect(exposed).toHaveLength(1);
-    expect(exposed[0]?.name).toBe('framelet');
+    expect(exposed[0]?.name).toBe('framecapt');
     expect(Object.keys(exposed[0]?.api ?? {}).sort()).toEqual(['invoke', 'on']);
   });
 

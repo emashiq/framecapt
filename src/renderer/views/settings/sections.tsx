@@ -48,7 +48,7 @@ export function GeneralSection({ onReset }: SectionProps) {
     <SectionCard
       id="general"
       title="General"
-      description="How Framelet looks and behaves on your desktop."
+      description="How FrameCapt looks and behaves on your desktop."
       onReset={onReset}
     >
       <SettingRow label="Theme" description="Follow Windows, or always use light or dark.">
@@ -64,7 +64,7 @@ export function GeneralSection({ onReset }: SectionProps) {
       </SettingRow>
       <SettingRow
         label="Launch at login"
-        description="Start Framelet in the tray when you sign in to Windows."
+        description="Start FrameCapt in the tray when you sign in to Windows."
       >
         {({ labelledBy, describedBy }) => (
           <Switch
@@ -81,7 +81,7 @@ export function GeneralSection({ onReset }: SectionProps) {
         description={
           trayMissing
             ? 'Closing the window quits, because Windows could not show the tray icon.'
-            : 'Closing the window keeps Framelet running in the tray, so shortcuts keep working.'
+            : 'Closing the window keeps FrameCapt running in the tray, so shortcuts keep working.'
         }
       >
         {({ labelledBy, describedBy }) => (
@@ -96,7 +96,7 @@ export function GeneralSection({ onReset }: SectionProps) {
       </SettingRow>
       <SettingRow
         label="Notifications"
-        description="Tell me when Framelet keeps running in the tray or a shortcut is unavailable."
+        description="Tell me when FrameCapt keeps running in the tray or a shortcut is unavailable."
       >
         {({ labelledBy, describedBy }) => (
           <Switch
@@ -387,7 +387,7 @@ export function ShortcutsSection({ onReset }: SectionProps) {
     <SectionCard
       id="shortcuts"
       title="Shortcuts"
-      description="Work from any app while Framelet runs. Include Ctrl or Alt; F-keys and PrintScreen work alone."
+      description="Work from any app while FrameCapt runs. Include Ctrl or Alt; F-keys and PrintScreen work alone."
       onReset={onReset}
     >
       {SHORTCUT_GROUPS.map((group) => (
@@ -487,7 +487,7 @@ function FolderRow({
               data-testid={`folder-open-${target}`}
               aria-label={`Open the ${label.toLowerCase()}`}
               onClick={() =>
-                void window.framelet
+                void window.framecapt
                   .invoke('settings:openOutputDir', { target })
                   .then((response) => {
                     if (!response.ok) notify.error(response.error);
@@ -520,7 +520,7 @@ export function StorageSection({ onReset }: SectionProps) {
     <SectionCard
       id="storage"
       title="Storage"
-      description="Where Framelet saves what you capture. Nothing leaves this computer."
+      description="Where FrameCapt saves what you capture. Nothing leaves this computer."
       onReset={onReset}
     >
       <FolderRow
@@ -538,8 +538,9 @@ export function StorageSection({ onReset }: SectionProps) {
         isDefault={settings.recording.outputDir === null}
       />
       <div className="px-6 py-4 text-[13px] text-fg-muted">
-        Unfinished recordings and screenshot originals wait in Framelet&apos;s app data folder until
-        you save, discard or recover them. Changing a folder never moves files you already saved.
+        Unfinished recordings and screenshot originals wait in FrameCapt&apos;s app data folder
+        until you save, discard or recover them. Changing a folder never moves files you already
+        saved.
       </div>
     </SectionCard>
   );
@@ -580,7 +581,7 @@ export function updatesLabel(updates: AppInfo['updates']): string {
 
 function infoRows(info: AppInfo): { id: string; label: string; value: string }[] {
   return [
-    { id: 'version', label: 'Framelet', value: info.version },
+    { id: 'version', label: 'FrameCapt', value: info.version },
     { id: 'electron', label: 'Electron', value: info.electron },
     { id: 'chrome', label: 'Chromium', value: info.chrome },
     { id: 'node', label: 'Node.js', value: info.node },
@@ -666,7 +667,7 @@ export function AboutSection() {
         ) : null}
 
         <p className="mt-5 text-xs text-fg-muted">
-          Framelet works fully offline and sends no telemetry. Licensed under GPL-3.0-only.
+          FrameCapt works fully offline and sends no telemetry. Licensed under GPL-3.0-only.
         </p>
       </Card>
     </section>

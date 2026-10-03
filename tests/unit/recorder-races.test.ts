@@ -118,8 +118,8 @@ let appended: Uint8Array[];
 let appendTimer: NodeJS.Timeout | undefined;
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-race-sessions-'));
-  out = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-race-out-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-race-sessions-'));
+  out = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-race-out-'));
   state.commands.length = 0;
   state.sent.length = 0;
   appended = [];
@@ -277,7 +277,7 @@ describe('stop from several places at once', () => {
     expect(saved).toEqual(['history-1']);
     // One finished file, no partial, no session directory left.
     expect(outputs()).toHaveLength(1);
-    expect(outputs()[0]).toMatch(/^Framelet .*\.webm$/);
+    expect(outputs()[0]).toMatch(/^FrameCapt .*\.webm$/);
     expect(fs.existsSync(path.join(root, sessionId))).toBe(false);
     // ... and every chunk the recorder produced, in order, is in it (the fake remux is a copy).
     const written = fs.readFileSync(path.join(out, outputs()[0] ?? ''));

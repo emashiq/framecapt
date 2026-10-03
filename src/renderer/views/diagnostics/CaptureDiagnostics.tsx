@@ -89,7 +89,7 @@ export function CaptureDiagnostics() {
   }
 
   async function reveal(): Promise<void> {
-    const result = await window.framelet.invoke('diagnostics:revealFolder');
+    const result = await window.framecapt.invoke('diagnostics:revealFolder');
     if (!result.ok) notify.error(result.error);
   }
 
@@ -108,7 +108,7 @@ export function CaptureDiagnostics() {
               Capture diagnostics
             </h2>
             <p className="text-sm text-fg-muted">
-              Feasibility checks for capture on this machine. Output stays in a Framelet folder.
+              Feasibility checks for capture on this machine. Output stays in a FrameCapt folder.
             </p>
           </div>
           <Button

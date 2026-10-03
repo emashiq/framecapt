@@ -46,7 +46,7 @@ export class ElectronCaptureProvider implements CaptureProvider {
       fetchWindowIcons: wantsWindows,
     });
 
-    // Never offer Framelet's own windows (toolbar, overlay, main) as capture sources.
+    // Never offer FrameCapt's own windows (toolbar, overlay, main) as capture sources.
     const own = BrowserWindow.getAllWindows().map((win) => win.getMediaSourceId());
     const displays = screen.getAllDisplays();
 

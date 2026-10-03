@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
         <div>
           <h1 className="text-xl font-semibold text-fg">Something went wrong</h1>
           <p className="mt-1 max-w-md text-sm text-fg-muted">
-            Framelet hit an unexpected problem. Your saved captures are safe. Reloading the window
+            FrameCapt hit an unexpected problem. Your saved captures are safe. Reloading the window
             usually fixes it.
           </p>
         </div>

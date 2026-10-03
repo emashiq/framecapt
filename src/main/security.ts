@@ -101,7 +101,7 @@ export function installPermissionHandlers(ses: Session, getConfig: () => AppOrig
 
 /**
  * No network: every http(s), ws(s) or ftp request is cancelled (the dev server of a development
- * build excepted). Framelet loads only its own files and `framelet-media:`; the CSP already says so,
+ * build excepted). FrameCapt loads only its own files and `framecapt-media:`; the CSP already says so,
  * this makes it true even if a policy were ever loosened by mistake.
  */
 export function installNetworkBlocker(ses: Session, getConfig: () => AppOriginConfig): void {

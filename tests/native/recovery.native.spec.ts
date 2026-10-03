@@ -41,7 +41,7 @@ function record(name: string, value: unknown): void {
   writeEvidenceJson(evidenceDir, 'recovery-native.json', evidence);
 }
 
-const videosDir = (): string => path.join(userDataDir, 'videos', 'Framelet');
+const videosDir = (): string => path.join(userDataDir, 'videos', 'FrameCapt');
 const recordingsDir = (): string => path.join(userDataDir, 'recordings');
 
 interface Probe {
@@ -112,7 +112,7 @@ async function launchApp(): Promise<void> {
   app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
-    env: { ...process.env, FRAMELET_USER_DATA_DIR: userDataDir },
+    env: { ...process.env, FRAMECAPT_USER_DATA_DIR: userDataDir },
   });
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -120,7 +120,7 @@ async function launchApp(): Promise<void> {
 }
 
 async function snapshot() {
-  const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+  const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
   if (!result.ok) throw new Error('recorder:getState failed');
   return result.data;
 }
@@ -130,7 +130,7 @@ async function waitForStatus(status: string, timeout = 30_000): Promise<void> {
 }
 
 async function primaryDisplayId(): Promise<string> {
-  const listed = await page.evaluate(() => window.framelet.invoke('capture:listDisplays'));
+  const listed = await page.evaluate(() => window.framecapt.invoke('capture:listDisplays'));
   if (!listed.ok) throw new Error('capture:listDisplays failed');
   const display = listed.data.find((d) => d.isPrimary) ?? listed.data[0];
   if (!display) throw new Error('no display');
@@ -168,7 +168,7 @@ async function startRecording(): Promise<void> {
   const displayId = await primaryDisplayId();
   const started = await page.evaluate(
     (id) =>
-      window.framelet.invoke('recorder:start', {
+      window.framecapt.invoke('recorder:start', {
         target: 'screen',
         displayId: id,
         options: {
@@ -193,7 +193,7 @@ test.beforeAll(() => {
     'Run `npm run package` first (npm run test:native does this).',
   ).toBe(true);
   expect(fs.existsSync(FFMPEG), 'Run `npm run fetch:ffmpeg` first.').toBe(true);
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-recovery-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-recovery-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
 });
 
@@ -209,7 +209,7 @@ test('a normal 6 s recording is finalized: duration in the container, seek index
   await startRecording();
   const startedAt = (await snapshot()).startedAt ?? Date.now();
   await page.waitForTimeout(6000 - (Date.now() - startedAt));
-  await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
   await waitForStatus('completed');
   const done = await snapshot();
   const result = done.result;
@@ -247,7 +247,7 @@ test('a normal 6 s recording is finalized: duration in the container, seek index
     sessionDirectoryRemoved: true,
     meanVolumeDb: meanVolume(result.path),
   });
-  await page.evaluate(() => window.framelet.invoke('recorder:reset'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:reset'));
   await waitForStatus('idle');
   await exitApp(app as ElectronApplication);
   app = undefined;

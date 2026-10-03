@@ -66,7 +66,7 @@ export const RecordingIdRequestSchema = z.strictObject({ resultId: z.string().mi
 const AudioFlagsSchema = z.strictObject({ mic: z.boolean(), system: z.boolean() });
 
 export const RecordingResultSchema = z.object({
-  /** Main-owned id: the media URL is `framelet-media://<id>`. */
+  /** Main-owned id: the media URL is `framecapt-media://<id>`. */
   id: z.string(),
   /** The history entry of the file (`export:mp4` takes it); null when it could not be added. */
   historyId: HistoryIdSchema.nullable(),

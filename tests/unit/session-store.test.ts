@@ -10,7 +10,7 @@ let tmp: string;
 let root: string;
 
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-shots-'));
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-shots-'));
   root = path.join(tmp, 'shots');
 });
 

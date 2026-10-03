@@ -29,7 +29,7 @@ import {
 } from './windows';
 
 /** Build-time constant of vite.main.config.ts: the literal `false` in every normal build. */
-declare const __FRAMELET_E2E__: boolean;
+declare const __FRAMECAPT_E2E__: boolean;
 
 export interface Desktop {
   tray: TrayController;
@@ -59,13 +59,13 @@ function trayImage(variant: 'normal' | 'recording') {
 }
 
 /**
- * E2E builds only (FRAMELET_E2E_FAKE_SHORTCUTS=1): a stand-in for `globalShortcut` so the suite
- * never grabs real system-wide keys. `FRAMELET_E2E_TAKEN_SHORTCUTS` ("A,B") lists accelerators that
+ * E2E builds only (FRAMECAPT_E2E_FAKE_SHORTCUTS=1): a stand-in for `globalShortcut` so the suite
+ * never grabs real system-wide keys. `FRAMECAPT_E2E_TAKEN_SHORTCUTS` ("A,B") lists accelerators that
  * "another app" holds: registering them fails like it does on Windows.
  */
 function fakeGlobalShortcut(): GlobalShortcutApi & { held: Set<string> } {
   const taken = new Set(
-    (process.env.FRAMELET_E2E_TAKEN_SHORTCUTS ?? '').split(',').filter((value) => value !== ''),
+    (process.env.FRAMECAPT_E2E_TAKEN_SHORTCUTS ?? '').split(',').filter((value) => value !== ''),
   );
   const held = new Set<string>();
   return {
@@ -120,14 +120,14 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     },
     toast: (event) => {
       if (getMainWindow()?.isVisible()) toMain('app:toast', event);
-      else if (event.level === 'error') notify('Framelet', event.message);
+      else if (event.level === 'error') notify('FrameCapt', event.message);
     },
     log,
   });
 
   // --- global shortcuts ---------------------------------------------------------------------
 
-  const fake = __FRAMELET_E2E__ && process.env.FRAMELET_E2E_FAKE_SHORTCUTS === '1';
+  const fake = __FRAMECAPT_E2E__ && process.env.FRAMECAPT_E2E_FAKE_SHORTCUTS === '1';
   const fakeApi = fake ? fakeGlobalShortcut() : undefined;
   const shortcuts = new ShortcutManager({
     api: fakeApi ?? {
@@ -225,7 +225,7 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
       if (store.get().notices.trayHintShown) return;
       if (!store.get().general.showNotifications) return;
       notify(
-        'Framelet is still running in the tray',
+        'FrameCapt is still running in the tray',
         'Click the tray icon to open it again, or choose Quit to exit.',
       );
       store.markTrayHintShown();
@@ -251,8 +251,8 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
 
   // --- test hooks (E2E builds only) ---------------------------------------------------------
 
-  if (__FRAMELET_E2E__) {
-    (globalThis as Record<string, unknown>).__frameletTest = {
+  if (__FRAMECAPT_E2E__) {
+    (globalThis as Record<string, unknown>).__frameCaptTest = {
       trayInstances: () => tray.instances,
       trayActive: () => tray.active,
       heldShortcuts: () => fakeApi?.held ?? new Set<string>(),

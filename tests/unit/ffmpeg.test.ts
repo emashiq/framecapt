@@ -116,7 +116,7 @@ describe('argument building', () => {
   });
 
   it('a path with spaces or shell characters stays ONE argument (no shell is involved)', () => {
-    const nasty = 'C:\\Users\\a b\\Framelet "x" & calc.webm';
+    const nasty = 'C:\\Users\\a b\\FrameCapt "x" & calc.webm';
     expect(remuxArgs(nasty, nasty + '.out').filter((arg) => arg.includes('calc'))).toHaveLength(2);
     expect(probeArgs(nasty).at(-1)).toBe(nasty);
   });

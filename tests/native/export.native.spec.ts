@@ -86,7 +86,7 @@ function meanVolume(file: string): number | null {
 }
 
 async function snapshot() {
-  const result = await page.evaluate(() => window.framelet.invoke('recorder:getState'));
+  const result = await page.evaluate(() => window.framecapt.invoke('recorder:getState'));
   if (!result.ok) throw new Error('recorder:getState failed');
   return result.data;
 }
@@ -106,8 +106,8 @@ test.beforeAll(() => {
     'Run `npm run package` first (npm run test:native does this).',
   ).toBe(true);
   expect(fs.existsSync(FFMPEG), 'Run `npm run fetch:ffmpeg` first.').toBe(true);
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-export-'));
-  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-native-export-out-'));
+  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-export-'));
+  outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-native-export-out-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
 });
 
@@ -122,7 +122,7 @@ test('a real recording exported to MP4 from the UI: H.264 + AAC, same length, fa
   app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
-    env: { ...process.env, FRAMELET_USER_DATA_DIR: userDataDir },
+    env: { ...process.env, FRAMECAPT_USER_DATA_DIR: userDataDir },
   });
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -140,13 +140,13 @@ test('a real recording exported to MP4 from the UI: H.264 + AAC, same length, fa
     void ctx.resume();
     (window as unknown as { __tone: unknown }).__tone = { ctx, osc };
   });
-  const listed = await page.evaluate(() => window.framelet.invoke('capture:listDisplays'));
+  const listed = await page.evaluate(() => window.framecapt.invoke('capture:listDisplays'));
   if (!listed.ok) throw new Error('capture:listDisplays failed');
   const display = listed.data.find((d) => d.isPrimary) ?? listed.data[0];
   if (!display) throw new Error('no display');
   const started = await page.evaluate(
     (id) =>
-      window.framelet.invoke('recorder:start', {
+      window.framecapt.invoke('recorder:start', {
         target: 'screen',
         displayId: id,
         options: {
@@ -163,7 +163,7 @@ test('a real recording exported to MP4 from the UI: H.264 + AAC, same length, fa
   await expect.poll(async () => (await snapshot()).status, { timeout: 30_000 }).toBe('recording');
   const startedAt = (await snapshot()).startedAt ?? Date.now();
   await page.waitForTimeout(Math.max(0, 6000 - (Date.now() - startedAt)));
-  await page.evaluate(() => window.framelet.invoke('recorder:stop'));
+  await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
   await expect(page.getByTestId('recording-result')).toBeVisible({ timeout: 60_000 });
   await page.evaluate(async () => {
     const tone = (window as unknown as { __tone?: { ctx: AudioContext; osc: OscillatorNode } })

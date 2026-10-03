@@ -4,9 +4,9 @@ import path from 'node:path';
 import { app } from 'electron';
 
 /** Squirrel package id: the MakerSquirrel `name` in forge.config.ts (PROVISIONAL). */
-const SQUIRREL_PACKAGE = 'Framelet';
+const SQUIRREL_PACKAGE = 'FrameCapt';
 /** PROVISIONAL app id of unpackaged runs and the portable zip (also in forge.config.ts). */
-const DEFAULT_APP_USER_MODEL_ID = 'com.framelet.app';
+const DEFAULT_APP_USER_MODEL_ID = 'com.framecapt.app';
 
 /** `<install root>\Update.exe`: present only in a Squirrel install, never in the portable zip or dev. */
 function updateExePath(execPath: string): string {
@@ -34,9 +34,9 @@ export function appUserModelId(
  * Returns true when the process should quit without starting the UI. No update checks happen.
  *
  * Uninstall removes the install folder, the shortcuts and the launch-at-login entry. It never
- * touches user data: %APPDATA%\Framelet (settings, history, sessions, logs) stays, and so do the
- * capture folders (Pictures\Framelet, Videos\Framelet) or any other output folder. Squirrel
- * itself only ever deletes %LOCALAPPDATA%\Framelet.
+ * touches user data: %APPDATA%\FrameCapt (settings, history, sessions, logs) stays, and so do the
+ * capture folders (Pictures\FrameCapt, Videos\FrameCapt) or any other output folder. Squirrel
+ * itself only ever deletes %LOCALAPPDATA%\FrameCapt.
  */
 export function handleSquirrelEvent(): boolean {
   if (process.platform !== 'win32') return false;

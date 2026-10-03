@@ -33,14 +33,14 @@ export interface ItemActions {
  */
 export function createItemActions(reload: () => void): ItemActions {
   return {
-    open: (item) => void run(window.framelet.invoke('history:open', { id: item.id })),
-    reveal: (item) => void run(window.framelet.invoke('history:reveal', { id: item.id })),
+    open: (item) => void run(window.framecapt.invoke('history:open', { id: item.id })),
+    reveal: (item) => void run(window.framecapt.invoke('history:reveal', { id: item.id })),
     copy: (item) =>
       void (item.type === 'screenshot'
-        ? run(window.framelet.invoke('history:copyImage', { id: item.id }), 'Image copied')
-        : run(window.framelet.invoke('history:copyPath', { id: item.id }), 'Path copied')),
+        ? run(window.framecapt.invoke('history:copyImage', { id: item.id }), 'Image copied')
+        : run(window.framecapt.invoke('history:copyPath', { id: item.id }), 'Path copied')),
     remove: (item) =>
-      void window.framelet.invoke('history:remove', { id: item.id }).then((response) => {
+      void window.framecapt.invoke('history:remove', { id: item.id }).then((response) => {
         if (!response.ok) {
           notify.error(response.error);
           return;
@@ -51,21 +51,21 @@ export function createItemActions(reload: () => void): ItemActions {
           action: {
             label: 'Undo',
             onClick: () =>
-              void window.framelet
+              void window.framecapt
                 .invoke('history:undoRemove', { id: item.id })
                 .then((undone) => (undone.ok ? reload() : notify.error(undone.error))),
           },
         });
       }),
     locate: (item) =>
-      void window.framelet.invoke('history:relink', { id: item.id }).then((response) => {
+      void window.framecapt.invoke('history:relink', { id: item.id }).then((response) => {
         if (!response.ok) notify.error(response.error);
         else if ('relinked' in response.data) notify.success('File linked again');
         reload();
       }),
     exportMp4: (item) => void startMp4Export(item.id),
     saveCopy: (item) =>
-      void window.framelet.invoke('history:saveCopy', { id: item.id }).then((response) => {
+      void window.framecapt.invoke('history:saveCopy', { id: item.id }).then((response) => {
         if (!response.ok) notify.error(response.error);
         else if ('path' in response.data) notify.success('Copy saved');
       }),
@@ -75,7 +75,7 @@ export function createItemActions(reload: () => void): ItemActions {
 /** The destructive action: the file goes to the Recycle Bin and the entry is removed. */
 export async function deleteItemFile(item: HistoryItemView, reload: () => void): Promise<void> {
   const ok = await run(
-    window.framelet.invoke('history:deleteFile', { id: item.id }),
+    window.framecapt.invoke('history:deleteFile', { id: item.id }),
     'Moved to the Recycle Bin',
   );
   if (ok) reload();

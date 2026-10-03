@@ -11,7 +11,7 @@ import { log } from './logger';
 import { getOriginConfig, getRole } from './windows';
 
 /** Build-time constant of vite.main.config.ts: the literal `false` in every normal build. */
-declare const __FRAMELET_E2E__: boolean;
+declare const __FRAMECAPT_E2E__: boolean;
 
 /** E2E builds only: how often each channel was invoked (the idle test needs "zero"). */
 const callCounts = new Map<string, number>();
@@ -49,7 +49,7 @@ export function handle<C extends IpcChannel>(
   }
 
   ipcMain.handle(channel, async (event: IpcMainInvokeEvent, rawPayload: unknown) => {
-    if (__FRAMELET_E2E__) callCounts.set(channel, (callCounts.get(channel) ?? 0) + 1);
+    if (__FRAMECAPT_E2E__) callCounts.set(channel, (callCounts.get(channel) ?? 0) + 1);
     const role = getRole(event.sender.id);
     const frame = event.senderFrame;
     const denied = checkSender(

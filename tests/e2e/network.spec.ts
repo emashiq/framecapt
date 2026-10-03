@@ -1,5 +1,5 @@
 /**
- * No unsolicited network traffic. The E2E build (production renderer from app://framelet, mock
+ * No unsolicited network traffic. The E2E build (production renderer from app://framecapt, mock
  * capture provider) runs for 60 seconds while the UI is exercised, and three independent views must
  * agree that nothing leaves the machine:
  *   1. the session: no request with an http(s)/ws(s)/ftp scheme ever reaches the network stack
@@ -8,7 +8,7 @@
  *      line in main.log: nothing even tried);
  *   3. the OS: every TCP connection owned by the app's process tree is loopback-only (sampled with
  *      Get-NetTCPConnection every 5 s).
- * The evidence is docs/evidence/phase10/network-e2e.json when FRAMELET_WRITE_EVIDENCE=1.
+ * The evidence is docs/evidence/phase10/network-e2e.json when FRAMECAPT_WRITE_EVIDENCE=1.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -54,11 +54,11 @@ const isLoopbackOrUnbound = (address: string): boolean =>
 
 test('60 seconds of use make no request to the network', async () => {
   test.setTimeout(WATCH_MS + 90_000);
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'framelet-net-'));
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-net-'));
   const app = await electron.launch({
     args: ['.'],
     cwd: projectRoot,
-    env: { ...process.env, FRAMELET_USER_DATA_DIR: userData },
+    env: { ...process.env, FRAMECAPT_USER_DATA_DIR: userData },
   });
   try {
     const page = await app.firstWindow();
@@ -120,9 +120,15 @@ test('60 seconds of use make no request to the network', async () => {
     );
     const external = seen.filter(
       (entry) =>
-        !['app', 'framelet-media', 'blob', 'data', 'devtools', 'chrome-extension', 'file'].includes(
-          entry.scheme,
-        ),
+        ![
+          'app',
+          'framecapt-media',
+          'blob',
+          'data',
+          'devtools',
+          'chrome-extension',
+          'file',
+        ].includes(entry.scheme),
     );
     const log = fs.readFileSync(path.join(userData, 'logs', 'main.log'), 'utf8');
     const blocked = log.split('\n').filter((line) => line.includes('Blocked network request'));
@@ -141,7 +147,7 @@ test('60 seconds of use make no request to the network', async () => {
 
     writeEvidenceJson(evidenceDir, 'network-e2e.json', {
       date: new Date().toISOString(),
-      build: 'e2e (production renderer from app://framelet, mock capture)',
+      build: 'e2e (production renderer from app://framecapt, mock capture)',
       watchedSeconds: Math.round((Date.now() - started) / 1000),
       requestsSeenBySession: seen.length,
       requestsBySchemeCounts: Object.fromEntries(

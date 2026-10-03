@@ -1,8 +1,8 @@
-# Framelet
+# FrameCapt
 
-> **Framelet is a provisional product name.** It has not been checked for trademark conflicts (see [docs/OWNER-TASKS.md](docs/OWNER-TASKS.md)).
+> **FrameCapt is a provisional product name.** It has not been checked for trademark conflicts (see [docs/OWNER-TASKS.md](docs/OWNER-TASKS.md)).
 
-Framelet is an offline screenshot and screen-recording app for Windows, made for developers, QA engineers, freelancers and support teams. Press a shortcut, pick a screen, window or region, capture or record, mark it up if you want, then copy or save. There is no account, no cloud, no telemetry and no upload: everything stays on your computer. It is free software under the GNU GPL version 3.
+FrameCapt is an offline screenshot and screen-recording app for Windows, made for developers, QA engineers, freelancers and support teams. Press a shortcut, pick a screen, window or region, capture or record, mark it up if you want, then copy or save. There is no account, no cloud, no telemetry and no upload: everything stays on your computer. It is free software under the GNU GPL version 3.
 
 **Status: beta (version 0.1.0, unreleased).** Everything below was built and exercised on one Windows 11 machine; see [Project status](#project-status) for what that does and does not cover.
 
@@ -42,8 +42,8 @@ These images are taken from the automated test build with synthetic content (no 
 
 There is no public release yet. Two ways to get a build:
 
-1. **From source** (see [Build from source](#build-from-source)); `npm run make` produces `Framelet-Setup-0.1.0.exe` and a portable zip under `out/make/`.
-2. **The installer.** `Framelet-Setup-0.1.0.exe` is a per-user Squirrel installer (no administrator rights; installs to `%LOCALAPPDATA%\Framelet`). **The installer is UNSIGNED: no code-signing certificate exists yet, so Windows SmartScreen will warn when you run it** and you will have to choose "More info" and "Run anyway". Verify the SHA-256 shown on the release page before running it. Uninstalling keeps your settings, history and captures.
+1. **From source** (see [Build from source](#build-from-source)); `npm run make` produces `FrameCapt-Setup-0.1.0.exe` and a portable zip under `out/make/`.
+2. **The installer.** `FrameCapt-Setup-0.1.0.exe` is a per-user Squirrel installer (no administrator rights; installs to `%LOCALAPPDATA%\FrameCapt`). **The installer is UNSIGNED: no code-signing certificate exists yet, so Windows SmartScreen will warn when you run it** and you will have to choose "More info" and "Run anyway". Verify the SHA-256 shown on the release page before running it. Uninstalling keeps your settings, history and captures.
 
 ## Quick start
 
@@ -58,11 +58,11 @@ There is no public release yet. Two ways to get a build:
 | Stop recording                | `Ctrl+Shift+0`   |
 | Pause or resume the recording | `Ctrl+Shift+9`   |
 
-Shortcuts work from any app while Framelet runs (also in the tray) and can be changed in Settings. You can also click the same actions on the home screen. Screenshots open in the editor; recordings land in `Videos\Framelet`, screenshots you save go to `Pictures\Framelet` by default. See the [user guide](docs/user-guide.md) and [keyboard shortcuts](docs/keyboard-shortcuts.md).
+Shortcuts work from any app while FrameCapt runs (also in the tray) and can be changed in Settings. You can also click the same actions on the home screen. Screenshots open in the editor; recordings land in `Videos\FrameCapt`, screenshots you save go to `Pictures\FrameCapt` by default. See the [user guide](docs/user-guide.md) and [keyboard shortcuts](docs/keyboard-shortcuts.md).
 
 ## Privacy
 
-Framelet makes no network requests of its own: no telemetry, no analytics, no uploads, no update checks (updates are not configured). This was measured, not just intended: the automated test and the installed app made no non-loopback connections during 60-second runs that included a recording and an export ([docs/packaging.md](docs/packaging.md#network-behavior)). Details of what is stored on your PC: [PRIVACY.md](PRIVACY.md).
+FrameCapt makes no network requests of its own: no telemetry, no analytics, no uploads, no update checks (updates are not configured). This was measured, not just intended: the automated test and the installed app made no non-loopback connections during 60-second runs that included a recording and an export ([docs/packaging.md](docs/packaging.md#network-behavior)). Details of what is stored on your PC: [PRIVACY.md](PRIVACY.md).
 
 ## Build from source
 
@@ -95,7 +95,7 @@ Phases 01 to 10 of the build plan are done and verified on one machine (Windows 
 
 ## License
 
-Framelet is licensed under the **GNU General Public License v3.0 only** ([LICENSE](LICENSE)). It bundles FFmpeg (GPL-3.0-or-later build), Electron/Chromium and a number of MIT/ISC/OFL components: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/licensing.md](docs/licensing.md). Whoever distributes a binary build must also provide the corresponding source, including that of FFmpeg.
+FrameCapt is licensed under the **GNU General Public License v3.0 only** ([LICENSE](LICENSE)). It bundles FFmpeg (GPL-3.0-or-later build), Electron/Chromium and a number of MIT/ISC/OFL components: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/licensing.md](docs/licensing.md). Whoever distributes a binary build must also provide the corresponding source, including that of FFmpeg.
 
 ## Documentation
 

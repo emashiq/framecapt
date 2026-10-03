@@ -8,11 +8,11 @@ import type { CaptureProvider } from './types';
 
 /**
  * Capture authorization. Display capture is not a permission prompt: Chromium asks the
- * display-media request handler which source to hand out. Framelet answers only from a main-owned,
+ * display-media request handler which source to hand out. FrameCapt answers only from a main-owned,
  * one-shot grant (created through `capture:grant` after main validated the source id), bound to
  * the requesting webContents and valid for a few seconds. Everything else is denied.
  *
- * `{ useSystemPicker: false }`: the system picker is macOS-only (and experimental); Framelet
+ * `{ useSystemPicker: false }`: the system picker is macOS-only (and experimental); FrameCapt
  * always uses its own source picker.
  */
 export function installCaptureAuthorization(

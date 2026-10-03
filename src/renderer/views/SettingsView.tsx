@@ -133,7 +133,7 @@ export function SettingsView({ section, onSectionChange }: SettingsViewProps) {
         title={`Reset ${resetEntry?.resetName?.toLowerCase() ?? ''} settings?`}
         description={
           resetting === 'storage'
-            ? 'Both folders go back to Pictures\\Framelet and Videos\\Framelet. Files you already saved stay where they are.'
+            ? 'Both folders go back to Pictures\\FrameCapt and Videos\\FrameCapt. Files you already saved stay where they are.'
             : 'These settings go back to their defaults. Your captures and folders are not touched.'
         }
         cancelLabel="Keep my settings"

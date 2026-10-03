@@ -22,7 +22,7 @@ export interface AcquireDisplayOptions {
  * On any failure nothing stays open.
  */
 export async function acquireDisplayStream(options: AcquireDisplayOptions): Promise<MediaStream> {
-  const grant = await window.framelet.invoke('capture:grant', {
+  const grant = await window.framecapt.invoke('capture:grant', {
     sourceId: options.sourceId,
     systemAudio: options.systemAudio,
   });

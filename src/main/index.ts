@@ -37,7 +37,7 @@ function start(): void {
   registerPrivilegedSchemes();
 
   // Tests point userData at a temp dir. Never honored by packaged builds.
-  const overrideDir = process.env.FRAMELET_USER_DATA_DIR;
+  const overrideDir = process.env.FRAMECAPT_USER_DATA_DIR;
   if (!app.isPackaged && overrideDir) {
     app.setPath('userData', path.resolve(overrideDir));
     // Keep the default save location inside the test directory as well.
@@ -84,7 +84,7 @@ function start(): void {
 
   void app.whenReady().then(async () => {
     const logger = initLogger(path.join(app.getPath('userData'), 'logs'));
-    logger.info(`Framelet ${app.getVersion()} starting (electron ${process.versions.electron})`);
+    logger.info(`FrameCapt ${app.getVersion()} starting (electron ${process.versions.electron})`);
 
     process.on('uncaughtException', (error) => log.error('uncaughtException', error));
     process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason));
@@ -101,14 +101,14 @@ function start(): void {
     });
     if (app.isPackaged) Menu.setApplicationMenu(null);
 
-    // The production renderer is served from app://framelet (dev uses the Vite server).
+    // The production renderer is served from app://framecapt (dev uses the Vite server).
     registerAppProtocol(getRendererDir());
     installCsp(session.defaultSession, getOriginConfig());
     installPermissionHandlers(session.defaultSession, getOriginConfig);
     installNetworkBlocker(session.defaultSession, getOriginConfig);
     // Unconfigured (empty feed URL) builds never touch autoUpdater: no update code, no network.
     const updates = new UpdateService({
-      feedUrl: __FRAMELET_UPDATE_URL__,
+      feedUrl: __FRAMECAPT_UPDATE_URL__,
       getAutoUpdater: () => autoUpdater,
       isSquirrelInstall: () => isSquirrelInstall(process.execPath),
     });

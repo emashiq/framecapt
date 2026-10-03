@@ -18,7 +18,7 @@ export const GeneralSettingsSchema = z.object({
 export const ScreenshotSettingsSchema = z.object({
   format: z.enum(['png', 'jpeg']),
   jpegQuality: z.number().min(0.5).max(1),
-  /** Null = Pictures/Framelet. Set only through `settings:chooseOutputDir`. */
+  /** Null = Pictures/FrameCapt. Set only through `settings:chooseOutputDir`. */
   outputDir: OutputDirSchema,
   afterCapture: z.enum(['editor', 'copy-and-editor', 'save-and-editor']),
   copyToClipboardOnSave: z.boolean(),
@@ -32,7 +32,7 @@ export const RecordingSettingsSchema = z.object({
   /** Undefined = the default microphone. */
   micDeviceId: z.string().min(1).max(256).optional(),
   systemAudio: z.boolean(),
-  /** Null = Videos/Framelet. Set only through `settings:chooseOutputDir`. */
+  /** Null = Videos/FrameCapt. Set only through `settings:chooseOutputDir`. */
   outputDir: OutputDirSchema,
   autoExportMp4: z.boolean(),
 });
@@ -261,7 +261,7 @@ export function patchFromRecordOptions(options: RecordOptions): SettingsPatch {
 }
 
 /** Where output goes when nothing was chosen, relative to the user's Pictures/Videos folder. */
-export const DEFAULT_OUTPUT_SUBFOLDER = 'Framelet';
+export const DEFAULT_OUTPUT_SUBFOLDER = 'FrameCapt';
 
 /** What the UI shows next to the settings: the folders actually in use. */
 export const EffectiveSettingsSchema = z.object({

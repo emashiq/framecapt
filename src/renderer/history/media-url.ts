@@ -1,12 +1,12 @@
 /**
- * The main-owned thumbnail and file routes of the `framelet-media:` protocol (history ids only).
+ * The main-owned thumbnail and file routes of the `framecapt-media:` protocol (history ids only).
  * `nonce` (lowercase letters and digits) gives a load its own URL; see the protocol's route comment.
  */
 const suffix = (nonce?: string): string => (nonce ? `/${nonce}` : '');
 export const thumbUrl = (id: string, nonce?: string): string =>
-  `framelet-media://thumb/${id}${suffix(nonce)}`;
+  `framecapt-media://thumb/${id}${suffix(nonce)}`;
 export const fileUrl = (id: string, nonce?: string): string =>
-  `framelet-media://file/${id}${suffix(nonce)}`;
+  `framecapt-media://file/${id}${suffix(nonce)}`;
 
 /** A fresh nonce (8 characters of a-z0-9). */
 export function newNonce(): string {

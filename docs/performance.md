@@ -7,16 +7,16 @@ measured baseline** (section 6), so a PASS means "no regression from this baseli
 
 ## 1. Environment
 
-|                |                                                                                                                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OS             | Windows 11 Pro 10.0.26300                                                                                                                                                                      |
-| CPU / RAM      | AMD Ryzen 7 7700 (8 cores, 16 logical), 63.1 GiB                                                                                                                                               |
-| Displays       | 3440x1440 @1x (primary, recorded) and 2560x1440 @1x                                                                                                                                            |
-| App            | Framelet 0.1.0, Electron 44.5.1 (Chromium 152.0.7977.130), launched as `electron .` on `.vite/build` with a temporary userData (Playwright's Electron driver attached, as in the native tests) |
-| FFmpeg         | bundled 9.0.2 essentials (finalization); the same binaries analysed the output                                                                                                                 |
-| Recording      | primary display, **1080p preset** (3440x1440 is fitted to 1920x804), **30 fps**, system audio (WASAPI loopback) on, microphone off, VP9 + Opus WebM                                            |
-| Screen content | a test beacon (see 2) plus, in the headline run, a 640x360 animated panel (scrolling text, bouncing shapes, gradient) so the encoder has real motion; the rest is the live desktop             |
-| Duration       | **30 minutes** (headline), plus 3-minute runs for tooling and before/after comparisons                                                                                                         |
+|                |                                                                                                                                                                                                 |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OS             | Windows 11 Pro 10.0.26300                                                                                                                                                                       |
+| CPU / RAM      | AMD Ryzen 7 7700 (8 cores, 16 logical), 63.1 GiB                                                                                                                                                |
+| Displays       | 3440x1440 @1x (primary, recorded) and 2560x1440 @1x                                                                                                                                             |
+| App            | FrameCapt 0.1.0, Electron 44.5.1 (Chromium 152.0.7977.130), launched as `electron .` on `.vite/build` with a temporary userData (Playwright's Electron driver attached, as in the native tests) |
+| FFmpeg         | bundled 9.0.2 essentials (finalization); the same binaries analysed the output                                                                                                                  |
+| Recording      | primary display, **1080p preset** (3440x1440 is fitted to 1920x804), **30 fps**, system audio (WASAPI loopback) on, microphone off, VP9 + Opus WebM                                             |
+| Screen content | a test beacon (see 2) plus, in the headline run, a 640x360 animated panel (scrolling text, bouncing shapes, gradient) so the encoder has real motion; the rest is the live desktop              |
+| Duration       | **30 minutes** (headline), plus 3-minute runs for tooling and before/after comparisons                                                                                                          |
 
 ## 2. Method (`npm run bench:recording`, `scripts/bench-recording.mjs`)
 
@@ -173,7 +173,7 @@ long-run cost.
 | `npm run test:e2e`                        | 150 tests: 149 passed on the first run, 1 failed because an E2E assertion encoded the old "unknown keys are dropped" behaviour (`desktop.spec.ts`, now asserts `INVALID_PAYLOAD`); that test then passed alone |
 | `npm run test:native`                     | **46 passed (7.2 min)**: the 38 earlier native tests plus 8 new failure-mode tests                                                                                                                             |
 | `npm run check:mocks`                     | `check-no-mocks: OK (3 bundle files and 1 app.asar scanned, no mock or test-hook markers)`                                                                                                                     |
-| `npm run smoke:packaged`                  | 9 PASS on `out/Framelet-win32-x64/Framelet.exe` (renderer loads, CSP meta present, bridge = `invoke,on`, no Node globals, strict payload refused, unknown channel refused, network request blocked)            |
+| `npm run smoke:packaged`                  | 9 PASS on `out/FrameCapt-win32-x64/FrameCapt.exe` (renderer loads, CSP meta present, bridge = `invoke,on`, no Node globals, strict payload refused, unknown channel refused, network request blocked)          |
 | `DURATION_MIN=30 npm run bench:recording` | completed, 0 stray processes; evidence in `docs/evidence/phase09/`                                                                                                                                             |
 | `npm audit --omit=dev` / `npm audit`      | found 0 vulnerabilities / found 0 vulnerabilities                                                                                                                                                              |
 

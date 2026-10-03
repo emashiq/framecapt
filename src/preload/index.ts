@@ -1,13 +1,13 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { isIpcChannel, isIpcEvent } from '../shared/ipc-contract';
-import type { FrameletApi, IpcResult } from '../shared/types';
+import type { FrameCaptApi, IpcResult } from '../shared/types';
 
 /**
  * The only bridge between renderer and main. ipcRenderer itself is never exposed; the renderer can
  * only call channels and subscribe to events that exist in the shared contract. Payload validation
  * and role/origin checks happen in main.
  */
-const api: FrameletApi = {
+const api: FrameCaptApi = {
   invoke(channel, ...args) {
     if (!isIpcChannel(channel)) {
       const failure: IpcResult<never> = {
@@ -30,4 +30,4 @@ const api: FrameletApi = {
   },
 };
 
-contextBridge.exposeInMainWorld('framelet', api);
+contextBridge.exposeInMainWorld('framecapt', api);

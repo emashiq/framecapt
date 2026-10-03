@@ -40,13 +40,13 @@ const find = (items: MenuItemConstructorOptions[], id: string) =>
   items.find((item) => item.id === id);
 
 describe('trayTooltip', () => {
-  it('says Framelet when idle and the clock while recording', () => {
-    expect(trayTooltip({ status: 'idle', activeMs: 0 })).toBe('Framelet');
-    expect(trayTooltip({ status: 'completed', activeMs: 5000 })).toBe('Framelet');
+  it('says FrameCapt when idle and the clock while recording', () => {
+    expect(trayTooltip({ status: 'idle', activeMs: 0 })).toBe('FrameCapt');
+    expect(trayTooltip({ status: 'completed', activeMs: 5000 })).toBe('FrameCapt');
     expect(trayTooltip({ status: 'recording', activeMs: 83_000 })).toBe(
-      'Framelet — Recording 01:23',
+      'FrameCapt — Recording 01:23',
     );
-    expect(trayTooltip({ status: 'paused', activeMs: 83_999 })).toBe('Framelet — Paused 01:23');
+    expect(trayTooltip({ status: 'paused', activeMs: 83_999 })).toBe('FrameCapt — Paused 01:23');
     expect(trayTooltip({ status: 'stopping', activeMs: 1 })).toContain('Saving');
   });
 });
@@ -58,11 +58,11 @@ describe('buildTrayTemplate', () => {
       'Screenshot',
       'Record',
       '-',
-      'Open Framelet',
+      'Open FrameCapt',
       'History',
       'Settings',
       '-',
-      'Quit Framelet',
+      'Quit FrameCapt',
     ]);
     const shot = find(template, 'screenshot')?.submenu as MenuItemConstructorOptions[];
     expect(labels(shot)).toEqual(['Screen', 'Window', 'Region']);
@@ -199,19 +199,19 @@ describe('TrayController', () => {
     controller.ensure();
     controller.update({ ...idle, status: 'recording', activeMs: 1000 });
     expect(tray.image).toBe(recording);
-    expect(tray.tooltip).toBe('Framelet — Recording 00:01');
+    expect(tray.tooltip).toBe('FrameCapt — Recording 00:01');
     controller.update({ ...idle, status: 'paused', activeMs: 2000 });
     expect(tray.image).toBe(recording);
     controller.update(idle);
     expect(tray.image).toBe(normal);
-    expect(tray.tooltip).toBe('Framelet');
+    expect(tray.tooltip).toBe('FrameCapt');
   });
 
   it('the first state is applied when the icon is created later', () => {
     const { controller, tray } = setup();
     controller.update({ ...idle, status: 'recording', activeMs: 0 });
     controller.ensure();
-    expect(tray.tooltip).toBe('Framelet — Recording 00:00');
+    expect(tray.tooltip).toBe('FrameCapt — Recording 00:00');
   });
 
   it('survives a platform that cannot make a tray icon', () => {

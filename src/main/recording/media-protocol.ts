@@ -6,9 +6,9 @@ import { HISTORY_ID_PATTERN } from '../../shared/history-ipc';
 import { log } from '../logger';
 import { mediaContentType, parseRange } from './range';
 
-export const MEDIA_SCHEME = 'framelet-media';
+export const MEDIA_SCHEME = 'framecapt-media';
 
-/** Files Framelet itself produced, by an unguessable id. The protocol serves nothing else. */
+/** Files FrameCapt itself produced, by an unguessable id. The protocol serves nothing else. */
 export class MediaRegistry {
   private readonly files = new Map<string, string>();
 
@@ -24,7 +24,7 @@ export class MediaRegistry {
 }
 
 /**
- * Privileges of the `framelet-media` scheme, registered with the other schemes in one call
+ * Privileges of the `framecapt-media` scheme, registered with the other schemes in one call
  * (registerPrivilegedSchemes in app-protocol.ts, before `app.whenReady()`).
  */
 export const MEDIA_SCHEME_PRIVILEGES: Electron.CustomScheme = {
@@ -59,7 +59,7 @@ const HISTORY_ROUTE = new RegExp(
 );
 
 /**
- * The file a `framelet-media:` URL names, or undefined. Exactly three shapes exist and nothing
+ * The file a `framecapt-media:` URL names, or undefined. Exactly three shapes exist and nothing
  * else resolves: `//<registry id>` (a recording of this run), `//thumb/<history id>` (a history
  * thumbnail) and `//file/<history id>` (the file of a history item), each history route with an
  * optional cache-busting nonce segment. No query, no other segments, no paths.
@@ -82,7 +82,7 @@ export function resolveMediaUrl(
 }
 
 /**
- * `framelet-media://<id>` serves a finished recording with Range support, so <video> can seek
+ * `framecapt-media://<id>` serves a finished recording with Range support, so <video> can seek
  * (net.fetch(file://) was not relied on for ranges: they are answered here from the file).
  */
 export function installMediaProtocol(registry: MediaRegistry, history?: HistoryMedia): void {

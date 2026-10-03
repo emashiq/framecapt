@@ -68,13 +68,13 @@ export function RecoveryBanner({ busy }: { busy: boolean }) {
   // is set from the reply, not in the effect body).
   const [refresh, setRefresh] = useState(0);
   useEffect(
-    () => window.framelet.on('recovery:changed', () => setRefresh((count) => count + 1)),
+    () => window.framecapt.on('recovery:changed', () => setRefresh((count) => count + 1)),
     [],
   );
   useEffect(() => {
     if (busy) return;
     let active = true;
-    void window.framelet.invoke('recovery:list').then((result) => {
+    void window.framecapt.invoke('recovery:list').then((result) => {
       if (active && result.ok) setCandidates(result.data.candidates);
     });
     return () => {
@@ -92,7 +92,7 @@ export function RecoveryBanner({ busy }: { busy: boolean }) {
 
   async function recover(sessionId: string): Promise<void> {
     setOutcome(sessionId, { kind: 'working' });
-    const result = await window.framelet.invoke('recovery:recover', { sessionId });
+    const result = await window.framecapt.invoke('recovery:recover', { sessionId });
     if (!result.ok) {
       setOutcome(sessionId, null);
       notify.error(result.error);
@@ -105,7 +105,7 @@ export function RecoveryBanner({ busy }: { busy: boolean }) {
 
   async function discard(sessionId: string): Promise<void> {
     setConfirming(null);
-    const result = await window.framelet.invoke('recovery:discard', { sessionId });
+    const result = await window.framecapt.invoke('recovery:discard', { sessionId });
     if (!result.ok) {
       notify.error(result.error);
       return;
@@ -149,7 +149,7 @@ export function RecoveryBanner({ busy }: { busy: boolean }) {
               icon={<FolderOpen className="size-4" aria-hidden="true" />}
               data-testid="recovery-show"
               onClick={() =>
-                void window.framelet.invoke('recorder:showInFolder', { resultId: result.resultId })
+                void window.framecapt.invoke('recorder:showInFolder', { resultId: result.resultId })
               }
             >
               Show in folder
@@ -207,7 +207,7 @@ export function RecoveryBanner({ busy }: { busy: boolean }) {
                   size="sm"
                   data-testid="recovery-reveal"
                   onClick={() =>
-                    void window.framelet.invoke('recovery:reveal', {
+                    void window.framecapt.invoke('recovery:reveal', {
                       sessionId: candidate.sessionId,
                     })
                   }

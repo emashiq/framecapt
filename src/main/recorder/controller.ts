@@ -113,7 +113,7 @@ export interface RecorderDeps {
   synthetic: boolean;
   /** True while a screenshot flow runs (the two never overlap). */
   isScreenshotBusy: () => boolean;
-  /** Folder of the finished recordings (the setting, else `Videos/Framelet`). */
+  /** Folder of the finished recordings (the setting, else `Videos/FrameCapt`). */
   outputDir: () => string;
   /** Throws (OUTPUT_DIR_UNWRITABLE) when finished recordings could not be saved there. */
   ensureOutputDir?: () => Promise<void>;
@@ -330,7 +330,7 @@ export class RecorderController implements SelectionHost {
     } catch {
       throw new IpcError(
         'FFMPEG_MISSING',
-        'Framelet cannot finish recordings because its video tools are missing. Reinstall Framelet.',
+        'FrameCapt cannot finish recordings because its video tools are missing. Reinstall FrameCapt.',
       );
     }
     await this.deps.ensureOutputDir?.();

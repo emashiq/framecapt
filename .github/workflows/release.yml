@@ -63,7 +63,7 @@ jobs:
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           if ($env:CERT_BASE64 -and $env:CERT_PASSWORD) {
-            $pfx = Join-Path $env:RUNNER_TEMP 'framelet-signing.pfx'
+            $pfx = Join-Path $env:RUNNER_TEMP 'framecapt-signing.pfx'
             [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_BASE64))
             "WINDOWS_CERTIFICATE_FILE=$pfx" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
             'signed=true' | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
@@ -83,13 +83,13 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:RUNNER_TEMP 'framelet-signing.pfx')
+          Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:RUNNER_TEMP 'framecapt-signing.pfx')
       - name: Verify the signature matches the claim
         shell: pwsh
         env:
           SIGNED: ${{ steps.signing.outputs.signed }}
         run: |
-          $setup = Get-ChildItem out/make/squirrel.windows -Recurse -Filter 'Framelet-Setup-*.exe' | Select-Object -First 1
+          $setup = Get-ChildItem out/make/squirrel.windows -Recurse -Filter 'FrameCapt-Setup-*.exe' | Select-Object -First 1
           $sig = Get-AuthenticodeSignature $setup.FullName
           Write-Host "Authenticode status of $($setup.Name): $($sig.Status)"
           if ($env:SIGNED -eq 'true' -and $sig.Status -eq 'NotSigned') { throw 'Signing was enabled but the installer is not signed.' }
@@ -139,7 +139,7 @@ jobs:
             SIGNING="Signing: UNSIGNED. No signing certificate was configured, so Windows SmartScreen will warn when the installer is run."
           fi
           {
-            echo "Framelet v${VERSION} - DRAFT, not published."
+            echo "FrameCapt v${VERSION} - DRAFT, not published."
             echo
             echo "Built from commit ${SHA} by the Release (draft) workflow."
             echo "Verify the downloads against SHA256SUMS.txt."
@@ -149,5 +149,5 @@ jobs:
           gh release create "v${VERSION}" release-assets/* \
             --draft \
             --target "${SHA}" \
-            --title "Framelet v${VERSION} (draft)" \
+            --title "FrameCapt v${VERSION} (draft)" \
             --notes-file notes.md

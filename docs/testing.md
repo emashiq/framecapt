@@ -6,7 +6,7 @@
 | Unit + integration  | `npm test`                                 | the vendored FFmpeg for the integration files   | Pure logic, IPC security, the app:// resolver, the update adapter, real-FFmpeg finalize and export  |
 | E2E (mock capture)  | `npm run test:e2e`                         | Windows desktop; builds the E2E app first       | The real UI, IPC, recorder pipeline and session service with a synthetic capture provider           |
 | Native              | `npm run test:native`                      | an interactive desktop, real screens and audio  | Real capture, SendInput shortcuts, forced-kill recovery, failure modes                              |
-| Packaged smoke      | `npm run smoke:packaged` (after `package`) | Windows                                         | The fused, packaged exe loads its UI from app://framelet and keeps its security properties          |
+| Packaged smoke      | `npm run smoke:packaged` (after `package`) | Windows                                         | The fused, packaged exe loads its UI from app://framecapt and keeps its security properties         |
 | Installed smoke     | `npm run smoke:installed` (after `make`)   | an interactive desktop; **installs on this PC** | Silent Squirrel install, real capture through the shortcuts, FFmpeg export, 60 s offline, uninstall |
 | Recording benchmark | `npm run bench:recording`                  | an interactive desktop, 30 minutes              | `docs/performance.md`                                                                               |
 
@@ -17,14 +17,14 @@ Run order used for a release candidate: `lint`, `typecheck`, `test`, `test:e2e`,
 The e2e and native suites take UI screenshots and write redacted JSON summaries that earlier phases committed under `docs/evidence/phaseNN/`. A normal run must not touch those files, so evidence is **gated by an environment variable**:
 
 ```
-FRAMELET_WRITE_EVIDENCE=1 npm run test:e2e
-FRAMELET_WRITE_EVIDENCE=1 npm run test:native
+FRAMECAPT_WRITE_EVIDENCE=1 npm run test:e2e
+FRAMECAPT_WRITE_EVIDENCE=1 npm run test:native
 ```
 
-- Unset (the default): every test still produces its screenshots and JSON and asserts on them, but they go to a scratch folder, `%TEMP%\framelet-evidence-scratch\<phase>\`. Nothing under `docs/evidence` changes.
-- `FRAMELET_WRITE_EVIDENCE=1`: the files are written to `docs/evidence/<phase>/` (this is how the committed evidence was produced).
+- Unset (the default): every test still produces its screenshots and JSON and asserts on them, but they go to a scratch folder, `%TEMP%\framecapt-evidence-scratch\<phase>\`. Nothing under `docs/evidence` changes.
+- `FRAMECAPT_WRITE_EVIDENCE=1`: the files are written to `docs/evidence/<phase>/` (this is how the committed evidence was produced).
 - The mechanism is one helper, `evidenceDirFor(repoRoot, phase)` in `tests/native/evidence.ts`. Evidence JSON always goes through `writeEvidenceJson`, which redacts window titles and the Windows user name.
-- The integration tests that already used `FRAMELET_WRITE_EVIDENCE` (`ffmpeg-integration`, `export-integration`) are unchanged. `npm run smoke:installed` and `npm run bench:recording` are explicit evidence-producing commands and always write theirs.
+- The integration tests that already used `FRAMECAPT_WRITE_EVIDENCE` (`ffmpeg-integration`, `export-integration`) are unchanged. `npm run smoke:installed` and `npm run bench:recording` are explicit evidence-producing commands and always write theirs.
 - Media evidence (`*.webm`, `*.mp4`, most `*.png`) stays gitignored because it shows the real desktop; only mock-content UI screenshots are tracked.
 
 ## Why the packaged exe is not driven by Playwright

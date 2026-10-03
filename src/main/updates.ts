@@ -3,16 +3,16 @@ import path from 'node:path';
 import type { UpdateStatus } from '../shared/ipc-contract';
 
 /**
- * Update adapter (ADR-035). Framelet ships as a Squirrel.Windows install; the only supported
+ * Update adapter (ADR-035). FrameCapt ships as a Squirrel.Windows install; the only supported
  * updater is Electron's built-in `autoUpdater` pointed at a Squirrel feed. The feed URL is a
- * BUILD-TIME constant (`__FRAMELET_UPDATE_URL__`, from FRAMELET_UPDATE_URL when building). With no
+ * BUILD-TIME constant (`__FRAMECAPT_UPDATE_URL__`, from FRAMECAPT_UPDATE_URL when building). With no
  * URL the service is `unconfigured`: it never touches `autoUpdater` and makes no network request.
  *
  * Supported feeds once the owner has one (neither is configured by this repository):
  *  - a static directory (any HTTPS host or object store) holding `RELEASES` and the `.nupkg` files
- *    that `npm run make` produces: FRAMELET_UPDATE_URL=https://updates.example.com/framelet/win32/x64
+ *    that `npm run make` produces: FRAMECAPT_UPDATE_URL=https://updates.example.com/framecapt/win32/x64
  *  - update.electronjs.org for a PUBLIC GitHub repository with published releases:
- *    FRAMELET_UPDATE_URL=https://update.electronjs.org/<owner>/<repo>/win32/<version> (the service
+ *    FRAMECAPT_UPDATE_URL=https://update.electronjs.org/<owner>/<repo>/win32/<version> (the service
  *    takes the URL as written; the version segment must then match the build)
  * Updates are never checked automatically in this build: `checkNow()` is the only entry point and
  * no UI calls it yet, so even a configured build makes no request until the owner wires one.
@@ -33,7 +33,7 @@ export interface AutoUpdaterLike {
 }
 
 export interface UpdateServiceDeps {
-  /** `__FRAMELET_UPDATE_URL__`. Empty or whitespace: not configured. */
+  /** `__FRAMECAPT_UPDATE_URL__`. Empty or whitespace: not configured. */
   feedUrl: string;
   /** Loads Electron's autoUpdater. Only called when updates are configured and a check is requested. */
   getAutoUpdater: () => AutoUpdaterLike;
@@ -80,7 +80,7 @@ export class UpdateService {
     if (this.status.state !== 'idle' && this.status.state !== 'error') return;
     if (this.deps.feedUrl.trim() === '' || !isValidFeedUrl(this.deps.feedUrl.trim())) return;
     if (!this.deps.isSquirrelInstall()) {
-      this.set({ state: 'error', message: 'Updates need the installed version of Framelet.' });
+      this.set({ state: 'error', message: 'Updates need the installed version of FrameCapt.' });
       return;
     }
     try {

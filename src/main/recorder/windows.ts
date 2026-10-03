@@ -25,7 +25,7 @@ export function createToolbarWindow(
 ): ToolbarWindow {
   let quiet = false;
   const win = new BrowserWindow({
-    title: 'Framelet recording controls',
+    title: 'FrameCapt recording controls',
     x: position.x,
     y: position.y,
     width,
@@ -95,7 +95,7 @@ export function createCountdownWindow(bounds: {
   const x = Math.round(bounds.x + (bounds.width - COUNTDOWN_SIZE) / 2);
   const y = Math.round(bounds.y + (bounds.height - COUNTDOWN_SIZE) / 2);
   const win = new BrowserWindow({
-    title: 'Framelet countdown',
+    title: 'FrameCapt countdown',
     x,
     y,
     width: COUNTDOWN_SIZE,
