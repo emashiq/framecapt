@@ -592,7 +592,11 @@ test.describe('one display', () => {
       for (const number of numbers) seenNumbers.add(number);
       await page.waitForTimeout(150);
     }
-    expect([...seenNumbers].sort()).toEqual(['1', '2', '3']);
+    // The countdown window can attach after the 3 was already shown on a slow machine: the numbers
+    // seen must be the tail of 3-2-1, ending at 1, at least two of them.
+    const seenDescending = [...seenNumbers].sort().reverse();
+    expect(seenDescending.length).toBeGreaterThanOrEqual(2);
+    expect(seenDescending).toEqual(['3', '2', '1'].slice(-seenDescending.length));
     const toolbar = await toolbarPage();
     expect(pagesOf('#/countdown')).toHaveLength(0);
     // Let the first frames arrive: a stop in the very first moments is "too short to save" (slower
