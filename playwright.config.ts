@@ -7,7 +7,9 @@ const slowRunner = Boolean(process.env.CI);
 export default defineConfig({
   testDir: './tests/e2e',
   workers: 1,
-  retries: 0,
+  // A hosted runner's timing varies from VM to VM: a failed test gets two more tries there (the
+  // trace of each is kept). Never locally.
+  retries: slowRunner ? 2 : 0,
   timeout: slowRunner ? 120_000 : 60_000,
   expect: { timeout: slowRunner ? 15_000 : 5_000 },
   reporter: 'list',

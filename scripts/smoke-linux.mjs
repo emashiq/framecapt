@@ -94,8 +94,10 @@ async function startApp(label, file, extraArgs) {
         ],
       ]
     : [file, args];
+  // The app's own stdout/stderr go to a file next to its HOME: printed when the run aborts.
+  const out = fs.openSync(path.join(os.tmpdir(), `framecapt-smoke-${label}.out`), 'w');
   const child = spawn(cmd, cmdArgs, {
-    stdio: 'ignore',
+    stdio: ['ignore', out, out],
     shell: false,
     env: isRoot ? process.env : env,
     detached: true,
@@ -362,6 +364,17 @@ try {
   );
 } catch (error) {
   console.error(error);
+  for (const app of apps) {
+    console.error(`--- ${app.home}: main.log ---
+${mainLog(app.home)}`);
+    const out = path.join(
+      os.tmpdir(),
+      `framecapt-smoke-${path.basename(app.home).split('-')[2]}.out`,
+    );
+    if (fs.existsSync(out))
+      console.error(`--- app output ---
+${fs.readFileSync(out, 'utf8').slice(-4000)}`);
+  }
   failures.push(`aborted: ${error instanceof Error ? error.message : error}`);
 } finally {
   for (const app of apps) {
