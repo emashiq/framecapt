@@ -1,7 +1,7 @@
 {
   "name": "framecapt",
   "productName": "FrameCapt",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "FrameCapt - an offline, Windows-first screenshot and screen recording app.",
   "license": "GPL-3.0-only",
   "private": true,
