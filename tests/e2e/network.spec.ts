@@ -29,6 +29,7 @@ interface TcpRow {
   local: string;
   remote: string;
   remotePort: number;
+  owner?: string;
 }
 
 /** Linux: `ss -tnpH` lines, e.g. `ESTAB 0 0 127.0.0.1:41234 [::1]:9222 users:(("electron",pid=7,fd=3))`. */
@@ -47,6 +48,7 @@ function tcpConnectionsLinux(pids: number[]): TcpRow[] {
       local: fields[3] ?? '',
       remote: peer.slice(0, cut).replace(/^\[|\]$/g, ''),
       remotePort: Number(peer.slice(cut + 1)),
+      owner: /users:.*/.exec(line)?.[0],
     });
   }
   return rows;

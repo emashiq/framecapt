@@ -1,5 +1,8 @@
 import { registerLoop, registerStream } from './resource-registry';
 
+/** Low on purpose: a one-core CI runner spends a whole core on a 30 fps 1080p software pipeline. */
+const SYNTHETIC_FPS = 10;
+
 /**
  * A generated "display" for E2E builds ONLY (reached through a dynamic import guarded by
  * __FRAMECAPT_E2E__ and checked out of production bundles by scripts/check-no-mocks.mjs). It is a
@@ -12,7 +15,7 @@ export function createSyntheticDisplayStream(width: number, height: number): Med
   canvas.height = height;
   const context = canvas.getContext('2d', { alpha: false });
   if (!context) throw new Error('No 2D context for the synthetic display');
-  const stream = registerStream(canvas.captureStream(30));
+  const stream = registerStream(canvas.captureStream(SYNTHETIC_FPS));
   const track = stream.getVideoTracks()[0];
   const unregister = registerLoop('synthetic-display');
   const started = performance.now();
@@ -41,6 +44,6 @@ export function createSyntheticDisplayStream(width: number, height: number): Med
       return;
     }
     draw();
-  }, 33);
+  }, 1000 / SYNTHETIC_FPS);
   return stream;
 }
