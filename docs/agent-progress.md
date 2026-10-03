@@ -135,3 +135,8 @@ If a session ends: read this file, `git log --oneline`, `git status`; resume at 
 - `npm run make` → smoke:packaged OK → smoke:installed 47/47 PASS on the exact released Setup.exe (fixed the smoke script's startup-line regex for pre-release versions).
 - Published as a GitHub pre-release on github.com/emashiq/framecapt (private repo) with Setup.exe, portable zip, nupkg + RELEASES, SHA256SUMS.txt and the FFmpeg 9.0.2 source tarball + signature (GPG "Good signature", FFmpeg release key FCF9 86EA … D676 58D8). Notes: docs/release-notes-0.1.0-alpha.1.md.
 - Setup.exe sha256 2d09a9d8…99cc (UNSIGNED).
+
+### Alpha release v0.1.0-alpha.2 (2026-10-03) — Windows + experimental Linux
+- Linux port committed (55bbbe9). Built from a clean clone in WSL2 Ubuntu 26.04 as user `tester`: lint/typecheck OK, unit 766 pass/18 skipped (FFmpeg integration before fetch), make → .deb + AppImage, smoke:packaged OK, smoke:linux 25/25 PASS (apt install, real 3 s recording decodes, system audio disabled with reason, autostart, AppImage start, apt remove keeps user files).
+- Windows: make + smoke:packaged OK. smoke:installed NOT run for alpha.2 because the owner's own FrameCapt alpha.1 install was running (the script would uninstall it); alpha.1's installer passed 47/47 and alpha.2 differs only in version + Linux-only paths.
+- Incident: during the Linux port a subagent quoting error ran `rm -rf /root` inside WSL; /root was the WSL default (root) user's home. Default .bashrc/.profile restored from /usr/share/base-files; any other prior contents are unrecoverable. Owner informed.
