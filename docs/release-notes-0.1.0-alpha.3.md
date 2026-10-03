@@ -94,3 +94,16 @@ Default shortcuts: `Ctrl+Shift+1/2/3` take screenshots (screen/window/region), `
 ## Feedback
 
 Please report bugs through this repository's **Issues** tab. Include your OS version and, on Linux, your desktop environment and whether you use Wayland or X11.
+
+## Checksums (SHA-256)
+
+```
+9d63147035e882dbe3c2c447c0df1a37a328965f0af0c3d731588b17055251cc  FrameCapt-Setup-0.1.0-alpha.3.exe
+bb6e47cc0effe371c2b9d0d7748db451831427819e580eb1a439a4fa150dcbd0  FrameCapt-win32-x64-0.1.0-alpha.3.zip
+35630b8808968d91cb9c22fece777fae7afb00228c900389e15055d0c24ab585  framecapt_0.1.0.alpha.3_amd64.deb
+5cf04747484ea5c453443a9c06b2c6b165ca0d3ebe412ce2b79e9cb023f8991b  FrameCapt-0.1.0-alpha.3-x64.AppImage
+f99f9ca1745d1799705daffc590fb45aa0bfb26c73a6d89b1f4d3b3f52222496  FrameCapt-0.1.0-alpha3-full.nupkg
+c3d7f702d6882a5b0e762c5afe3c1650e611121504001b7bfbbc3bdb1a120d1c  RELEASES
+8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e  ffmpeg-9.0.2.tar.xz
+d617fd94ea354dadd2a8bb16243d37c44e1e9729b06b6ad58fe30bfb0fa943f2  ffmpeg-9.0.2.tar.xz.asc
+```
