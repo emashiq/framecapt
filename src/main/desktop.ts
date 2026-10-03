@@ -18,7 +18,7 @@ import type { AppSettings } from './settings';
 import { registerSettingsHandlers } from './settings/handlers';
 import { hasProblems, ShortcutManager, type GlobalShortcutApi } from './shortcuts';
 import { TrayController, buildTrayTemplate, trayTooltip, type TrayState } from './tray';
-import { TRAY_ICONS } from './tray-icons.generated';
+import { TRAY_ICONS, TRAY_SCALE_FACTORS } from './tray-icons.generated';
 import type { TrayInfo } from './tray-info';
 import {
   getEditorState,
@@ -42,14 +42,10 @@ export interface Desktop {
 
 function trayImage(variant: 'normal' | 'recording') {
   const image = nativeImage.createEmpty();
-  // 16 px at 100%, 24 px at 150%, 32 px at 200% display scaling.
-  for (const [size, scaleFactor] of [
-    [16, 1],
-    [24, 1.5],
-    [32, 2],
-  ] as const) {
+  // 16, 20, 24 and 32 px for 100, 125, 150 and 200 % display scaling.
+  for (const size of [16, 20, 24, 32] as const) {
     image.addRepresentation({
-      scaleFactor,
+      scaleFactor: TRAY_SCALE_FACTORS[size],
       width: size,
       height: size,
       buffer: Buffer.from(TRAY_ICONS[variant][size], 'base64'),

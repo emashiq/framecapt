@@ -63,7 +63,7 @@ export function AppShell({
         )}
       >
         <div className={cn('mb-6 flex items-center gap-2.5', !editor && 'px-2')}>
-          <Logo size={30} />
+          <Logo size={32} />
           {!editor && (
             <span className="text-[17px] font-semibold tracking-tight text-fg">FrameCapt</span>
           )}

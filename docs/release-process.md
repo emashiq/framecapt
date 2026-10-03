@@ -90,7 +90,7 @@ Either way: updates only work for signed builds in practice (an unsigned update 
 
 ## Owner actions that remain (summary)
 
-- Confirm or replace the provisional identity: product name `FrameCapt`, publisher string `FrameCapt contributors`, app id `com.framecapt.app`, Squirrel package id `FrameCapt`, the placeholder icon (`assets/app/framecapt.ico`, generated), install folder name. Changing the Squirrel package id or the app id later breaks taskbar pins, notification grouping and in-place upgrades.
+- Confirm or replace the provisional identity: product name `FrameCapt`, publisher string `FrameCapt contributors`, app id `com.framecapt.app`, Squirrel package id `FrameCapt`, the icon (`assets/app/framecapt.ico`, the owner's logo), install folder name. Changing the Squirrel package id or the app id later breaks taskbar pins, notification grouping and in-place upgrades.
 - Obtain a signing certificate; create the two secrets.
 - Host an https icon (`iconUrl`) if a Programs and Features icon is wanted (it makes the installer contact that URL; `assets/app/framecapt.nuspectemplate` currently omits it on purpose).
 - Choose and host an update feed; decide how updates are offered.

@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "brand:assets": "node scripts/generate-brand-assets.mjs",
     "check:mocks": "node scripts/check-no-mocks.mjs",
     "bench:recording": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/bench-recording.mjs",
     "smoke:packaged": "node scripts/smoke-packaged.mjs",

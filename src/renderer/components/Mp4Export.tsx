@@ -9,6 +9,7 @@ import {
 } from '../history/export-store';
 import { useExportCapabilities } from '../history/use-export-capabilities';
 import { cn } from '../lib/cn';
+import { Loader } from './Loader';
 import { Button } from './ui/Button';
 
 export interface Mp4ExportProps {
@@ -42,7 +43,8 @@ export function Mp4Export({ historyId, className }: Mp4ExportProps) {
     return (
       <div data-testid="mp4-progress" className={cn('flex flex-col gap-2', className)}>
         <div className="flex items-center justify-between text-[13px] text-fg-muted">
-          <span aria-live="polite">
+          <span aria-live="polite" className="flex items-center gap-2">
+            <Loader size="sm" decorative />
             {state.status === 'starting'
               ? 'Choose where to save…'
               : percent === null

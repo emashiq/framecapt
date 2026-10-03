@@ -17,6 +17,7 @@ import { patchFromRecordOptions, recordOptionsFromSettings } from '../../shared/
 import type { SettingsSectionId, StartRequestEvent } from '../../shared/settings-ipc';
 import { acceleratorKeys, type ShortcutAction } from '../../shared/shortcuts';
 import type { ShotKind } from '../../shared/shots';
+import { Loader } from '../components/Loader';
 import { PageHeader } from '../components/PageHeader';
 import { RecentCaptures } from '../components/RecentCaptures';
 import { RecordOptions } from '../components/RecordOptions';
@@ -271,6 +272,9 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
         }`
       : '';
 
+  /** Finishing a recording is a brand moment (the logo loader); the other steps keep the plain spinner. */
+  const saving = flow.running === null && ['stopping', 'processing'].includes(recorder.status);
+
   return (
     <>
       <PageHeader
@@ -386,7 +390,11 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
       >
         {statusText ? (
           <>
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            {saving ? (
+              <Loader size="sm" decorative />
+            ) : (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            )}
             {statusText}
           </>
         ) : null}

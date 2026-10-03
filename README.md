@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/brand/framecapt-logo-256.png" alt="FrameCapt logo" width="160" height="160" /></p>
+
 # FrameCapt
 
 > **FrameCapt is a provisional product name.** It has not been checked for trademark conflicts (see [docs/OWNER-TASKS.md](docs/OWNER-TASKS.md)).

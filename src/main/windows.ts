@@ -133,6 +133,16 @@ export function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
   return win.loadURL(`${devServerUrl ?? APP_ENTRY_URL}#${hash}`);
 }
 
+/**
+ * The taskbar/title-bar icon. A packaged build uses the icon embedded in FrameCapt.exe; an unpackaged
+ * run (npm start, e2e) would show Electron's, so it gets the .ico from the repository.
+ */
+function devWindowIcon(): { icon?: string } {
+  return app.isPackaged
+    ? {}
+    : { icon: path.join(app.getAppPath(), 'assets', 'app', 'framecapt.ico') };
+}
+
 export function createMainWindow(options: { show?: boolean } = {}): BrowserWindow {
   const showOnReady = options.show ?? true;
   const win = new BrowserWindow({
@@ -143,6 +153,7 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
     minHeight: 560,
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? BACKGROUND.dark : BACKGROUND.light,
+    ...devWindowIcon(),
     webPreferences: securePreferences(),
   });
 

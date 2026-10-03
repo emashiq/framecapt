@@ -90,6 +90,8 @@ async function overlayFor(displayId: string, testId: string): Promise<Page> {
       { timeout: 15_000 },
     )
     .toBe(true);
+  // The boot screen belongs to the main window only: an overlay stays transparent.
+  await expect((found as Page).getByTestId('boot-screen')).toHaveCount(0);
   return found as Page;
 }
 

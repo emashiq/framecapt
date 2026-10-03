@@ -7,6 +7,7 @@ import {
   type Settings,
 } from '../../../shared/settings';
 import { SHORTCUT_ACTIONS, SHORTCUT_LABELS, type ShortcutAction } from '../../../shared/shortcuts';
+import { Logo } from '../../components/Logo';
 import { MicrophoneSelect } from '../../components/MicrophoneSelect';
 import { ShortcutField } from '../../components/ShortcutField';
 import { Button } from '../../components/ui/Button';
@@ -630,6 +631,18 @@ export function AboutSection() {
               Copy details
             </Button>
           ) : null}
+        </div>
+
+        <div className="mb-5 flex items-center gap-5" data-testid="about-brand">
+          <Logo size={112} />
+          <div>
+            <p className="text-2xl font-semibold tracking-tight text-fg">FrameCapt</p>
+            <p className="text-sm text-fg-muted">
+              {state.status === 'ready'
+                ? `Version ${state.info.version}`
+                : 'Screenshots and screen recordings, offline.'}
+            </p>
+          </div>
         </div>
 
         {state.status === 'loading' ? (

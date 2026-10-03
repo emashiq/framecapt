@@ -3,6 +3,7 @@ import { AppWindow, RefreshCw, Search } from 'lucide-react';
 import { THUMBNAIL_MAX_WIDTH, type SourceInfo } from '../../shared/capture-schemas';
 import { cn } from '../lib/cn';
 import { filterWindows } from '../lib/filter-windows';
+import { Loader } from './Loader';
 import { Button } from './ui/Button';
 import { Modal } from './ui/Dialog';
 import { EmptyState } from './ui/EmptyState';
@@ -224,16 +225,22 @@ export function SourcePicker({ open, purpose = 'capture', onClose, onPick }: Sou
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5" onKeyDown={onGridKeyDown}>
         {listing.status === 'loading' ? (
-          <div
-            className={GRID}
-            data-testid="window-skeletons"
-            role="status"
-            aria-label="Loading windows"
-          >
-            {Array.from({ length: 6 }, (_, index) => (
-              <Skeleton key={index} />
-            ))}
-          </div>
+          <>
+            <p className="mb-3 flex items-center gap-2 text-[13px] text-fg-muted">
+              <Loader size="sm" decorative />
+              Looking for windows…
+            </p>
+            <div
+              className={GRID}
+              data-testid="window-skeletons"
+              role="status"
+              aria-label="Loading windows"
+            >
+              {Array.from({ length: 6 }, (_, index) => (
+                <Skeleton key={index} />
+              ))}
+            </div>
+          </>
         ) : listing.status === 'error' ? (
           <EmptyState
             icon={<AppWindow className="size-6" />}

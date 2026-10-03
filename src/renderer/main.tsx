@@ -1,7 +1,7 @@
 import { StrictMode, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { App } from './App';
+import { MainApp } from './MainApp';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { installGlobalErrorReporting } from './lib/report-error';
 import { roleFromHash } from './role';
@@ -23,7 +23,7 @@ const roleViews: Partial<Record<Role, ComponentType>> = {
 
 installGlobalErrorReporting();
 
-const RoleView = roleViews[roleFromHash(window.location.hash)] ?? App;
+const RoleView = roleViews[roleFromHash(window.location.hash)] ?? MainApp;
 const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root element');
 

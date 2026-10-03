@@ -86,6 +86,8 @@ async function toolbarPage(): Promise<Page> {
     .toBe(true);
   const toolbar = found as Page;
   await expect(toolbar.getByTestId('toolbar')).toBeVisible();
+  // The boot screen belongs to the main window only: the toolbar is instant.
+  await expect(toolbar.getByTestId('boot-screen')).toHaveCount(0);
   // The toolbar window exists (hidden) from preflight on; it is shown once recording runs.
   await expect.poll(async () => (await state()).status, { timeout: 20_000 }).toBe('recording');
   const win = await app.browserWindow(toolbar);

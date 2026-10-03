@@ -4,6 +4,7 @@ import { CircleCheck, FolderOpen, LifeBuoy, TriangleAlert } from 'lucide-react';
 import { friendlyError } from '../../shared/error-messages';
 import { formatBytes, formatDuration } from '../../shared/recording';
 import type { RecoveryCandidate, RecoverResponse } from '../../shared/recovery-ipc';
+import { Loader } from './Loader';
 import { Button } from './ui/Button';
 import { AlertConfirm } from './ui/AlertConfirm';
 
@@ -182,7 +183,9 @@ export function RecoveryBanner({ busy }: { busy: boolean }) {
             className="rounded-xl border border-line bg-warning-soft px-4 py-3.5 text-sm text-fg"
           >
             <div className="flex flex-wrap items-center gap-3">
-              {failed ? (
+              {outcome?.kind === 'working' ? (
+                <Loader size="sm" label="Recovering the recording" />
+              ) : failed ? (
                 <TriangleAlert className="size-4 shrink-0 text-warning" aria-hidden="true" />
               ) : (
                 <LifeBuoy className="size-4 shrink-0 text-warning" aria-hidden="true" />
