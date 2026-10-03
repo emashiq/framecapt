@@ -29,7 +29,6 @@ describe('applyLinuxSwitches', () => {
       ['ozone-platform', LINUX_OZONE_PLATFORM],
       ['disable-background-networking', undefined],
       ['disable-component-update', undefined],
-      ['disable-spell-checking', undefined],
     ]);
     expect(LINUX_OZONE_PLATFORM).toBe('x11');
   });

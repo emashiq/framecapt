@@ -45,3 +45,15 @@ Mitigations, both in the test tooling:
 
 - `npm run test:e2e` runs `scripts/run-e2e.mjs`. If every failure of a run is that exact worker death, only those tests are run once more (`--last-failed`); any other failure, or a second crash, fails the run. `npx playwright test` directly does not retry.
 - `tests/e2e/global-teardown.ts` (e2e and native configs) ends any Electron process tree that Playwright started from this repository and nobody closed, so a crash cannot leave tray icons, user-data locks or (outside the mock-shortcut build) global shortcuts behind. A developer's own `npm start` is not touched.
+
+## Hosted CI runners (GitHub Actions) and the E2E suite
+
+The hosted `windows-latest` runner has **one physical core (two threads), no GPU, no audio device** and varies a lot from VM to VM: the same recording test takes 6 s on a development PC and 15 s to over a minute there, and the whole VM can stall for seconds while the recorder renderer encodes video. What was done, and what is still timing noise:
+
+- E2E build only (`__FRAMECAPT_E2E__`): the synthetic display paints its backdrop once and moves one block at 10 fps, and the recorder prefers VP8 over VP9. Production keeps VP9 first.
+- When `CI` is set, `playwright.config.ts` raises the test timeout to 120 s and the default `expect` timeout to 15 s, and retries a failed test twice (traces kept). Locally there are no retries. Retries are only a backstop for VM timing noise: a test that fails three times in a row is a real failure.
+- The lost-microphone test passes `--use-fake-device-for-media-stream` (the runner has no microphone).
+- Defender real-time scanning is switched off on the (disposable) E2E runner.
+- Tests that were racing on slow machines and were made deterministic, not looser: the 3-2-1 countdown (digits are recorded by a page-side observer; the "3" may be missed if the window attaches late), recovery (waits for the session folder to go and ignores `.partial.webm` files), the pause test (its duration bound follows the measured wall clock), and "rapid start and stop" (it used to send Stop while the recorder was still `idle`, which is a no-op, so the second Start then ran; it now waits until the recorder has left `idle`).
+- Product check for that last one: a Stop while the engine is still starting is a cancel and a late "started" from a slow engine is ignored (`tests/unit/recorder-races.test.ts`, and `tests/e2e/recording-slow-start.spec.ts` with the E2E-only `FRAMECAPT_E2E_ENGINE_START_DELAY_MS` hook). No recorder can be left in `recording` by a quick Start/Stop.
+- Linux (`ubuntu-latest`): the network test samples sockets with `ss`. It found a real leak, fixed on all platforms: the session spellchecker downloaded a Hunspell dictionary from Google (`src/main/security.ts` `disableSpellChecker`, `tests/unit/spellchecker.test.ts`).

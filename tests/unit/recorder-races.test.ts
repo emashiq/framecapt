@@ -407,3 +407,34 @@ describe('quitting while the file is being finished', () => {
     expect(outputs()).toHaveLength(1);
   });
 });
+
+describe('a stop while the engine is still starting', () => {
+  it('is a cancel: the recorder goes idle, a late "started" from the slow engine changes nothing, and a new start works', async () => {
+    build();
+    installEngine();
+    const normal = state.onCommand;
+    let releaseStart: (() => void) | undefined;
+    // A slow PC: the engine answers "start" only when the test lets it.
+    state.onCommand = (command) => {
+      if (command.cmd !== 'start') return normal(command);
+      releaseStart = () => normal(command);
+    };
+    await controller.start({ target: 'screen', displayId: '1', options: OPTIONS });
+    await waitFor(() => releaseStart !== undefined, 'the engine start command');
+    expect(controller.status).toBe('starting');
+
+    await controller.stop('user');
+    await controller.stop('user'); // a second stop is harmless too
+    expect(controller.status).toBe('idle');
+
+    releaseStart?.(); // the slow engine finally reports "started" (and would stream chunks)
+    await sleep(100);
+    expect(controller.status).toBe('idle');
+    expect(outputs()).toEqual([]);
+
+    state.onCommand = normal;
+    await startRecording();
+    await controller.stop('user');
+    await waitFor(() => controller.status === 'completed', 'completed');
+  });
+});

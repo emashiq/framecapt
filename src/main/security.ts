@@ -114,3 +114,17 @@ export function installNetworkBlocker(ses: Session, getConfig: () => AppOriginCo
     },
   );
 }
+
+/**
+ * No spellchecker, on every platform. Chromium's session spellchecker downloads a Hunspell
+ * dictionary from Google (redirector.gvt1.com) for its language when the session starts (seen on
+ * Linux in the CI network test), even though no FrameCapt window checks spelling. FrameCapt makes
+ * no request of its own, so the checker is disabled and has no language to fetch a dictionary for.
+ * index.ts also passes --disable-spell-checking before the app is ready.
+ */
+export function disableSpellChecker(
+  ses: Pick<Session, 'setSpellCheckerEnabled' | 'setSpellCheckerLanguages'>,
+): void {
+  ses.setSpellCheckerEnabled(false);
+  ses.setSpellCheckerLanguages([]);
+}

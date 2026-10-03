@@ -223,6 +223,11 @@ export function registerHandlers(
         void exports.startAuto(historyId);
       }
     },
+    // E2E builds only: a slow engine start, to test a stop that arrives while starting.
+    ...(__FRAMECAPT_E2E__ &&
+      Number(process.env.FRAMECAPT_E2E_ENGINE_START_DELAY_MS) > 0 && {
+        engineStartDelayMs: Number(process.env.FRAMECAPT_E2E_ENGINE_START_DELAY_MS),
+      }),
     // E2E builds only: a short cap to test quitting while finalizing takes too long.
     ...(__FRAMECAPT_E2E__ &&
       Number(process.env.FRAMECAPT_E2E_QUIT_CAP_MS) > 0 && {

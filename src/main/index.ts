@@ -9,6 +9,7 @@ import { initLogger, log } from './logger';
 import {
   installCsp,
   installNavigationLockdown,
+  disableSpellChecker,
   installNetworkBlocker,
   installPermissionHandlers,
 } from './security';
@@ -36,6 +37,8 @@ function start(): void {
   app.enableSandbox();
   // X11 (or XWayland) on Linux, before anything is ready: see linux.ts.
   applyLinuxSwitches(app.commandLine);
+  // No spellchecker (no dictionary download from Google) on any platform: see security.ts.
+  app.commandLine.appendSwitch('disable-spell-checking');
   // Privileged schemes must be registered before the app is ready.
   registerPrivilegedSchemes();
 
@@ -109,10 +112,7 @@ function start(): void {
     installCsp(session.defaultSession, getOriginConfig());
     installPermissionHandlers(session.defaultSession, getOriginConfig);
     installNetworkBlocker(session.defaultSession, getOriginConfig);
-    // Linux Chromium downloads a Hunspell dictionary from Google for the session's spellchecker even
-    // when no window checks spelling; FrameCapt has no text input that needs it and makes no requests.
-    session.defaultSession.setSpellCheckerEnabled(false);
-    session.defaultSession.setSpellCheckerLanguages([]);
+    disableSpellChecker(session.defaultSession);
     // Unconfigured (empty feed URL) builds never touch autoUpdater: no update code, no network.
     const updates = new UpdateService({
       feedUrl: __FRAMECAPT_UPDATE_URL__,

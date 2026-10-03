@@ -611,6 +611,11 @@ test.describe('one display', () => {
   test('rapid start and stop never leaves anything running', async () => {
     // Stop requested right after start: a cancel during start-up.
     await startScreen();
+    // The click starts an asynchronous flow: a stop sent while the recorder is still idle is a no-op
+    // and would leave the start to finish. Stop only once the recorder has left idle.
+    await expect
+      .poll(async () => (await state()).status !== 'idle', { timeout: 20_000 })
+      .toBe(true);
     await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
     await page.evaluate(() => window.framecapt.invoke('recorder:stop'));
     await expect

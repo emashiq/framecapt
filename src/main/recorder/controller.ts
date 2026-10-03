@@ -126,6 +126,8 @@ export interface RecorderDeps {
   onSaved?: (historyId: string | null) => void;
   /** Overrides the 15 s quit cap (E2E builds only). */
   quitCapMs?: number;
+  /** E2E builds only: the engine's start command is sent this many ms late (a slow PC). */
+  engineStartDelayMs?: number;
 }
 
 function toGeom(display: DisplayInfo): DisplayGeom {
@@ -518,6 +520,10 @@ export class RecorderController implements SelectionHost {
     );
     ctx.sessionCreated = true;
     this.guard(token);
+    if (this.deps.engineStartDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, this.deps.engineStartDelayMs));
+      this.guard(token);
+    }
     const started = await this.engineRequest(
       { cmd: 'start', requestId: randomUUID(), sessionId: ctx.sessionId },
       ['started', 'error'],
