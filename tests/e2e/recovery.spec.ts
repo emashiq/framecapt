@@ -199,7 +199,10 @@ test('unfinished recordings from an earlier run: banner, details, Recover, Disca
     .toBe(true);
   expect(fs.existsSync(partial)).toBe(false);
   expect(fs.readFileSync(path.join(videosDir(), 'my own notes.webm'), 'utf8')).toBe('a user file');
-  expect(fs.existsSync(path.join(recordingsDir(), ID_FINALIZING))).toBe(false);
+  // The session folder goes right after the publish, not atomically with it.
+  await expect
+    .poll(() => fs.existsSync(path.join(recordingsDir(), ID_FINALIZING)), { timeout: 15_000 })
+    .toBe(false);
   const resumed = probeFile(path.join(videosDir(), 'FrameCapt 2026-10-02 at 09.00.05.webm'));
   expect(Number(resumed.format?.duration)).toBeGreaterThan(4.9);
 

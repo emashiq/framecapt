@@ -16,15 +16,22 @@ export function createSyntheticDisplayStream(width: number, height: number): Med
   const track = stream.getVideoTracks()[0];
   const unregister = registerLoop('synthetic-display');
   const started = performance.now();
+  // The backdrop is painted once. Only a small block moves, so a software VP8 encoder on a
+  // one-core CI runner has little to encode (a full-frame gradient per frame starved it).
+  const gradient = context.createLinearGradient(0, 0, width, height);
+  gradient.addColorStop(0, 'hsl(220 70% 45%)');
+  gradient.addColorStop(1, 'hsl(340 70% 25%)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, width, height);
+  let lastX = -200;
   const draw = (): void => {
     const t = (performance.now() - started) / 1000;
-    const gradient = context.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, `hsl(${(t * 40) % 360} 70% 45%)`);
-    gradient.addColorStop(1, `hsl(${(t * 40 + 120) % 360} 70% 25%)`);
+    const x = Math.round(((t * 200) % (width + 200)) - 200);
     context.fillStyle = gradient;
-    context.fillRect(0, 0, width, height);
+    context.fillRect(lastX, height / 3, 200, height / 3);
     context.fillStyle = '#ffffff';
-    context.fillRect(((t * 200) % (width + 200)) - 200, height / 3, 200, height / 3);
+    context.fillRect(x, height / 3, 200, height / 3);
+    lastX = x;
   };
   draw();
   const timer = setInterval(() => {

@@ -924,8 +924,8 @@ test.describe('errors and devices', () => {
   test('a saved microphone that is gone is reported, not dropped', async () => {
     const { page } = await start({
       settings: { version: 1, recording: { micEnabled: true, micDeviceId: 'device-that-is-gone' } },
-      // A headless Linux box (CI under Xvfb) has no audio input at all: give Chromium a fake one.
-      ...(process.platform === 'linux' && { args: ['--use-fake-device-for-media-stream'] }),
+      // A CI runner has no audio input at all: give Chromium a fake one.
+      args: ['--use-fake-device-for-media-stream'],
     });
     await expect(page.getByTestId('mic-missing')).toHaveText(
       'Saved microphone not found — using default',

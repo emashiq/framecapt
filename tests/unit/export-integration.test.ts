@@ -57,6 +57,10 @@ describe.skipIf(paths === null)('real ffmpeg: MP4 export', () => {
   }
 
   function runningEncodersFor(marker: string): boolean {
+    if (process.platform !== 'win32') {
+      const listing = spawnSync('ps', ['-eo', 'args'], { shell: false, encoding: 'utf8' }).stdout;
+      return listing.split('\n').some((line) => line.includes('ffmpeg') && line.includes(marker));
+    }
     const script =
       'Get-CimInstance Win32_Process -Filter "Name=\'ffmpeg.exe\'" | ForEach-Object { $_.CommandLine }';
     const encoded = Buffer.from(script, 'utf16le').toString('base64');
