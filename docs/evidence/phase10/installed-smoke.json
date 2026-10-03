@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-03T05:22:29.765Z",
+  "date": "2026-10-03T05:43:21.542Z",
   "host": {
     "os": "Windows_NT 10.0.26300 x64",
     "cpu": "AMD Ryzen 7 7700 8-Core Processor"
@@ -23,7 +23,7 @@
     {
       "name": "installed to %LOCALAPPDATA%\\FrameCapt (Update.exe + app-<version>\\FrameCapt.exe)",
       "ok": true,
-      "detail": "~\\AppData\\Local\\FrameCapt\\app-0.1.0"
+      "detail": "~\\AppData\\Local\\FrameCapt\\app-0.1.0-alpha1"
     },
     {
       "name": "resources/ffmpeg/win32-x64 has ffmpeg.exe, ffprobe.exe, LICENSE, PROVENANCE.json",
@@ -43,7 +43,7 @@
     {
       "name": "the exe carries the provisional product name",
       "ok": true,
-      "detail": "{\"product\":\"FrameCapt\",\"company\":\"FrameCapt contributors\",\"description\":\"FrameCapt - an offline, Windows-first screenshot and screen recording app.\",\"version\":\"0.1.0\"}"
+      "detail": "{\"product\":\"FrameCapt\",\"company\":\"FrameCapt contributors\",\"description\":\"FrameCapt - an offline, Windows-first screenshot and screen recording app.\",\"version\":\"0.1.0-alpha.1\"}"
     },
     {
       "name": "GrantFileProtocolExtraPrivileges fuse is OFF in the installed exe",
@@ -53,7 +53,7 @@
     {
       "name": "the silent install finished quickly without any network wait (no iconUrl download)",
       "ok": true,
-      "detail": "6.023 s"
+      "detail": "5.853 s"
     },
     {
       "name": "--squirrel-firstrun starts the app and shows its window",
@@ -68,12 +68,12 @@
     {
       "name": "main.log shows the startup line",
       "ok": true,
-      "detail": "2026-10-03T05:22:42.151Z [info] FrameCapt 0.1.0 starting (electron 44.5.1)"
+      "detail": "2026-10-03T05:43:33.669Z [info] FrameCapt 0.1.0-alpha.1 starting (electron 44.5.1)"
     },
     {
       "name": "main.log shows the FFmpeg self-check (\"ffmpeg ok <version>\")",
       "ok": true,
-      "detail": "2026-10-03T05:22:42.467Z [info] ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the"
+      "detail": "2026-10-03T05:43:33.976Z [info] ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the"
     },
     {
       "name": "Settings: launch at login can be switched on in the installed app",
@@ -88,7 +88,7 @@
     {
       "name": "the Run entry really starts the installed app, with --hidden",
       "ok": true,
-      "detail": "\"~\\AppData\\Local\\FrameCapt\\app-0.1.0\\FrameCapt.exe\" --hidden"
+      "detail": "\"~\\AppData\\Local\\FrameCapt\\app-0.1.0-alpha1\\FrameCapt.exe\" --hidden"
     },
     {
       "name": "a start at login stays in the tray (no window)",
@@ -113,7 +113,7 @@
     {
       "name": "Update.exe --processStart (the shortcut path) starts the versioned exe",
       "ok": true,
-      "detail": "pid 38300"
+      "detail": "pid 55756"
     },
     {
       "name": "attached to the installed app",
@@ -133,7 +133,7 @@
     {
       "name": "app:getInfo: packaged, updates \"unconfigured\"",
       "ok": true,
-      "detail": "{\"v\":\"0.1.0\",\"updates\":{\"state\":\"unconfigured\"}}"
+      "detail": "{\"v\":\"0.1.0-alpha.1\",\"updates\":{\"state\":\"unconfigured\"}}"
     },
     {
       "name": "Ctrl+Shift+1 and Ctrl+Shift+5 are registered by the installed app",
@@ -148,7 +148,7 @@
     {
       "name": "a PNG was saved by the installed app",
       "ok": true,
-      "detail": "FrameCapt 2026-10-03 at 11.22.57.png"
+      "detail": "FrameCapt 2026-10-03 at 11.43.49.png"
     },
     {
       "name": "the screenshot is a PNG with the exact physical size of a display",
@@ -168,22 +168,22 @@
     {
       "name": "the recording was finalized to a .webm in the chosen folder",
       "ok": true,
-      "detail": "FrameCapt 2026-10-03 at 11.23.10.webm"
+      "detail": "FrameCapt 2026-10-03 at 11.44.02.webm"
     },
     {
       "name": "the WebM is a playable VP9 video of about 5 s (probed with the INSTALLED ffprobe)",
       "ok": true,
-      "detail": "{\"bytes\":315907,\"container\":\"matroska,webm\",\"codec\":\"vp9\",\"width\":1920,\"height\":804,\"durationS\":7.274,\"decodesClean\":true}"
+      "detail": "{\"bytes\":731770,\"container\":\"matroska,webm\",\"codec\":\"vp9\",\"width\":1920,\"height\":804,\"durationS\":7.406,\"decodesClean\":true}"
     },
     {
       "name": "the MP4 auto-export finished (installed FFmpeg encodes H.264)",
       "ok": true,
-      "detail": "FrameCapt 2026-10-03 at 11.23.10.mp4"
+      "detail": "FrameCapt 2026-10-03 at 11.44.02.mp4"
     },
     {
       "name": "the MP4 is H.264 yuv420p and decodes cleanly",
       "ok": true,
-      "detail": "{\"bytes\":67564,\"codec\":\"h264\",\"pixFmt\":\"yuv420p\",\"durationS\":7.266667,\"decodesClean\":true}"
+      "detail": "{\"bytes\":150076,\"codec\":\"h264\",\"pixFmt\":\"yuv420p\",\"durationS\":7.4,\"decodesClean\":true}"
     },
     {
       "name": "no TCP connection to a non-loopback address for 60 s of use (whole process tree)",
@@ -203,7 +203,7 @@
     {
       "name": "the app files are removed (no FrameCapt.exe, app.asar or FFmpeg left in the install folder)",
       "ok": true,
-      "detail": "Squirrel's own stub remains: .dead, app-0.1.0, Update.exe, app-0.1.0\\squirrel.exe (4007937 bytes)"
+      "detail": "Squirrel's own stub remains: .dead, app-0.1.0-alpha1, Update.exe, app-0.1.0-alpha1\\squirrel.exe (4007937 bytes)"
     },
     {
       "name": "the Start Menu and Desktop shortcuts are gone",
@@ -268,25 +268,25 @@
     }
   ],
   "setup": {
-    "file": "FrameCapt-Setup-0.1.0.exe",
+    "file": "FrameCapt-Setup-0.1.0-alpha.1.exe",
     "bytes": 229965312,
-    "sha256": "75def59a566a751113b7338b6dd4dfe59b4dfca7d0a044d78c59658eadd799e9",
+    "sha256": "2d09a9d895ba4348951f94e1fc3abae9e76046a32d485d60ae7545cf4ebd99cc",
     "authenticode": "NotSigned"
   },
   "install": {
     "exitCode": 0,
-    "seconds": 6.023
+    "seconds": 5.853
   },
   "installDir": "~\\AppData\\Local\\FrameCapt",
   "installedFiles": {
     "exeBytes": 245793280,
-    "asarBytes": 1431726
+    "asarBytes": 1431734
   },
   "exeVersionInfo": {
     "product": "FrameCapt",
     "company": "FrameCapt contributors",
     "description": "FrameCapt - an offline, Windows-first screenshot and screen recording app.",
-    "version": "0.1.0"
+    "version": "0.1.0-alpha.1"
   },
   "fuses": {
     "RunAsNode": "disabled",
@@ -301,8 +301,8 @@
   },
   "silentInstallLaunchesApp": false,
   "firstRunLog": {
-    "starting": "2026-10-03T05:22:42.151Z [info] FrameCapt 0.1.0 starting (electron 44.5.1)",
-    "ffmpeg": "2026-10-03T05:22:42.467Z [info] ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
+    "starting": "2026-10-03T05:43:33.669Z [info] FrameCapt 0.1.0-alpha.1 starting (electron 44.5.1)",
+    "ffmpeg": "2026-10-03T05:43:33.976Z [info] ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers"
   },
   "launchAtLogin": {
     "name": "com.squirrel.FrameCapt.FrameCapt",
@@ -322,7 +322,7 @@
   },
   "uninstallEntry": "FrameCapt|\"~\\AppData\\Local\\FrameCapt\\Update.exe\" --uninstall",
   "appInfo": {
-    "version": "0.1.0",
+    "version": "0.1.0-alpha.1",
     "electron": "44.5.1",
     "isPackaged": true,
     "updates": {
@@ -330,30 +330,30 @@
     }
   },
   "screenshot": {
-    "bytes": 166118,
+    "bytes": 400133,
     "width": 3440,
     "height": 1440,
     "matchesDisplay": true,
-    "ms": 2286
+    "ms": 2254
   },
   "recording": {
-    "bytes": 315907,
+    "bytes": 731770,
     "container": "matroska,webm",
     "codec": "vp9",
     "width": 1920,
     "height": 804,
-    "durationS": 7.274,
+    "durationS": 7.406,
     "decodesClean": true
   },
   "mp4": {
-    "bytes": 67564,
+    "bytes": 150076,
     "codec": "h264",
     "pixFmt": "yuv420p",
-    "durationS": 7.266667,
+    "durationS": 7.4,
     "decodesClean": true
   },
   "network": {
-    "watchedSeconds": 65,
+    "watchedSeconds": 64,
     "tcpSamples": [
       {
         "atS": 2,
@@ -380,7 +380,7 @@
         "nonLoopback": 0
       },
       {
-        "atS": 36,
+        "atS": 37,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
@@ -398,7 +398,7 @@
         "nonLoopback": 0
       },
       {
-        "atS": 54,
+        "atS": 53,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
@@ -410,7 +410,7 @@
         "nonLoopback": 0
       },
       {
-        "atS": 65,
+        "atS": 64,
         "processes": 7,
         "connections": 2,
         "nonLoopback": 0
@@ -422,7 +422,7 @@
   "errorLines": [],
   "uninstall": {
     "exitCode": 0,
-    "seconds": 0.534,
+    "seconds": 0.925,
     "command": "Update.exe --uninstall -s",
     "installDirFullyRemoved": false,
     "leftovers": [
@@ -431,7 +431,7 @@
         "bytes": 1
       },
       {
-        "name": "app-0.1.0",
+        "name": "app-0.1.0-alpha1",
         "bytes": 0
       },
       {
@@ -439,7 +439,7 @@
         "bytes": 2003968
       },
       {
-        "name": "app-0.1.0\\squirrel.exe",
+        "name": "app-0.1.0-alpha1\\squirrel.exe",
         "bytes": 2003968
       }
     ],

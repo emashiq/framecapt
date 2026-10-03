@@ -458,7 +458,9 @@ async function main() {
     20_000,
   ).catch(() => (fs.existsSync(firstLog) ? fs.readFileSync(firstLog, 'utf8') : ''));
   const logLines = logText.split(/\r?\n/);
-  const starting = logLines.find((line) => /FrameCapt \d+\.\d+\.\d+ starting/.test(line));
+  const starting = logLines.find((line) =>
+    /FrameCapt \d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)? starting/.test(line),
+  );
   const ffok = logLines.find((line) => /ffmpeg ok /.test(line));
   check(
     'main.log shows the startup line',
