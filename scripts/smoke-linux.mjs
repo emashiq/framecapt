@@ -74,6 +74,8 @@ async function startApp(label, file, extraArgs) {
     PATH: process.env.PATH,
     HOME: home,
     DISPLAY: process.env.DISPLAY ?? ':0',
+    // xvfb-run (CI) protects its X server with an authority file.
+    ...(process.env.XAUTHORITY && { XAUTHORITY: process.env.XAUTHORITY }),
     ...(process.env.XDG_RUNTIME_DIR && { XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR }),
     ...(process.env.WAYLAND_DISPLAY && { WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY }),
     ...(process.env.PULSE_SERVER && { PULSE_SERVER: process.env.PULSE_SERVER }),
