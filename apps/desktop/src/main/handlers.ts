@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, session, shell } from 'electron';
+import { app, nativeImage, session, shell } from 'electron';
 import { BulkExportService } from './history/bulk-export';
 import { ExportService } from './history/export-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
+import { rescanLibrary } from './history/rescan';
 import { createAfterCapture } from './shots/after-capture';
 import { rememberExported } from './shots/exported-paths';
 import type { AppSettings } from './settings';
@@ -271,7 +272,17 @@ export function registerHandlers(
     onSaved: rememberExported,
     onProgress: (done, total) => emitToMain('history:bulkProgress', { done, total }),
   });
-  registerHistoryHandlers(history, exports, bulk, () => mp4Capability, outputDir);
+  const rescan = (): Promise<number> =>
+    rescanLibrary({
+      dirs: [settings.dirs().screenshotsDir, settings.dirs().recordingsDir],
+      history,
+      tools,
+      thumbnail: async (file, width) => {
+        const image = nativeImage.createFromPath(file);
+        return image.isEmpty() ? undefined : image.resize({ width }).toPNG();
+      },
+    });
+  registerHistoryHandlers(history, exports, bulk, () => mp4Capability, outputDir, rescan);
   registerRecorderHandlers(recorder, sessions, media);
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.
@@ -295,10 +306,18 @@ export function registerHandlers(
     (error: unknown) =>
       log.error('ffmpeg is not usable (run "npm run fetch:ffmpeg" in development)', error),
   );
-  void history.backfillFromCompleted(recordingsDir).then(
-    (added) => added > 0 && log.info(`History: added ${added} earlier recordings`),
-    (error: unknown) => log.error('History backfill failed', error),
-  );
+  // A fresh start (no history.json: first run, a reinstall, lost app data): earlier recordings,
+  // then any capture files already sitting in the output folders. Once; later it is a button.
+  void history.ready
+    .then(async () => {
+      const firstRun = history.isFirstRun;
+      const backfilled = await history.backfillFromCompleted(recordingsDir);
+      if (backfilled > 0) log.info(`History: added ${backfilled} earlier recordings`);
+      if (!firstRun) return;
+      const found = await rescan();
+      if (found > 0) log.info(`History: found ${found} existing captures`);
+    })
+    .catch((error: unknown) => log.error('History backfill failed', error));
   void recovery
     .startup()
     .catch((error: unknown) => log.error('Recovery scan failed', error))

@@ -108,6 +108,8 @@ Recordings are saved as WebM. For a recording in History (or on the result scree
 - **Remove from history** removes only the list entry (with a 5-second Undo). It never touches your file.
 - **Delete file** is a separate, confirmed action that moves the file to the **Recycle Bin**.
 - If a file was moved or deleted outside FrameCapt, the entry stays listed as "File moved or deleted" with **Locate...** to point it at the new place, **Remove**, or **Clear missing**.
+- **Find existing captures** (History, or the empty History page) adds screenshots and recordings that are in your output folders but not in the list, for example after a reinstall. It only reads files named like FrameCapt's own (`FrameCapt 2026-10-02 at 14.05.09.png`), never moves or changes them, and says how many it added. On a fresh start FrameCapt does this once by itself.
+- **Uninstalling** asks whether to remove your FrameCapt data (history, settings, editable projects) as well; the default and a timeout keep it. Your screenshots and recordings stay unless you tick **Also move my screenshots and recordings to the Recycle Bin**.
 - History keeps at most 1000 entries (older entries drop off the list; their files are never touched). It stores metadata and thumbnails only.
 
 ## Editing a saved screenshot

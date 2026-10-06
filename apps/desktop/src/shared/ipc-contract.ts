@@ -383,6 +383,12 @@ export const ipcContract = {
     response: z.object({ removed: z.number() }),
     roles: ['main'],
   },
+  /** Adds captures found in the output folders that history does not list (files only read). */
+  'history:rescan': {
+    request: z.undefined(),
+    response: z.object({ added: z.number() }),
+    roles: ['main'],
+  },
   /** Recordings: "Save a copy as..." of the finished WebM (a save dialog in main). */
   'history:saveCopy': {
     request: HistoryIdRequestSchema,

@@ -42,7 +42,8 @@ const HistoryFileSchema = z.object({
   version: z.literal(HISTORY_VERSION),
   /** Set once the recordings finished before history existed were added (see the service). */
   backfilled: z.literal(true).optional(),
-  items: z.array(HistoryItemSchema),
+  /** Each item is checked on its own (see `load`), so one unknown entry never costs the rest. */
+  items: z.array(z.unknown()),
 });
 
 export interface LoadResult {
@@ -54,11 +55,14 @@ export interface LoadResult {
 
 /**
  * `history.json`: a versioned list, written atomically (temp file, fsync, rename), newest first.
- * A damaged file is moved to `history.json.corrupt-<time>` and the history starts empty, so it
- * never blocks the app. Writes are serialized; callers await the one that holds their change.
+ * An item this build does not understand (a newer build's type or format) is kept as it is and
+ * written back unchanged, but never listed. A damaged file (or an unsupported version) is moved to
+ * `history.json.corrupt-<time>` and the history starts empty, so it never blocks the app. Writes are serialized; callers await the one that holds their change.
  */
 export class HistoryStore {
   private list: HistoryItem[] = [];
+  /** Items that did not parse, in file order; opaque, they only count toward the cap. */
+  private foreign: unknown[] = [];
   private backfilledFlag = false;
   private writes: Promise<void> = Promise.resolve();
 
@@ -83,7 +87,14 @@ export class HistoryStore {
     }
     try {
       const parsed = HistoryFileSchema.parse(JSON.parse(text));
-      this.list = sortNewestFirst(parsed.items);
+      const valid: HistoryItem[] = [];
+      this.foreign = [];
+      for (const raw of parsed.items) {
+        const item = HistoryItemSchema.safeParse(raw);
+        if (item.success) valid.push(item.data);
+        else this.foreign.push(raw);
+      }
+      this.list = sortNewestFirst(valid);
       this.backfilledFlag = parsed.backfilled === true;
       return { existed: true, reset: false };
     } catch {
@@ -91,6 +102,7 @@ export class HistoryStore {
       await fs.promises.rename(this.file, aside).catch(() => undefined);
       log.warn('History file was damaged; it was set aside and the history starts empty');
       this.list = [];
+      this.foreign = [];
       return { existed: true, reset: true };
     }
   }
@@ -114,7 +126,7 @@ export class HistoryStore {
   /** Adds or replaces (same id) an item; returns the items that fell off the end of the cap. */
   async put(item: HistoryItem): Promise<HistoryItem[]> {
     this.list = sortNewestFirst([...this.list.filter((other) => other.id !== item.id), item]);
-    const dropped = this.list.splice(this.maxItems);
+    const dropped = this.list.splice(Math.max(0, this.maxItems - this.foreign.length));
     await this.save();
     return dropped;
   }
@@ -151,7 +163,7 @@ export class HistoryStore {
       const body = {
         version: HISTORY_VERSION,
         ...(this.backfilledFlag && { backfilled: true as const }),
-        items: this.list,
+        items: [...this.list, ...this.foreign],
       };
       await fs.promises.mkdir(this.dir, { recursive: true });
       await writeFileAtomic(this.file, Buffer.from(`${JSON.stringify(body, null, 2)}\n`, 'utf8'));

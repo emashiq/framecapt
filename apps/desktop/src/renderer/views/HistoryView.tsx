@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { announce, notify } from '../lib/notify';
-import { Camera, Clock, Search, SearchX, Video, X } from 'lucide-react';
+import { Camera, Clock, FolderSearch, Search, SearchX, Video, X } from 'lucide-react';
 import type { HistoryItemView, HistoryType } from '../../shared/history-ipc';
 import { AlertConfirm } from '../components/ui/AlertConfirm';
 import { Button } from '../components/ui/Button';
@@ -335,6 +335,21 @@ export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: His
     );
   }
 
+  const findExisting = (): void => {
+    void window.framecapt.invoke('history:rescan').then((response) => {
+      if (!response.ok) notify.error(response.error);
+      else {
+        const { added } = response.data;
+        notify.info(
+          added > 0
+            ? `Added ${added} ${added === 1 ? 'capture' : 'captures'}`
+            : 'No new captures found',
+        );
+        reload();
+      }
+    });
+  };
+
   const activeId = tabStopId && items.some((i) => i.id === tabStopId) ? tabStopId : items[0]?.id;
 
   return (
@@ -390,6 +405,15 @@ export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: His
                 </button>
               ) : null}
             </label>
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid="history-find-existing"
+              icon={<FolderSearch className="size-4" aria-hidden="true" />}
+              onClick={findExisting}
+            >
+              Find existing captures
+            </Button>
             {missingCount > 0 ? (
               <Button
                 size="sm"
@@ -460,6 +484,14 @@ export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: His
                 onClick={startRecording}
               >
                 Record your screen
+              </Button>
+              <Button
+                variant="ghost"
+                data-testid="history-empty-find"
+                icon={<FolderSearch className="size-4" aria-hidden="true" />}
+                onClick={findExisting}
+              >
+                Find existing captures
               </Button>
             </div>
           }

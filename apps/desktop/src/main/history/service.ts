@@ -189,6 +189,21 @@ export class HistoryService {
     return this.store.get(id);
   }
 
+  /** The item that points at `file` (same path, any case on Windows), if any. */
+  findByPath(file: string): HistoryItem | undefined {
+    return this.existingFor(file);
+  }
+
+  /** Items in the list; unlisted items of a newer build are not counted here. */
+  get size(): number {
+    return this.store.count;
+  }
+
+  /** True when `history.json` did not exist at load and nothing was backfilled yet (a fresh start). */
+  get isFirstRun(): boolean {
+    return !this.existedAtLoad && !this.store.backfilled;
+  }
+
   /** The file of an item, for the media protocol (history items only). */
   filePathOf(id: string): string | undefined {
     return this.get(id)?.path;

@@ -90,6 +90,7 @@ export function registerHistoryHandlers(
   bulk: BulkExportService,
   capability: () => Promise<Mp4Capability>,
   recordingsDir: () => string,
+  rescan: () => Promise<number>,
 ): void {
   handle('history:list', { roles: ['main'] }, (request) => history.list(request));
   handle('history:consumeNotice', { roles: ['main'] }, async () => ({
@@ -190,6 +191,8 @@ export function registerHistoryHandlers(
   handle('history:clearMissing', { roles: ['main'] }, async () => ({
     removed: await history.clearMissing(),
   }));
+
+  handle('history:rescan', { roles: ['main'] }, async () => ({ added: await rescan() }));
 
   // The finished WebM is already a complete file in Videos/FrameCapt; this only copies it.
   handle('history:saveCopy', { roles: ['main'] }, async (request) => {
