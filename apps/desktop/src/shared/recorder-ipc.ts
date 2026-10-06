@@ -33,6 +33,8 @@ export const RecordOptionsSchema = z.strictObject({
    * manifests written before it existed still parse.
    */
   follow: z.strictObject({ zoom: z.union(FOLLOW_ZOOM_LITERALS) }).optional(),
+  /** Compressed storage: record at a lower bitrate. Optional, so older manifests still parse. */
+  compressed: z.boolean().optional(),
 });
 export type RecordOptions = z.infer<typeof RecordOptionsSchema>;
 

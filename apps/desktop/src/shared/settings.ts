@@ -60,6 +60,8 @@ export const RecordingSettingsSchema = z.object({
   autoExportMp4: z.boolean(),
   /** Follow-mouse recording of a screen: the zoom of the window that follows the mouse, or off. */
   followMouseZoom: z.enum(FOLLOW_MOUSE_VALUES),
+  /** "compressed": after saving, the WebM is re-encoded to a smaller MP4 (post-processing only). */
+  storage: z.enum(['original', 'compressed']),
 });
 
 export const ShortcutSettingsSchema = z.object({
@@ -124,6 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
     outputDir: null,
     autoExportMp4: false,
     followMouseZoom: 'off',
+    storage: 'original',
   },
   shortcuts: { ...DEFAULT_SHORTCUTS },
   editorShortcuts: { ...DEFAULT_EDITOR_SHORTCUTS },
@@ -353,6 +356,8 @@ export function recordOptionsFromSettings(recording: Settings['recording']): Rec
     fps: recording.fps,
     countdown: recording.countdown,
     ...followOption(recording.followMouseZoom),
+    // Only the recorder's bitrate depends on it; the re-encode itself reads the setting at save time.
+    ...(recording.storage === 'compressed' && { compressed: true }),
   };
 }
 

@@ -107,6 +107,10 @@ The Capture view shows one calm card per candidate: "We found an unfinished reco
 
 `before-quit` stops the recording and waits for finalization with a hard cap of 15 s. When the cap is exceeded the running ffmpeg process is killed, the app quits, and the manifest stays `stopping`/`finalizing` for the next start. The renderer is never asked to quit before the recorder had the chance to flush.
 
+### 7.1 Compressed storage (post-processing)
+
+With the setting `recording.storage = 'compressed'`, a saved single-source WebM is queued as a compress job (`CompressService`, on the shared `JobRunner`) after the session was finalized and added to history. The job writes `<name>.mp4` through a `.partial` file (libx264 medium, CRF 28, yuv420p, even scale, AAC 96 kbps, `+faststart`), probes it (H.264, audio kept, duration within 0.5 s), renames it, updates the history item in place (path, format, size; id, thumbnail and date kept) and only then moves the WebM to the Recycle Bin (`shell.trashItem`). Failure, cancel or quit leave the WebM and its history item unchanged and remove the partial file; quitting cancels the running job like a running MP4 export. The setting is read at save time and is not part of the session manifest; the recorder only gets an optional `compressed` option (video bitrate x 0.6), so older manifests parse unchanged. Sessions that are recovered are not compressed automatically.
+
 ## 8. Measured limits
 
 Host: Windows 11 Pro 10.0.26300, AMD Ryzen 7 7700, 63 GB RAM, Electron 44.5.1, FFmpeg 9.0.2 essentials, userData volume with 242.7 GB free (`fs.statfs` works there: `bavail * bsize`). Evidence: `docs/evidence/phase06/ffmpeg-integration.json` (real ffmpeg, synthetic VP9 + Opus live stream cut at arbitrary points) and `docs/evidence/phase06/recovery-native.json` (real screen + system audio recordings, process tree killed).

@@ -78,13 +78,18 @@ export const ExportMp4ResponseSchema = z.union([
 ]);
 export const ExportCancelRequestSchema = z.strictObject({ jobId: z.string().min(1).max(64) });
 
+/** What the job is: the user's MP4 export (default) or the compressed-storage re-encode. */
+const ExportKindSchema = z.enum(['export', 'compress']).optional();
+
 export const ExportProgressEventSchema = z.object({
+  kind: ExportKindSchema,
   jobId: z.string(),
   historyId: HistoryIdSchema,
   /** 0..99 while encoding; null when the length of the recording is not known. */
   percent: z.number().nullable(),
 });
 export const ExportDoneEventSchema = z.object({
+  kind: ExportKindSchema,
   jobId: z.string(),
   historyId: HistoryIdSchema,
   path: z.string(),
@@ -92,6 +97,7 @@ export const ExportDoneEventSchema = z.object({
   itemId: HistoryIdSchema.nullable(),
 });
 export const ExportFailedEventSchema = z.object({
+  kind: ExportKindSchema,
   jobId: z.string(),
   historyId: HistoryIdSchema,
   code: z.string(),

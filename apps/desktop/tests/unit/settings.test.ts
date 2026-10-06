@@ -52,6 +52,7 @@ describe('defaults', () => {
       systemAudio: false,
       outputDir: null,
       autoExportMp4: false,
+      storage: 'original',
     });
     expect(DEFAULT_SETTINGS.shortcuts).toEqual(DEFAULT_SHORTCUTS);
   });
@@ -194,6 +195,17 @@ describe('record options', () => {
       systemAudio: true,
       quality: 'source',
     });
+  });
+
+  it('storage defaults to original, patches to compressed and reaches the recorder as an optional flag', () => {
+    expect(DEFAULT_SETTINGS.recording.storage).toBe('original');
+    const loaded = parseSettings({ version: 1, recording: { fps: 60 } });
+    expect(loaded.ok && loaded.settings.recording.storage).toBe('original');
+    const next = applyPatch(DEFAULT_SETTINGS, { recording: { storage: 'compressed' } });
+    expect(next.recording.storage).toBe('compressed');
+    expect(recordOptionsFromSettings(next.recording)).toMatchObject({ compressed: true });
+    expect('compressed' in recordOptionsFromSettings(DEFAULT_SETTINGS.recording)).toBe(false);
+    expect(SettingsPatchSchema.safeParse({ recording: { storage: 'zip' } }).success).toBe(false);
   });
 
   it('carries the phase-05 localStorage options over', () => {

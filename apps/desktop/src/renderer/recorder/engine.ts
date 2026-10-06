@@ -4,7 +4,13 @@ import type { AudioSource } from '../../shared/recorder-machine';
 import { followCrop, followCropSize, type FollowZoom } from '../../shared/compositor-layout';
 import type { Size } from '../../shared/geometry';
 import type { Rect } from '../../shared/rect';
-import { AUDIO_BITRATE, fitWithin, qualityLimit, videoBitrate } from '../../shared/recording';
+import {
+  AUDIO_BITRATE,
+  COMPRESSED_BITRATE_FACTOR,
+  fitWithin,
+  qualityLimit,
+  videoBitrate,
+} from '../../shared/recording';
 import { createAudioMix, type AudioMix } from '../capture/audio-graph';
 import { createCompositor } from '../capture/compositor';
 import { CaptureError, mapMediaError } from '../capture/errors';
@@ -36,6 +42,7 @@ interface Prepared {
   width: number;
   height: number;
   fps: number;
+  bitrateFactor: number;
   audio: { mic: boolean; system: boolean };
   unwatch: () => void;
 }
@@ -224,6 +231,7 @@ export class RecorderEngine {
         width,
         height,
         fps: options.fps,
+        bitrateFactor: options.compressed ? COMPRESSED_BITRATE_FACTOR : 1,
         audio: { mic, system },
         unwatch: () => undefined,
       };
@@ -364,6 +372,7 @@ export class RecorderEngine {
         videoBitsPerSecond: videoBitrate(
           { width: prepared.width, height: prepared.height },
           prepared.fps,
+          prepared.bitrateFactor,
         ),
         ...(audioTrack && { audioBitsPerSecond: AUDIO_BITRATE }),
       });
