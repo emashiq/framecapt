@@ -157,6 +157,45 @@ describe('recordings', () => {
     expect(thumbs()).toEqual([`${id}.png`]);
   });
 
+  it('replaceVideoFile points the item at the MP4 and keeps id, thumbnail and date', async () => {
+    const { service } = makeService();
+    const { id } = await addVideo(service, 'r.webm', { createdAt: 5 });
+    await service.idle();
+    const mp4 = writeFile('r.mp4', 'mp4');
+    const before = (await service.list()).items[0];
+    expect(
+      await service.replaceVideoFile(id, {
+        path: mp4,
+        sizeBytes: 3,
+        durationMs: 4100,
+        width: 1280,
+        height: 720,
+        hasAudio: true,
+      }),
+    ).toBe(true);
+    const items = (await service.list()).items;
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id,
+      path: mp4,
+      format: 'mp4',
+      sizeBytes: 3,
+      durationMs: 4100,
+      hasThumb: true,
+      createdAt: before?.createdAt,
+    });
+    expect(
+      await service.replaceVideoFile('11111111-1111-4111-8111-111111111111', {
+        path: mp4,
+        sizeBytes: 3,
+        durationMs: 1,
+        width: 1,
+        height: 1,
+        hasAudio: false,
+      }),
+    ).toBe(false);
+  });
+
   it('seeks to half of a very short recording', async () => {
     const { service, tools } = makeService();
     await addVideo(service, 'short.webm', { durationMs: 600 });

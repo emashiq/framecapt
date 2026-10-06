@@ -21,6 +21,8 @@ export const RecordOptionsSchema = z.strictObject({
   fps: z.union([z.literal(FPS_VALUES[0]), z.literal(FPS_VALUES[1])]),
   /** A 3-2-1 countdown before recording starts. */
   countdown: z.boolean(),
+  /** Compressed storage: record at a lower bitrate. Optional, so older manifests still parse. */
+  compressed: z.boolean().optional(),
 });
 export type RecordOptions = z.infer<typeof RecordOptionsSchema>;
 

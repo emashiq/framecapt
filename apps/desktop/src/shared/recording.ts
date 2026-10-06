@@ -39,10 +39,16 @@ export function qualityLimit(quality: RecordQuality): Size | null {
   return quality === '1080p' ? MAX_1080P : null;
 }
 
-/** About 8 Mbps for 1920 x 1080 at 30 fps, scaled with pixels and frame rate, within 2.5-30 Mbps. */
-export function videoBitrate(size: Size, fps: number): number {
+/** The recording bitrate factor for compressed storage. */
+export const COMPRESSED_BITRATE_FACTOR = 0.6;
+
+/**
+ * About 8 Mbps for 1920 x 1080 at 30 fps, scaled with pixels and frame rate, within 2.5-30 Mbps,
+ * then multiplied by `factor` (compressed storage: 0.6, so 1.5-18 Mbps).
+ */
+export function videoBitrate(size: Size, fps: number, factor = 1): number {
   const scaled = 8_000_000 * ((size.width * size.height) / (1920 * 1080)) * (fps / 30);
-  return Math.round(Math.min(30_000_000, Math.max(2_500_000, scaled)));
+  return Math.round(Math.min(30_000_000, Math.max(2_500_000, scaled)) * factor);
 }
 
 export const AUDIO_BITRATE = 128_000;

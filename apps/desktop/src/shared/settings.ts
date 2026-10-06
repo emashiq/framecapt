@@ -51,6 +51,8 @@ export const RecordingSettingsSchema = z.object({
   /** Null = Videos/FrameCapt. Set only through `settings:chooseOutputDir`. */
   outputDir: OutputDirSchema,
   autoExportMp4: z.boolean(),
+  /** "compressed": after saving, the WebM is re-encoded to a smaller MP4 (post-processing only). */
+  storage: z.enum(['original', 'compressed']),
 });
 
 export const ShortcutSettingsSchema = z.object({
@@ -113,6 +115,7 @@ export const DEFAULT_SETTINGS: Settings = {
     systemAudio: false,
     outputDir: null,
     autoExportMp4: false,
+    storage: 'original',
   },
   shortcuts: { ...DEFAULT_SHORTCUTS },
   editorShortcuts: { ...DEFAULT_EDITOR_SHORTCUTS },
@@ -320,6 +323,8 @@ export function recordOptionsFromSettings(recording: Settings['recording']): Rec
     quality: recording.quality,
     fps: recording.fps,
     countdown: recording.countdown,
+    // Only the recorder's bitrate depends on it; the re-encode itself reads the setting at save time.
+    ...(recording.storage === 'compressed' && { compressed: true }),
   };
 }
 

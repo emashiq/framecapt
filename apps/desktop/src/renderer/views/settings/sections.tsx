@@ -282,6 +282,10 @@ const QUALITY = [
   { value: '1080p', label: '1080p' },
   { value: 'source', label: 'Source' },
 ] as const;
+const STORAGE = [
+  { value: 'original', label: 'Original (best quality, larger files)' },
+  { value: 'compressed', label: 'Compressed (smaller files)' },
+] as const;
 const FPS = [
   { value: 30, label: '30' },
   { value: 60, label: '60' },
@@ -407,6 +411,28 @@ export function RecordingSection({ onReset }: SectionProps) {
             onCheckedChange={(autoExportMp4) =>
               void updateSettings({ recording: { autoExportMp4 } })
             }
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Video storage"
+        description={
+          mp4Unavailable
+            ? (caps?.reason ?? 'MP4 is not available in this build.')
+            : recording.storage === 'compressed'
+              ? 'Recordings are re-encoded to a smaller MP4 after you stop. The original WebM is moved to the Recycle Bin once the compressed file is verified.'
+              : 'Original keeps the recording as saved (best quality, larger files).'
+        }
+      >
+        {({ labelledBy }) => (
+          <Select
+            className="w-80 max-w-full"
+            value={recording.storage}
+            options={STORAGE}
+            labelledBy={labelledBy}
+            disabled={mp4Unavailable}
+            data-testid="setting-storage"
+            onChange={(storage) => void updateSettings({ recording: { storage } })}
           />
         )}
       </SettingRow>

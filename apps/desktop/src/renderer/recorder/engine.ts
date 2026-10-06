@@ -1,7 +1,12 @@
 import type { EngineCommand, EngineEvent, EnginePrepareCommand } from '../../shared/recorder-ipc';
 import { CHUNK_TIMESLICE_MS } from '../../shared/recorder-ipc';
 import type { AudioSource } from '../../shared/recorder-machine';
-import { AUDIO_BITRATE, qualityLimit, videoBitrate } from '../../shared/recording';
+import {
+  AUDIO_BITRATE,
+  COMPRESSED_BITRATE_FACTOR,
+  qualityLimit,
+  videoBitrate,
+} from '../../shared/recording';
 import { createAudioMix, type AudioMix } from '../capture/audio-graph';
 import { CaptureError, mapMediaError } from '../capture/errors';
 import { detectRecorderFormats } from '../capture/recorder-probe';
@@ -32,6 +37,7 @@ interface Prepared {
   width: number;
   height: number;
   fps: number;
+  bitrateFactor: number;
   audio: { mic: boolean; system: boolean };
   unwatch: () => void;
 }
@@ -206,6 +212,7 @@ export class RecorderEngine {
         width,
         height,
         fps: options.fps,
+        bitrateFactor: options.compressed ? COMPRESSED_BITRATE_FACTOR : 1,
         audio: { mic, system },
         unwatch: () => undefined,
       };
@@ -305,6 +312,7 @@ export class RecorderEngine {
         videoBitsPerSecond: videoBitrate(
           { width: prepared.width, height: prepared.height },
           prepared.fps,
+          prepared.bitrateFactor,
         ),
         ...(audioTrack && { audioBitsPerSecond: AUDIO_BITRATE }),
       });

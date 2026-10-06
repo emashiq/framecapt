@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { app, session, shell } from 'electron';
 import { BulkExportService } from './history/bulk-export';
+import { CompressService, postSaveAction } from './history/compress-service';
 import { ExportService } from './history/export-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
 import { createAfterCapture } from './shots/after-capture';
@@ -11,6 +12,7 @@ import { probeWritable } from './settings/output-dirs';
 import type { TrayInfo } from './tray-info';
 import { HistoryService } from './history/service';
 import { detectMp4Capability, MP4_UNAVAILABLE_MESSAGE, type Mp4Capability } from './media/export';
+import { JobRunner } from './media/job-runner';
 import { createMediaTools, FfmpegError, resolveFfmpeg, type MediaTools } from './media/ffmpeg';
 import { installMediaProtocol, MediaRegistry } from './recording/media-protocol';
 import { RecoveryService } from './recording/recovery';
@@ -82,6 +84,18 @@ function emitToMain<
   E extends 'export:progress' | 'export:done' | 'export:failed' | 'history:bulkProgress',
 >(event: E, payload: IpcEventPayload<E>): void {
   for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
+}
+
+/** A free `<name>.mp4` next to the recording (no dialog). */
+async function freeMp4Path(source: { path: string }): Promise<string> {
+  const dir = path.dirname(source.path);
+  const base = path.basename(source.path, path.extname(source.path));
+  for (let attempt = 1; attempt < 1000; attempt += 1) {
+    const name = attempt === 1 ? `${base}.mp4` : `${base} (${attempt}).mp4`;
+    const candidate = path.join(dir, name);
+    if (!fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error('No free MP4 name.');
 }
 
 /** What the desktop layer (tray, shortcuts) drives: the same objects the IPC handlers use. */
@@ -176,21 +190,29 @@ export function registerHandlers(
     log.info(`MP4 export ${capability.available ? 'available (libx264 + aac)' : 'unavailable'}`);
     return capability;
   });
+  // One ffmpeg job at a time: the user's MP4 exports and the compressed-storage jobs share a queue.
+  const runner = new JobRunner();
   const exports = new ExportService({
     history,
     tools,
     capability: () => mp4Capability,
     pickDestination: (source) => mp4SaveDialog(source, outputDir()),
-    autoDestination: async (source) => {
-      const dir = path.dirname(source.path);
-      const base = path.basename(source.path, path.extname(source.path));
-      for (let attempt = 1; attempt < 1000; attempt += 1) {
-        const name = attempt === 1 ? `${base}.mp4` : `${base} (${attempt}).mp4`;
-        const candidate = path.join(dir, name);
-        if (!fs.existsSync(candidate)) return candidate;
-      }
-      throw new Error('No free MP4 name.');
+    autoDestination: freeMp4Path,
+    runner,
+    emit: {
+      progress: (event) => emitToMain('export:progress', event),
+      done: (event) => emitToMain('export:done', event),
+      failed: (event) => emitToMain('export:failed', event),
     },
+  });
+  const compress = new CompressService({
+    history,
+    tools,
+    capability: () => mp4Capability,
+    storage: () => settings.store.get().recording.storage,
+    destination: freeMp4Path,
+    trashItem: (file) => shell.trashItem(file),
+    runner,
     emit: {
       progress: (event) => emitToMain('export:progress', event),
       done: (event) => emitToMain('export:done', event),
@@ -226,9 +248,11 @@ export function registerHandlers(
       }
     },
     onSaved: (historyId) => {
-      if (historyId && settings.store.get().recording.autoExportMp4) {
-        void exports.startAuto(historyId);
-      }
+      if (!historyId) return;
+      // One MP4, never two: compressed storage wins over "Export MP4 automatically".
+      const action = postSaveAction(settings.store.get().recording);
+      if (action === 'compress') void compress.startIfEnabled(historyId);
+      else if (action === 'export') void exports.startAuto(historyId);
     },
     // E2E builds only: a slow engine start, to test a stop that arrives while starting.
     ...(__FRAMECAPT_E2E__ &&

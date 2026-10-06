@@ -419,6 +419,20 @@ export class HistoryService {
     return { id };
   }
 
+  /**
+   * Points a recording at its compressed MP4 (compressed storage): same id, thumbnail and
+   * creation time, new path, format and size. False when the item is gone.
+   */
+  async replaceVideoFile(
+    id: string,
+    input: Pick<NewVideo, 'path' | 'durationMs' | 'width' | 'height' | 'sizeBytes' | 'hasAudio'>,
+  ): Promise<boolean> {
+    await this.ready;
+    const updated = await this.store.update(id, { ...input, format: 'mp4' });
+    if (updated) this.changed();
+    return updated !== undefined;
+  }
+
   private queueThumbnail(item: HistoryItem): void {
     const task = this.thumbQueue.then(() => this.makeVideoThumbnail(item));
     this.thumbQueue = task.catch(() => undefined);
