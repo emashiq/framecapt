@@ -22,7 +22,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 | 08 Desktop polish | VERIFIED | settings/shortcuts/tray; axe 0 serious; idle CPU 0.04 %; flakes root-caused |
 | 09 Security/reliability/perf | VERIFIED | 13 findings fixed; 30-min 1080p30 bench PASS (29.72 fps, drift +10 ms); lead audit agreed |
 | 10 Packaging/CI/updates | VERIFIED | Squirrel installer (UNSIGNED) installed/captured/uninstalled on host; app:// scheme, fuse off; CI files |
-| 11 Open source & sales prep | VERIFIED | canonical GPLv3, notices (53 deps, no incompatibility), user/build docs, commercial plan, provider research (none selected) |
+| 11 Open source & sales prep | VERIFIED | canonical GPLv3, notices (53 deps, no incompatibility), user/build docs, provider research (none selected) |
 | 12 Final validation | VERIFIED | working local beta on host; NOT public-release ready (unsigned + owner tasks) — docs/RELEASE-READINESS.md |
 
 ## Phase log
@@ -106,7 +106,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Risks: signing never exercised; workflows never run on GitHub; no update feed; Win10/arm64/upgrade/SmartScreen untested; e2e worker-crash flake (→ phase 12).
 
 ### Phase 11 — Open source & sales preparation (VERIFIED 2026-10-02, docs only)
-- Files: LICENSE (canonical GPLv3 from gnu.org, 674 lines), THIRD_PARTY_NOTICES.md (53 prod deps: 50 MIT, ISC, 0BSD, OFL-1.1; FFmpeg 9.0.2 = n9.0.2 tag, source URL verified), README, CONTRIBUTING (no CLA), CODE_OF_CONDUCT (Contributor Covenant 2.1, contact placeholder), SECURITY/PRIVACY (placeholders, no invented contacts), CHANGELOG, .github issue/PR templates, docs/{user-guide,building-on-windows,licensing,commercial-plan,release-notes-0.1.0,product-copy,checkout-integration-requirements,OWNER-TASKS}.md.
+- Files: LICENSE (canonical GPLv3 from gnu.org, 674 lines), THIRD_PARTY_NOTICES.md (53 prod deps: 50 MIT, ISC, 0BSD, OFL-1.1; FFmpeg 9.0.2 = n9.0.2 tag, source URL verified), README, CONTRIBUTING (no CLA), CODE_OF_CONDUCT (Contributor Covenant 2.1, contact placeholder), SECURITY/PRIVACY (placeholders, no invented contacts), CHANGELOG, .github issue/PR templates, docs/{user-guide,building-on-windows,release-notes-0.1.0,product-copy,OWNER-TASKS}.md.
 - Commercial: $15 current major + 12 months updates, optional $29 supporter, no gating/keys, GPL rights preserved. Providers (official pages 2026-10-02): Stripe no BD; Lemon Squeezy & Gumroad list BD bank payouts; Paddle/FastSpring unverified → none selected.
 - Checks: prettier --check . and lint pass (lead reviewed README for overstatements: none).
 - Open (→ phase 12): package must ship Framelet LICENSE + THIRD_PARTY_NOTICES; OFL font & Squirrel stub notices flagged for owner review; README home screenshot shows a test-modified shortcut.
@@ -122,7 +122,7 @@ User approved native tests on this host: real capture, 30-min benchmark, silent 
 - Product renamed from the working name Framelet to FrameCapt (owner decision) across code, tests, scripts, assets, configs and current docs. Agent definition names `framelet-impl-*` and historical entries above/under docs/evidence keep the old name. Provisional; trademark clearance still pending. No user-data migration (never released; userData follows productName).
 
 ## Recovery instructions
-If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED using `capture-prompts/RESUME.md`.
+If a session ends: read this file, `git log --oneline`, `git status`; resume at the first phase not VERIFIED.
 
 ### Branding & publish (2026-10-03)
 - Owner decisions: product renamed to FrameCapt (commit b6f60c1); license stays GPL-3.0-only; push to private repo github.com/emashiq/framecapt (remote had only an MIT LICENSE "Initial commit" → merged with GPL LICENSE kept).
@@ -146,3 +146,6 @@ If a session ends: read this file, `git log --oneline`, `git status`; resume at 
 - Real bug found by the Linux "no network" test: Chromium's session spellchecker downloaded the en-US dictionary from redirector.gvt1.com on Linux. Fixed on all platforms (`--disable-spell-checking`, spellchecker off, no languages) with a unit test. Affected the alpha.2 Linux packages.
 - Rapid start/stop investigated as a possible product race: none (stop during start = cancel; late "started" ignored) — regression unit + e2e with E2E-only start-delay hook added.
 - alpha.3 builds: Windows make + smoke:packaged OK (FileVersion 0.1.0.3); Linux clean-clone build in WSL: 769 pass/18 skipped, make, smoke:packaged OK, smoke:linux 25/25. smoke:installed (Windows) skipped: owner's alpha.1 install running.
+
+### Desktop only (2026-10-06)
+- Owner decision: the repository is the desktop app only. The account, organization, SSO, offline-grant, API and website work was removed from this branch (preserved on branch `login-website`); the app has no sign-in and works as alpha.3 did, with the later desktop features kept.

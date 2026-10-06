@@ -1,5 +1,10 @@
 # Testing
 
+Install from the repository root with `npm ci`. Root commands forward to
+`apps/desktop`; package output is under `apps/desktop/out/`, FFmpeg cache under
+`apps/desktop/vendor/ffmpeg/`, and checked-in evidence remains under root `docs/`.
+For a focused unit selector, use `npm run test:desktop -- tests/unit/<name>.test.ts`.
+
 | Suite               | Command                                    | Needs                                           | What it proves                                                                                      |
 | ------------------- | ------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Lint / types        | `npm run lint`, `npm run typecheck`        | Node 24                                         | Style and the three TypeScript projects (main/shared, renderer, e2e)                                |
@@ -23,19 +28,24 @@ FRAMECAPT_WRITE_EVIDENCE=1 npm run test:native
 
 - Unset (the default): every test still produces its screenshots and JSON and asserts on them, but they go to a scratch folder, `%TEMP%\framecapt-evidence-scratch\<phase>\`. Nothing under `docs/evidence` changes.
 - `FRAMECAPT_WRITE_EVIDENCE=1`: the files are written to `docs/evidence/<phase>/` (this is how the committed evidence was produced).
-- The mechanism is one helper, `evidenceDirFor(repoRoot, phase)` in `tests/native/evidence.ts`. Evidence JSON always goes through `writeEvidenceJson`, which redacts window titles and the Windows user name.
+- The mechanism is one helper, `evidenceDirFor(desktopRoot, phase)` in `apps/desktop/tests/native/evidence.ts`. Evidence JSON always goes through `writeEvidenceJson`, which redacts window titles and the Windows user name.
 - The integration tests that already used `FRAMECAPT_WRITE_EVIDENCE` (`ffmpeg-integration`, `export-integration`) are unchanged. `npm run smoke:installed` and `npm run bench:recording` are explicit evidence-producing commands and always write theirs.
 - Media evidence (`*.webm`, `*.mp4`, most `*.png`) stays gitignored because it shows the real desktop; only mock-content UI screenshots are tracked.
 
 ## Why the packaged exe is not driven by Playwright
 
-The shipped build has `EnableNodeCliInspectArguments` off, which Playwright needs. E2E therefore runs the Forge build output (`.vite/build`, `electron .`) with the mock provider compiled in (`scripts/package-e2e.mjs`); `npm run check:mocks` proves that no production build and no packaged `app.asar` contains it. The packaged and installed exes are exercised by `smoke:packaged` / `smoke:installed`, which use the Chromium remote-debugging port for read-only UI checks and real OS input (SendInput) for capture.
+The shipped build has `EnableNodeCliInspectArguments` off, which Playwright needs. E2E therefore runs the Forge build output (`apps/desktop/.vite/build`, `electron .`) with the mock provider compiled in (`apps/desktop/scripts/package-e2e.mjs`); `npm run check:mocks` proves that no production build and no packaged `app.asar` contains it. The packaged and installed exes are exercised by `smoke:packaged` / `smoke:installed`, which use the Chromium remote-debugging port for read-only UI checks and real OS input (SendInput) for capture.
 
 ## What runs where
 
 - **Local, interactive Windows host**: everything.
-- **GitHub Actions (`.github/workflows/ci.yml`, `windows-latest`)**: lint, typecheck, unit tests, the mock-provider e2e suite, `npm run make` and `check:mocks`. Native capture tests, the installed smoke and the 30-minute benchmark are **not** run on hosted runners (no real display, audio or shortcut environment is guaranteed, and the installed smoke installs software). They remain local gates; see `docs/packaging.md`.
+- **GitHub Actions (`.github/workflows/ci.yml`)**: build only. Two independent jobs run `npm ci` and `npm run make` on Windows and Linux, then upload the Windows installer/ZIP and Linux .deb/AppImage. CI does not run lint, typecheck, unit, E2E, native, smoke or benchmark checks.
+- **Development checkpoints**: run focused checks for the behavior changed. Run the broader relevant suites at integration checkpoints and before release, rather than repeating every suite after every implementation phase. Production-package checks (`npm run check:mocks`) and capture/installation validation remain available locally; see `docs/packaging.md`.
 - Screen-reader testing and mixed-DPI / rotated / negative-origin monitors have not been performed on real hardware (see `docs/agent-progress.md` risks).
+
+## UI tests for the title bar and command center
+
+`tests/e2e/command-center.spec.ts` covers the top bar: the menu bar by keyboard and mouse, the command center (open by click, `Ctrl+K`, `Ctrl+Shift+P`; fuzzy search; Enter starting the same selection overlay as the button; saved captures found by name; disabled commands with reasons while a recording runs; rebinding the open key; the narrow layout) and axe scans of the bar with the palette or a menu open in both themes (set `FRAMECAPT_E2E_SHOTS=<folder>` to also write pictures of the bar for a human to look at). `tests/e2e/shortcut-editing.spec.ts` covers swapping, reset all, the filter, reserved combinations and the editor keys being rebound and then working in the real editor; `tests/e2e/a11y.spec.ts` scans the title bar and the open menu in four states, in both themes.
 
 ## Known flake: the Playwright worker dies during `electron.launch()`
 
@@ -57,3 +67,6 @@ The hosted `windows-latest` runner has **one physical core (two threads), no GPU
 - Tests that were racing on slow machines and were made deterministic, not looser: the 3-2-1 countdown (digits are recorded by a page-side observer; the "3" may be missed if the window attaches late), recovery (waits for the session folder to go and ignores `.partial.webm` files), the pause test (its duration bound follows the measured wall clock), and "rapid start and stop" (it used to send Stop while the recorder was still `idle`, which is a no-op, so the second Start then ran; it now waits until the recorder has left `idle`).
 - Product check for that last one: a Stop while the engine is still starting is a cancel and a late "started" from a slow engine is ignored (`tests/unit/recorder-races.test.ts`, and `tests/e2e/recording-slow-start.spec.ts` with the E2E-only `FRAMECAPT_E2E_ENGINE_START_DELAY_MS` hook). No recorder can be left in `recording` by a quick Start/Stop.
 - Linux (`ubuntu-latest`): the network test samples sockets with `ss`. It found a real leak, fixed on all platforms: the session spellchecker downloaded a Hunspell dictionary from Google (`src/main/security.ts` `disableSpellChecker`, `tests/unit/spellchecker.test.ts`).
+
+## Product media
+

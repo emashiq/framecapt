@@ -4,6 +4,11 @@ All notable changes to FrameCapt are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+- CI now only builds Windows installer/ZIP and Linux .deb/AppImage artifacts. Automated test and smoke jobs are removed from CI; local validation commands remain available.
+- **Desktop only, no accounts.** The repository is now the Electron desktop app only. There is no backend API, no website, no sign-in, no account menu, no lock screen, no organizations or workspaces, no offline grants and no OIDC; the app works as the alpha.3 builds did (no sign-in) and keeps the later desktop features (custom title bar, command center and palette, professional editor, multi-select and bulk actions in History, customizable shortcuts). The account, organization, website and API work is preserved on the branch `login-website`.
+- **Privacy statement.** Captures are never uploaded and there is no telemetry or account service; the app makes no network requests of its own.
+- Existing local history files still load; ownership fields written by account builds are ignored.
+
 ## [0.1.0-alpha.3] - 2026-10-03
 
 Privacy fix release ([release notes](docs/release-notes-0.1.0-alpha.3.md)).

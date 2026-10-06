@@ -8,7 +8,7 @@ FrameCapt is built and tested on Windows 11 x64. Other platforms are not support
 - **Node.js 24** (the project was developed with 24.15.0) and **npm** (11.12.1 was used). One lockfile (`package-lock.json`) is committed; use `npm ci`, not `npm install`.
 - **git**.
 - Internet access for the first `npm ci` and for downloading Electron and FFmpeg (both are pinned by SHA-256).
-- **FFmpeg is not installed by you**: `scripts/fetch-ffmpeg.mjs` downloads the pinned FFmpeg 9.0.2 build (Gyan "essentials", about 115 MB zip, GPL-3.0-or-later; see [ffmpeg.md](ffmpeg.md)) into `vendor/ffmpeg/win32-x64/`, verifies its SHA-256 and does nothing if it is already there. It runs automatically before `start`, `package`, `make` and `package:e2e`. It needs no Python and no PowerShell.
+- **FFmpeg is not installed by you**: `apps/desktop/scripts/fetch-ffmpeg.mjs` downloads the pinned FFmpeg 9.0.2 build (Gyan "essentials", about 115 MB zip, GPL-3.0-or-later; see [ffmpeg.md](ffmpeg.md)) into `apps/desktop/vendor/ffmpeg/win32-x64/`, verifies its SHA-256 and does nothing if it is already there. It runs automatically before `start`, `package`, `make` and `package:e2e`. It needs no Python and no PowerShell.
 - Python is **not** required. No signing certificate is required (builds are unsigned unless you set the signing variables, see [release-process.md](release-process.md)).
 
 ## Commands
@@ -40,11 +40,11 @@ Notes:
 
 | Command                    | Output                                                                                                                                                                                         |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm start`                | Build output in `.vite/` (gitignored); user data in `%APPDATA%\FrameCapt` (likely shared with an installed app; unverified)                                                                    |
-| `npm run package`          | `out/FrameCapt-win32-x64/` (the unpacked app: `FrameCapt.exe`, `resources/app.asar`, `resources/ffmpeg/win32-x64/`)                                                                            |
-| `npm run make`             | `out/make/squirrel.windows/x64/FrameCapt-Setup-0.1.0.exe` (per-user installer, about 229 MB), `FrameCapt-0.1.0-full.nupkg`, `RELEASES`; `out/make/zip/win32/x64/FrameCapt-win32-x64-0.1.0.zip` |
-| `npm run record:artifacts` | `out/make/SHA256SUMS.txt` and `docs/evidence/phase10/artifacts.json`                                                                                                                           |
-| FFmpeg                     | `vendor/ffmpeg/win32-x64/` (gitignored)                                                                                                                                                        |
+| `npm start`                | Build output in `apps/desktop/.vite/` (gitignored); user data in `%APPDATA%\FrameCapt` (likely shared with an installed app; unverified)                                                                    |
+| `npm run package`          | `apps/desktop/out/FrameCapt-win32-x64/` (the unpacked app: `FrameCapt.exe`, `resources/app.asar`, `resources/ffmpeg/win32-x64/`)                                                                            |
+| `npm run make`             | `apps/desktop/out/make/squirrel.windows/x64/FrameCapt-Setup-0.1.0.exe` (per-user installer, about 229 MB), `FrameCapt-0.1.0-full.nupkg`, `RELEASES`; zip also under `apps/desktop/out/make/` |
+| `npm run record:artifacts` | `apps/desktop/out/make/SHA256SUMS.txt` and `docs/evidence/phase10/artifacts.json`                                                                                                                           |
+| FFmpeg                     | `apps/desktop/vendor/ffmpeg/win32-x64/` (gitignored)                                                                                                                                                        |
 
 The installer and executables are **unsigned** unless you provide a certificate through `WINDOWS_CERTIFICATE_FILE` and `WINDOWS_CERTIFICATE_PASSWORD`; the build log says which. Builds are not bit-for-bit reproducible (archives embed timestamps).
 

@@ -1,10 +1,5 @@
-# Continuous integration. Runs on every push and pull request to main; it NEVER publishes anything
-# (no release, no tag, no package registry). Build output is kept as workflow artifacts for 14 days.
-#
-# Native capture tests (npm run test:native: real screen/audio capture, global shortcuts, the
-# 30-minute recording benchmark) and the installed-app smoke test (npm run smoke:installed) need a
-# real interactive desktop and run locally only: see docs/testing.md and docs/packaging.md. The
-# hosted runner runs the mock-provider e2e suite instead.
+# Build Windows and Linux packages on pushes and pull requests to main.
+# Artifacts are kept for 14 days; this workflow does not publish releases.
 name: CI
 
 on:
@@ -13,7 +8,6 @@ on:
   pull_request:
     branches: [main]
 
-# Least privilege: the workflow can read the repository and nothing else.
 permissions:
   contents: read
 
@@ -25,62 +19,8 @@ env:
   NODE_VERSION: '24'
 
 jobs:
-  checks:
-    name: Lint, typecheck, unit tests
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      # Actions are pinned to a major version (tags move within the major). Hardening option for the
-      # owner: pin each to a full commit SHA (see docs/release-process.md).
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-
-  e2e:
-    name: E2E (mock capture)
-    needs: checks
-    runs-on: windows-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      # The pinned FFmpeg build (scripts/fetch-ffmpeg.mjs holds the URL and SHA-256). The key changes
-      # with that file, i.e. exactly when the pin changes; fetch-ffmpeg verifies the SHA either way.
-      - name: Cache FFmpeg
-        uses: actions/cache@v6
-        with:
-          path: vendor/ffmpeg
-          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
-      # The hosted runner has one core: Defender's real-time scan of every recorded chunk and every
-      # Electron start competes with the recording flows. Test-only: this runner is thrown away.
-      - name: Turn off real-time antivirus scanning (disposable runner)
-        shell: pwsh
-        run: Set-MpPreference -DisableRealtimeMonitoring $true
-      # package:e2e builds the mock-provider app, then Playwright drives it. Windows open on the
-      # runner's desktop session; real capture is not attempted (mock provider).
-      - run: npm run test:e2e
-      - name: Upload Playwright traces on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-test-results
-          path: test-results/
-          retention-days: 14
-          if-no-files-found: ignore
-
   package:
-    name: Package (Squirrel installer + zip, UNSIGNED)
-    needs: checks
+    name: Windows - installer + zip
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
@@ -93,80 +33,42 @@ jobs:
       - name: Cache FFmpeg
         uses: actions/cache@v6
         with:
-          path: vendor/ffmpeg
-          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
-      # Fetches the pinned FFmpeg (premake hook), packages, and makes the Squirrel installer + zip.
-      # This workflow has no signing secrets: the artifacts are UNSIGNED (signing is release.yml).
-      - run: npm run make
-      # The packaged app.asar must not contain the mock capture provider or any test hook.
-      - run: npm run check:mocks
-      - name: Checksums
-        shell: pwsh
-        run: |
-          Get-ChildItem out/make -Recurse -File |
-            Where-Object { $_.Extension -in '.exe', '.zip', '.nupkg' -or $_.Name -eq 'RELEASES' } |
-            Get-FileHash -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
-            Tee-Object -FilePath out/make/SHA256SUMS.txt
+          path: apps/desktop/vendor/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('apps/desktop/scripts/fetch-ffmpeg.mjs') }}
+      # premake fetches and verifies the pinned FFmpeg build.
+      - run: npm run make:desktop
       - uses: actions/upload-artifact@v7
         with:
           name: framecapt-windows-unsigned
-          path: out/make/
+          path: apps/desktop/out/make/
           retention-days: 14
           if-no-files-found: error
 
-  # Experimental Linux x64 build (ADR-036). Independent of the Windows jobs. A hosted runner has no
-  # real desktop: the suites run on Xvfb with a window manager (a real X11 server: capture works).
   linux:
-    name: Linux (experimental) - checks, e2e, .deb + AppImage
+    name: Linux (experimental) - deb + AppImage
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: System packages
+      - name: Packaging tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb openbox fakeroot dpkg squashfs-tools libfuse2t64
-          # Ubuntu 24.04+ restricts unprivileged user namespaces, which Chromium's sandbox uses when
-          # the unpackaged Electron in node_modules has no setuid chrome-sandbox.
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get install -y --no-install-recommends fakeroot dpkg squashfs-tools
       - run: npm ci
       - name: Cache FFmpeg
         uses: actions/cache@v6
         with:
-          path: vendor/ffmpeg
-          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
-      # The pinned linux FFmpeg first, so the real-ffmpeg unit tests run instead of skipping.
-      - run: npm run fetch:ffmpeg
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: bash scripts/xvfb-wm.sh npm run test:e2e
-      - name: Upload Playwright traces on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: linux-e2e-test-results
-          path: test-results/
-          retention-days: 14
-          if-no-files-found: ignore
-      # .deb + AppImage (the AppImage runtime is fetched pinned and SHA-256 verified by premake).
-      - run: npm run make
-      - run: npm run check:mocks
-      - run: bash scripts/xvfb-wm.sh npm run smoke:packaged
-      - run: bash scripts/xvfb-wm.sh npm run test:native:linux
-      - run: bash scripts/xvfb-wm.sh npm run smoke:linux
-      - name: Checksums
-        run: |
-          cd out/make
-          find . -type f \( -name '*.deb' -o -name '*.AppImage' \) -exec sha256sum {} + | tee SHA256SUMS.txt
+          path: apps/desktop/vendor/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('apps/desktop/scripts/fetch-ffmpeg.mjs') }}
+      # premake fetches and verifies FFmpeg and the pinned AppImage runtime.
+      - run: npm run make:desktop
       - uses: actions/upload-artifact@v7
         with:
           name: framecapt-linux-experimental-unsigned
-          path: out/make/
+          path: apps/desktop/out/make/
           retention-days: 14
           if-no-files-found: error

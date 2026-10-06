@@ -1,0 +1,350 @@
+@import '@fontsource-variable/inter/wght.css';
+@import 'tailwindcss';
+
+/*
+ * Design tokens. Light and dark values are paired with light-dark(), which follows the system
+ * (nativeTheme.themeSource = 'system') through `color-scheme`. A user override later only needs to
+ * set <html data-theme="light|dark">.
+ */
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#f8fafc, #0b0f1a);
+  --surface: light-dark(#ffffff, #121829);
+  --surface-2: light-dark(#f1f5f9, #0f1424);
+  --surface-3: light-dark(#e8edf4, #1a2136);
+  --line: light-dark(#e2e8f0, #232b3e);
+  --line-strong: light-dark(#cbd5e1, #333d55);
+  /* The edge of a form control (input, select, switch): 3:1 against its surface (WCAG 1.4.11). */
+  --control: light-dark(#7c8aa0, #5f6d8b);
+
+  --fg: light-dark(#0f172a, #e8ebf4);
+  --fg-muted: light-dark(#475569, #a1abc2);
+  /* Every text token is at least 4.5:1 on bg, surface, surface-2 and surface-3 in both themes. */
+  --fg-subtle: light-dark(#5d6b80, #8591ab);
+
+  /* The logo's palette (cyan, indigo, violet): brand moments only (boot screen, loader ring). */
+  --brand-cyan: #22d3ee;
+  --brand-indigo: #6366f1;
+  --brand-violet: #a855f7;
+  --brand-glow: light-dark(rgb(99 102 241 / 0.2), rgb(99 102 241 / 0.4));
+  --brand-glow-edge: light-dark(rgb(34 211 238 / 0.1), rgb(34 211 238 / 0.14));
+
+  --accent: light-dark(#6366f1, #818cf8);
+  --accent-solid: light-dark(#4f46e5, #5a5df0);
+  --accent-solid-hover: light-dark(#4338ca, #4b4ee6);
+  --accent-soft: light-dark(#eef2ff, rgb(99 102 241 / 0.16));
+  --accent-fg: light-dark(#4338ca, #a5b4fc);
+
+  --danger: light-dark(#c81e1e, #f87171);
+  --danger-solid: light-dark(#dc2626, #dc2626);
+  --danger-solid-hover: light-dark(#b91c1c, #b91c1c);
+  --danger-soft: light-dark(#fef2f2, rgb(248 113 113 / 0.14));
+
+  --warning: light-dark(#b45309, #fbbf24);
+  --warning-soft: light-dark(#fffbeb, rgb(251 191 36 / 0.14));
+
+  --success: light-dark(#15803d, #4ade80);
+
+  --shadow-card: light-dark(0 1px 2px rgb(15 23 42 / 0.05), 0 1px 2px rgb(0 0 0 / 0.4));
+  --shadow-raised: light-dark(
+    0 8px 24px -8px rgb(15 23 42 / 0.14),
+    0 8px 24px -8px rgb(0 0 0 / 0.55)
+  );
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-control: var(--control);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-solid: var(--accent-solid);
+  --color-accent-solid-hover: var(--accent-solid-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --color-danger-solid: var(--danger-solid);
+  --color-danger-solid-hover: var(--danger-solid-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+
+  --color-success: var(--success);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-raised: var(--shadow-raised);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    /* App chrome is not selectable; opt in with .selectable. */
+    user-select: none;
+    overflow: hidden;
+  }
+
+  .selectable {
+    user-select: text;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+  }
+}
+
+/* Thin, unobtrusive scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Transparency backdrop for the screenshot preview. */
+.checkerboard {
+  background-color: var(--surface-2);
+  background-image: conic-gradient(
+    color-mix(in srgb, var(--fg) 6%, transparent) 25%,
+    transparent 0 50%,
+    color-mix(in srgb, var(--fg) 6%, transparent) 0 75%,
+    transparent 0
+  );
+  background-size: 20px 20px;
+}
+
+.view-in {
+  animation: view-in 180ms ease-out both;
+}
+
+/* Boot screen: the main window's start-up cover (MainApp). */
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: var(--bg);
+  transition: opacity 200ms ease-out;
+}
+
+.boot-screen[data-leaving='true'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.boot-glow {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    var(--brand-glow) 0%,
+    var(--brand-glow-edge) 45%,
+    transparent 70%
+  );
+  animation: brand-breathe 2.4s ease-in-out infinite;
+}
+
+.boot-bar {
+  position: relative;
+  width: 168px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.boot-bar-segment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-cyan), var(--brand-indigo), var(--brand-violet));
+  animation: boot-bar 1.3s ease-in-out infinite;
+}
+
+@keyframes brand-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes boot-bar {
+  from {
+    left: -45%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+/* Loader: a ring in the brand gradient that turns around the logo mark. */
+.loader-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0turn,
+    var(--brand-cyan) 0.5turn,
+    var(--brand-indigo) 0.78turn,
+    var(--brand-violet) 1turn
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--ring, 3px)),
+    #000 calc(100% - var(--ring, 3px) + 0.5px)
+  );
+  animation: loader-spin 900ms linear infinite;
+}
+
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still pictures: a half-filled bar, a steady glow, a ring that does not turn. */
+  .boot-glow,
+  .loader-ring {
+    animation: none;
+  }
+
+  .boot-bar-segment {
+    animation: none;
+    left: 27.5%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Selection overlay windows draw their own background (frozen frame or the live desktop). */
+html.overlay-root,
+html.overlay-root body,
+html.overlay-root #root {
+  background: transparent;
+  overflow: hidden;
+}
+
+/* Recording toolbar: only the grip drags the window. */
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+/*
+ * The main window's title bar. The bar itself drags the window (double click maximizes) and every
+ * control inside it opts out. With the window-controls overlay (Windows, Linux) the bar's content
+ * stays inside `env(titlebar-area-*)`, so the OS window buttons never cover it; without it the
+ * env() values fall back to the full width.
+ */
+.title-bar {
+  -webkit-app-region: drag;
+  height: 36px;
+}
+
+.title-bar-area {
+  margin-left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, 100%);
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+@keyframes countdown-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.countdown-pop {
+  animation: countdown-pop 320ms ease-out both;
+}
+
+/* The toolbar pill clips its content: a focus ring has to sit inside it. */
+.app-toolbar :focus-visible {
+  outline-offset: -2px;
+}
+
+/* A tooltip that must never take the pointer: Radix puts it in a positioned wrapper that would. */
+[data-radix-popper-content-wrapper]:has(> .tooltip-passthrough) {
+  pointer-events: none;
+}

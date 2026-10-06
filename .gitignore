@@ -8,6 +8,10 @@ vendor/appimage-runtime/
 test-results/
 playwright-report/
 *.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
 .DS_Store
 docs/evidence/**/*.webm
 docs/evidence/**/*.mp4
@@ -21,3 +25,7 @@ docs/evidence/**/*.png
 !docs/evidence/phase06/ui-*.png
 !docs/evidence/phase08/ui-*.png
 !docs/evidence/brand/*.png
+
+# downloaded FFmpeg and AppImage runtime (fetched by scripts, never committed)
+apps/desktop/vendor/ffmpeg/
+apps/desktop/vendor/appimage-runtime/

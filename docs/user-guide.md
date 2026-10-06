@@ -1,8 +1,19 @@
 # FrameCapt user guide
 
-FrameCapt (provisional name, beta 0.1.0) captures screenshots and screen recordings on Windows and keeps everything on your computer. This guide describes what the current build does. For the list of default shortcuts see [keyboard-shortcuts.md](keyboard-shortcuts.md).
+FrameCapt (provisional name, beta 0.1.0) captures screenshots and screen recordings on Windows and keeps every capture on your computer. There is no account or sign-in. This guide describes what the current build does. For the list of default shortcuts see [keyboard-shortcuts.md](keyboard-shortcuts.md).
 
-Contents: [Screenshots](#screenshots) - [The editor](#the-editor) - [Redaction](#redaction) - [Recording](#recording) - [Unfinished recordings](#unfinished-recordings) - [Export to MP4](#export-to-mp4) - [History](#history) - [Settings](#settings) - [Tray](#tray) - [Troubleshooting](#troubleshooting)
+Contents: [The top bar](#the-top-bar-menus-and-command-center) - [Screenshots](#screenshots) - [The editor](#the-editor) - [Redaction](#redaction) - [Recording](#recording) - [Unfinished recordings](#unfinished-recordings) - [Export to MP4](#export-to-mp4) - [History](#history) - [Settings](#settings) - [Tray](#tray) - [Troubleshooting](#troubleshooting)
+
+## The top bar: menus and command center
+
+The top of the window is one bar, like a code editor's: the FrameCapt logo and the menus **File**, **View** and **Help** on the left, a wide search box (the command center) in the middle and, on Windows and Linux, the window buttons (minimize, maximize, close) at the far right. Drag the empty part of the bar to move the window; double-click it to maximize or restore. In a narrow window the three menus fold into one **Menu** button and the search box shrinks to a magnifier.
+
+- **File**: New screenshot and New recording (region, window or screen), History, Settings and **Quit FrameCapt** (asks first while a recording runs). **View**: Capture, History, Settings, the command center and **Toggle light or dark theme**. **Help**: Keyboard shortcuts and About FrameCapt (Settings, About). Each item shows its current shortcut. An item that cannot run right now (a recording is in progress) stays in the menu, greyed out; hover it to read why.
+- **Command center**: click the search box, or press `Ctrl+K` (`Ctrl+Shift+P` for commands only). Type a few letters of what you want: "region", "record", "history", "shortcuts", or the name of a saved capture. Commands come first, grouped (Capture, Navigate, Help); saved captures follow under **Recent captures** (the name is matched; a few are shown). `Enter` runs the highlighted result: a command does exactly what its button does (for example **Take screenshot – region** starts the same region selection as the Screenshot > Region button), a capture opens in History. `Shift+Enter` on a capture shows it in its folder. With nothing typed, the commands you used last are listed first. Unavailable commands are listed with the reason. Both keys can be changed in Settings, Shortcuts.
+
+## First run
+
+There is no account and nothing to sign in to: the app opens ready to capture. The Capture screen shows a **Welcome** card: that everything stays on your device, your global shortcuts as they are set now, and that closing the window keeps FrameCapt in the tray. **Got it** dismisses it for good (it is remembered in the settings; it also dismisses the one-line shortcut tip).
 
 ## Screenshots
 
@@ -14,20 +25,35 @@ Start from the home screen (**Capture > Screenshot**) or from a global shortcut:
 
 After a capture the screenshot opens in the editor (Settings > Screenshots > "After a capture" can also copy it to the clipboard or save it first). The selection overlay, pill and dim layer are never part of the image.
 
-Save with `Ctrl+S` (PNG or JPEG, your choice in Settings; you pick the file name in a save dialog) or copy with `Ctrl+C` (image to the clipboard). Saved screenshots go to `Pictures\FrameCapt` unless you changed the folder.
+Save with `Ctrl+S` (PNG or JPEG, your choice in Settings; you pick the file name in a save dialog). **Quick save** (`Ctrl+Shift+S`, or the entry in the Save menu) skips the dialog: the screenshot goes straight into your screenshots folder (Settings > Storage) under the usual name ("FrameCapt 2026-10-02 at 14.05.09.png"; a name that is taken gets "(2)"), and a message offers **Show in folder** and **Undo** (which moves the new file to the Recycle Bin). The key can be changed in Settings > Shortcuts or copy with `Ctrl+C` (image to the clipboard). Saved screenshots go to `Pictures\FrameCapt` unless you changed the folder.
 
 ## The editor
 
-| Tool      | Key | What it does                                                 |
-| --------- | --- | ------------------------------------------------------------ |
-| Select    | `V` | Select, move and resize marks; `Delete` removes the selected |
-| Crop      | `C` | Drag to crop (non-destructive until you save)                |
-| Arrow     | `A` | Drag to draw an arrow                                        |
-| Rectangle | `R` | Drag to draw a rectangle                                     |
-| Text      | `T` | Click to add text                                            |
-| Redact    | `X` | Drag to cover an area with solid black                       |
+Tools are grouped in the toolbar (hover one for its key; every key can be changed in Settings, Shortcuts):
 
-Other keys: `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo (200 steps), `Ctrl+=` / `Ctrl+-` zoom, `Ctrl+0` fit, `Ctrl+1` 100%, arrow keys move the selected mark. Closing the editor with unsaved changes asks first. The unedited original is kept in FrameCapt's app-data folder only while the editor is open (it is deleted when the editor closes; unfinished leftovers older than 7 days are swept).
+| Group    | Tool        | Key | What it does                                                                                                |
+| -------- | ----------- | --- | ----------------------------------------------------------------------------------------------------------- |
+| Pointer  | Select      | `V` | Select, move and resize marks; `Shift`-click or drag a box to select several; `Delete` removes them         |
+| Pointer  | Crop        | `C` | Drag to crop (non-destructive until you save); Free, 16:9, 4:3 and 1:1 shapes                               |
+| Shapes   | Rectangle   | `R` | Outline, fill, fill opacity, corner radius, optional drop shadow                                            |
+| Shapes   | Ellipse     | `O` | Same as the rectangle (`Shift` for a circle)                                                                |
+| Shapes   | Line        | `L` | Solid, dashed or dotted                                                                                     |
+| Shapes   | Arrow       | `A` | Straight or curved (drag the round handle to bend it), a head or a dot at either end                        |
+| Shapes   | Pen         | `P` | Freehand, smoothed                                                                                          |
+| Annotate | Text        | `T` | Font (sans, serif, mono, handwriting), size, weight, italic, alignment, background and outline              |
+| Annotate | Callout     | `D` | A speech bubble with text; drag its round handle to aim the tail                                            |
+| Annotate | Step number | `N` | Numbered badges, counting up; **Reset** restarts at 1                                                       |
+| Annotate | Stamp       | `E` | Check, cross, star, heart, warning, question, info (drawn as shapes: no fonts or downloads needed)          |
+| Effects  | Highlighter | `H` | A translucent marker, as a box or freehand                                                                  |
+| Effects  | Blur        | `B` | Blur or pixelate an area, with an intensity slider. **A visual effect, not secure**: use Redact for secrets |
+| Effects  | Redact      | `X` | Drag to cover an area with solid black                                                                      |
+| Effects  | Spotlight   | `S` | Dim everything outside an area                                                                              |
+| Effects  | Magnifier   | `M` | A circle that enlarges what is under it                                                                     |
+| Effects  | Ruler       | `I` | Measure a distance in pixels                                                                                |
+
+The **Properties** panel (toggle it with the panel button in the toolbar) has the exact numbers for the selected mark, or for the active tool when nothing is selected: color (the palette, a hex code, recent colors and, where the system allows it, an eyedropper), stroke width, opacity, fill, corner radius, drop shadow, text, arrow and effect settings. Under **Arrange** you can bring marks forward or back (`Ctrl+]` / `Ctrl+[`), duplicate them (`Ctrl+D`), align them to each other (or to the image when one is selected), distribute three or more evenly, and turn the snapping guides on or off. **Canvas** has the crop shape, **Beautify** (a background color or gradient, padding, rounded corners and a shadow around the exported image; the crop stays non-destructive) and **Preview the result**, which shows exactly what Save will write.
+
+Other keys: `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo (200 steps, covering every edit above), `Ctrl+=` / `Ctrl+-` zoom, `Ctrl+0` fit, `Ctrl+1` 100%, arrow keys move the selected mark. Closing the editor with unsaved changes asks first. While the editor is open the unedited original is in FrameCapt's app-data folder; the session copy is deleted when the editor closes (unfinished leftovers older than 7 days are swept). After you save, an editable copy is kept with the history item unless you turned **Keep editable originals** off (see [Editing a saved screenshot](#editing-a-saved-screenshot)).
 
 ## Redaction
 
@@ -50,7 +76,7 @@ Start from **Capture > Record** or a shortcut: **Screen** (`Ctrl+Shift+5`), **Wi
 - **Countdown**: a 3-2-1 countdown before recording starts (on by default).
 - **Also save an MP4**: converts every finished recording to MP4 next to the original (off by default).
 
-While recording, a small floating **toolbar** shows the timer and status with Pause/Resume, Mute buttons and Stop. The toolbar and the countdown are excluded from the recording (verified on the test machine through Windows' content-protection setting; this exclusion is a platform behavior, so do not rely on it for anything security-critical). Paused time is not recorded. Stop with the toolbar, the main window, the tray menu, or `Ctrl+Shift+0` (pressing the record shortcut again also stops).
+While recording, a small floating **toolbar** shows the timer and status with Pause/Resume, Mute buttons and Stop. **Hide controls** (the arrows at its end) tucks it into a small indicator with the timer and a button to bring the controls back; recording is not affected and `Ctrl+Shift+9` / `Ctrl+Shift+0` still pause and stop. The toolbar and the countdown are excluded from the recording (verified on the test machine through Windows' content-protection setting; this exclusion is a platform behavior, so do not rely on it for anything security-critical). Paused time is not recorded. Stop with the toolbar, the main window, the tray menu, or `Ctrl+Shift+0` (pressing the record shortcut again also stops).
 
 Recordings are written to disk **while** you record (bounded memory, a 30-minute 1080p30 recording was benchmarked: [performance.md](performance.md)) and finished into a seekable `.webm` (VP9 video, Opus audio) in `Videos\FrameCapt`, named `FrameCapt YYYY-MM-DD at HH.mm.ss.webm`. Existing files are never overwritten.
 
@@ -76,14 +102,24 @@ Recordings are saved as WebM. For a recording in History (or on the result scree
 
 **History** lists screenshots and recordings you saved (the newest six also appear on the home screen). Filter All / Screenshots / Recordings, search by name, date or type, press `Enter` to open the details, where you can open the file, show it in its folder, copy the image or the path, export MP4, save a copy of a recording, or remove it.
 
+- **Select several**: `Ctrl`-click or `Shift`-click cards (or tick the checkbox on a card, or press `Ctrl+A`). A bar shows how many are selected with **Save copies...** (one folder dialog; each file is copied under a free name, existing files are never overwritten; progress, **Cancel** and a per-item summary if anything was skipped), **Remove from history** (asks first, with Undo), **Select all** and **Clear selection** (`Esc`). Viewers can select but not save copies.
+- **Right-click a card** (or `Shift+F10`) for Edit, Open, Show in folder, Copy, Save a copy, Remove, Delete editable data and Delete file. Entries that are not available stay listed, disabled, with the reason.
+- **Drag a card out of the window** (into a chat, an email, Explorer) to drop the actual file there.
 - **Remove from history** removes only the list entry (with a 5-second Undo). It never touches your file.
 - **Delete file** is a separate, confirmed action that moves the file to the **Recycle Bin**.
 - If a file was moved or deleted outside FrameCapt, the entry stays listed as "File moved or deleted" with **Locate...** to point it at the new place, **Remove**, or **Clear missing**.
 - History keeps at most 1000 entries (older entries drop off the list; their files are never touched). It stores metadata and thumbnails only.
 
+## Editing a saved screenshot
+
+In **History**, choose **Edit** on a screenshot to open it in the editor again. If FrameCapt kept the editable version (Settings, Screenshots, **Keep editable originals**, on by default), every annotation can be moved, restyled or deleted. Screenshots saved earlier, or whose editable data was deleted, open as a flattened copy: you can add new annotations, but the old ones cannot be changed.
+
+- **Save** replaces the saved image (the previous version is not kept); **Save as copy** makes a new history item.
+- Redactions are applied in the saved image. The editable original keeps the pixels underneath, in FrameCapt's own data folder. Use **Delete editable data** in the item's details, or turn **Keep editable originals** off, if you do not want that.
+
 ## Settings
 
-Sections: **General** (theme: follow Windows / light / dark; launch at login; close to tray; notifications), **Screenshots** (format, JPEG quality, what happens after a capture, copy on save), **Recording** (quality, frame rate, countdown, microphone and device, system audio, also save MP4), **Shortcuts** (change or turn off each global shortcut; conflicts are shown), **Storage** (screenshots and recordings folders, chosen with a folder dialog and checked for write access), **Advanced** (capture diagnostics for troubleshooting), **About** (version and update status; updates are "Not configured for this build"). Each section can be reset. Settings are stored in `%APPDATA%\FrameCapt\settings.json`.
+Sections: **General** (theme: follow Windows / light / dark; launch at login; close to tray; notifications), **Screenshots** (format, JPEG quality, what happens after a capture, copy on save), **Recording** (quality, frame rate, countdown, microphone and device, system audio, also save MP4), **Shortcuts** (change or turn off each global shortcut and the editor's own keys; filter the list; a combination another action already has offers **Swap**; combinations Windows keeps for itself are refused with the reason; **Reset all shortcuts** puts everything back; see [keyboard-shortcuts.md](keyboard-shortcuts.md)), **Storage** (screenshots and recordings folders, chosen with a folder dialog and checked for write access), **Advanced** (capture diagnostics for troubleshooting), **About** (version and update status; updates are "Not configured for this build"). The **search box** at the top filters every section by what its options say (try "folder", "microphone" or "shortcut"); clearing it returns to the sections. Each section can be reset. Settings are stored in `%APPDATA%\FrameCapt\settings.json`.
 
 ## Tray
 

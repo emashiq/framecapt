@@ -1,0 +1,15 @@
+.git
+.serena
+node_modules
+**/node_modules
+**/.next
+**/dist
+apps/desktop/out
+apps/desktop/.vite
+apps/desktop/vendor
+docs/evidence
+docs/implementation-prompts
+**/.env
+**/.env.*
+!**/.env.example
+*.log

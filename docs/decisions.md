@@ -247,3 +247,9 @@ Every e2e/native run used to rewrite the committed screenshots and JSON of earli
 - **Launch at login** is an XDG autostart entry (`~/.config/autostart/framecapt.desktop`, `Exec=... --hidden`) written and removed by the same Settings switch.
 - **Packaging choices.** The FFmpeg folder is copied by a `packageAfterCopy` hook for the target platform only. The AppImage maker is `@reforged/maker-appimage` (ISC; typed for maker-base 6/7, runs under Forge 8, cast in `forge.config.ts`); its runtime download is replaced by a SHA-256-pinned file. Executable name and package name are lower case `framecapt` on Linux.
 - **Not done.** arm64, rpm, Flatpak/Snap, signing, system audio, Wayland-native capture, platform-specific UI wording.
+
+## ADR-039: Desktop only; no accounts, login or website (2026-10-06)
+
+- **Decision (owner).** The repository is the desktop app only. The account system (sign-in, organizations and workspaces, SSO, offline grants, device keys), the backend API and the website are removed from this branch; the app works as the 0.1.0-alpha.3 builds did, with no sign-in, plus the later desktop features.
+- **Why.** A local, offline screenshot and recording tool needs no identity; the account layer added a service dependency, a locked state and a privacy trade-off that the product does not need.
+- **Consequence.** No channel is gated by an authorization; history is a single local history; the app makes no network requests of its own. The removed work is preserved on the branch `login-website`.

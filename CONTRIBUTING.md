@@ -15,6 +15,10 @@ npm ci
 npm start
 ```
 
+The Electron source, tests, assets, and build tooling are under `apps/desktop/`.
+Run npm commands from the repository root; the scripts forward to that
+workspace. Package output is under `apps/desktop/out/`.
+
 ## Before you open a pull request
 
 Run, and make pass:
@@ -31,11 +35,11 @@ npm run test:e2e        # when you touch UI, IPC, recording or export
 ## Code style
 
 - TypeScript strict mode; ESLint and Prettier decide formatting (`npm run format`: single quotes, semicolons, trailing commas, 100 columns, LF line endings).
-- Match the existing structure: `src/main` (main process: capture authorization, windows, tray, shortcuts, files, FFmpeg), `src/preload` (a small typed allowlist), `src/renderer` (UI, editor, recorder pipeline), `src/shared` (types, zod schemas, pure logic).
+- Match the existing structure under `apps/desktop/`: `src/main` (main process: capture, windows, tray, shortcuts, files, FFmpeg), `src/preload` (a small typed allowlist), `src/renderer` (UI, editor, recorder pipeline), `src/shared` (types, zod schemas, pure logic).
 - Keep code small and clear; no speculative abstractions.
 - **Security rules** (see [docs/security-review.md](docs/security-review.md)): `contextIsolation` on, `nodeIntegration` off, sandbox on; every IPC channel validates its payload with zod and checks the sender; never expose `ipcRenderer` or arbitrary filesystem/process access to the renderer; renderer code never supplies file paths (use save/open dialogs in main or main-owned ids); child processes run with `shell: false` and an argument array; no network requests, telemetry or remote media processing.
 - **Redaction** must always flatten into exported pixels. **User files** are never deleted silently; deletion goes to the Recycle Bin on explicit confirmation.
-- Tests are required for behavior changes: unit tests for logic (`tests/unit`), e2e for UI flows (`tests/e2e`, mock capture provider), native specs for real capture (`tests/native`). Mock providers are for automated tests only and must not end up in a production build (`npm run check:mocks`).
+- Tests are required for behavior changes: unit tests for logic (`apps/desktop/tests/unit`), e2e for UI flows (`apps/desktop/tests/e2e`, mock capture provider), native specs for real capture (`apps/desktop/tests/native`). Mock providers are for automated tests only and must not end up in a production build (`npm run check:mocks`).
 - Documentation must match behavior: update the relevant file in `docs/` and the [CHANGELOG](CHANGELOG.md) when you change something users or maintainers will notice. Do not claim something is verified unless you ran it.
 
 ## Pull request checklist

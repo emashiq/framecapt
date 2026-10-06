@@ -56,15 +56,14 @@ Both files are in `.github/workflows/`. They were **validated locally only** (`n
 
 ### `ci.yml` (push and pull request to `main`)
 
-`permissions: contents: read`. Jobs on `windows-latest`, Node 24, npm cache:
+`permissions: contents: read`. Two independent packaging jobs, Node 24, npm cache:
 
-1. `checks`: `npm ci`, lint, typecheck, unit tests.
-2. `e2e` (needs `checks`): the mock-provider Playwright suite (`npm run test:e2e`, which builds the E2E app itself). Traces are uploaded on failure.
-3. `package` (needs `checks`): `npm run make`, `npm run check:mocks`, SHA-256 sums, upload of `out/make` as `framecapt-windows-unsigned` (**retention 14 days**).
+1. `package` (`windows-latest`): `npm ci`, `npm run make`, upload of `out/make` as `framecapt-windows-unsigned` (installer, portable ZIP and Squirrel update files; **retention 14 days**).
+2. `linux` (`ubuntu-latest`): install packaging tools, `npm ci`, `npm run make`, upload of `out/make` as `framecapt-linux-experimental-unsigned` (.deb and AppImage; **retention 14 days**).
 
 The pinned FFmpeg is cached under `vendor/ffmpeg`, keyed on `hashFiles('scripts/fetch-ffmpeg.mjs')` (the file that holds the URL and SHA-256 pin; `fetch-ffmpeg` verifies the hash regardless of the cache). Nothing is published on a push: there is no release step, no tag creation and no write permission.
 
-Not run on CI (they need a real display, audio devices and the right to install software): `test:native`, `smoke:installed`, `bench:recording`. The brief's "`check:mocks` after a package" lives in the `package` job because `npm run make` already packages.
+CI only builds and uploads packages: lint, typecheck, unit, E2E, native, smoke, benchmark and `check:mocks` commands are run locally at appropriate development or release checkpoints. The manual draft-release workflow below has its own checks and is separate from automatic CI.
 
 Actions are pinned to **major versions** (`actions/checkout@v7`, `setup-node@v7`, `cache@v6`, `upload-artifact@v7`, `download-artifact@v8`; the majors current on 2026-10-02). **OWNER ACTION (hardening)**: pin each to a full commit SHA and let Dependabot update them.
 

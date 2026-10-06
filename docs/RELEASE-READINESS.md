@@ -10,6 +10,10 @@ Date: 2026-10-03 · Branch `main` (local only, never pushed) · Lead: final vali
 
 **Not ready for public release or sale.** The installer is **unsigned**, and owner actions remain open: name/trademark, app identity, signing certificate, contacts, payment provider, FFmpeg source mirroring, codec/patent and legal review. See [Owner actions](#owner-actions-prioritized).
 
+## Update 2026-10-06: desktop only
+
+The repository is now the desktop application only: no accounts, sign-in, backend or website (the removed work lives on the branch `login-website`). The app behaves like the alpha.3 builds (no sign-in) plus the later desktop features (title bar, command center, professional editor, History multi-select, shortcut customization). The validation below was done on the earlier desktop build; the later features were checked by unit and E2E tests only. No release is published and none is authorized by this document.
+
 ## Delivered features
 
 - **Screenshots** of a screen, a window (frame included) or a region (one monitor per selection). Screen and region captures are pixel-exact: full-size `desktopCapturer` images, with the size checked against each display. Window screenshots use a video frame. Output is PNG or JPEG via save dialogs that main owns, or the clipboard (Chromium's encoder path).
@@ -145,10 +149,10 @@ Legend:
 | Item                                                                      | Status                                            | Evidence                                                                                                               |
 | ------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Canonical project license and dependency notices                          | PASS                                              | `LICENSE` (gnu.org text), `THIRD_PARTY_NOTICES.md`, both shipped inside the package                                    |
-| Exact bundled FFmpeg licensing and source obligations recorded            | PASS (recorded); source mirroring BLOCKED (owner) | [ffmpeg.md](ffmpeg.md), [licensing.md](licensing.md)                                                                   |
+| Exact bundled FFmpeg licensing and source obligations recorded            | PASS (recorded); source mirroring BLOCKED (owner) | [ffmpeg.md](ffmpeg.md)                                                                   |
 | Working name, branding and release identity resolved by owner             | BLOCKED (owner)                                   | Provisional name `FrameCapt` and app id `com.framecapt.app`                                                            |
-| Certificates, accounts and payment eligibility resolved; no fake checkout | BLOCKED (owner); no fake checkout PASS            | Provider research only; nothing created ([checkout-integration-requirements.md](checkout-integration-requirements.md)) |
-| Paid-offer terms state update/support scope and open-source rights        | PASS (draft for owner review)                     | [commercial-plan.md](commercial-plan.md)                                                                               |
+| Certificates, accounts and payment eligibility resolved; no fake checkout | BLOCKED (owner); no fake checkout PASS            | Provider research only; nothing created |
+| Paid-offer terms state update/support scope and open-source rights        | PASS (draft for owner review)                     | (the commercial plan was removed from the repository) |
 | All blockers shown prominently here                                       | PASS                                              | This document                                                                                                          |
 
 ## Security, licensing, signing, payment and release status

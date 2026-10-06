@@ -44,17 +44,17 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           if ($env:INPUT_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'version must look like 1.2.3' }
-          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $pkg = (Get-Content apps/desktop/package.json -Raw | ConvertFrom-Json).version
           if ($pkg -ne $env:INPUT_VERSION) { throw "package.json version is $pkg, not $($env:INPUT_VERSION). Bump it first." }
       - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
+      - run: npm run lint:desktop
+      - run: npm run typecheck:desktop
+      - run: npm run test:desktop
       - name: Cache FFmpeg
         uses: actions/cache@v6
         with:
-          path: vendor/ffmpeg
-          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/fetch-ffmpeg.mjs') }}
+          path: apps/desktop/vendor/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('apps/desktop/scripts/fetch-ffmpeg.mjs') }}
       - name: Prepare code signing (optional)
         id: signing
         shell: pwsh
@@ -72,13 +72,13 @@ jobs:
             'signed=false' | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
             Write-Host '::warning title=UNSIGNED build::WINDOWS_CERTIFICATE_BASE64 or WINDOWS_CERTIFICATE_PASSWORD is not set. This release is UNSIGNED: Windows SmartScreen will warn users.'
           }
-      - name: Build (npm run make)
-        run: npm run make
+      - name: Build (npm run make:desktop)
+        run: npm run make:desktop
         env:
           # Read by forge.config.ts together with WINDOWS_CERTIFICATE_FILE (set above).
           # Both stay empty for an unsigned build.
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-      - run: npm run check:mocks
+      - run: npm run check:mocks:desktop
       - name: Remove the temporary certificate
         if: always()
         shell: pwsh
@@ -89,7 +89,7 @@ jobs:
         env:
           SIGNED: ${{ steps.signing.outputs.signed }}
         run: |
-          $setup = Get-ChildItem out/make/squirrel.windows -Recurse -Filter 'FrameCapt-Setup-*.exe' | Select-Object -First 1
+          $setup = Get-ChildItem apps/desktop/out/make/squirrel.windows -Recurse -Filter 'FrameCapt-Setup-*.exe' | Select-Object -First 1
           $sig = Get-AuthenticodeSignature $setup.FullName
           Write-Host "Authenticode status of $($setup.Name): $($sig.Status)"
           if ($env:SIGNED -eq 'true' -and $sig.Status -eq 'NotSigned') { throw 'Signing was enabled but the installer is not signed.' }
@@ -98,7 +98,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release-assets | Out-Null
-          Get-ChildItem out/make -Recurse -File |
+          Get-ChildItem apps/desktop/out/make -Recurse -File |
             Where-Object { $_.Extension -in '.exe', '.zip', '.nupkg' -or $_.Name -eq 'RELEASES' } |
             ForEach-Object { Copy-Item $_.FullName release-assets/ }
           Get-ChildItem release-assets -File | Get-FileHash -Algorithm SHA256 |

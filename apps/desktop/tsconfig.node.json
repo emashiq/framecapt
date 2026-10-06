@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/main",
+    "src/preload",
+    "src/shared",
+    "tests/unit",
+    "tests/live",
+    "forge.config.ts",
+    "vite.*.config.ts",
+    "vitest.config.mts",
+    "vitest.live.config.mts"
+  ]
+}
