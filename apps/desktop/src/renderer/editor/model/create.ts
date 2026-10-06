@@ -258,6 +258,32 @@ export function stampAt(id: string, at: Point, stamp: StampId, d: StyleDefaults)
   };
 }
 
+/** A new picture takes at most this share of the canvas's width and height. */
+export const IMAGE_FIT = 0.6;
+
+/**
+ * A new image layer for a picture of `natural` pixels: scaled down (never up) to fit within 60 % of
+ * the canvas, centered on `center` (default: the canvas center) and kept inside the canvas.
+ */
+export function imageAt(
+  id: string,
+  assetId: string,
+  natural: { width: number; height: number },
+  canvas: { width: number; height: number },
+  center: Point = { x: canvas.width / 2, y: canvas.height / 2 },
+): Annotation {
+  const scale = Math.min(
+    1,
+    (canvas.width * IMAGE_FIT) / natural.width,
+    (canvas.height * IMAGE_FIT) / natural.height,
+  );
+  const width = Math.max(1, Math.round(natural.width * scale));
+  const height = Math.max(1, Math.round(natural.height * scale));
+  const x = Math.round(Math.min(Math.max(center.x - width / 2, 0), canvas.width - width));
+  const y = Math.round(Math.min(Math.max(center.y - height / 2, 0), canvas.height - height));
+  return { type: 'image', id, assetId, rect: { x, y, width, height } };
+}
+
 export function textDraft(id: string, at: Point, d: StyleDefaults): Annotation {
   return {
     type: 'text',

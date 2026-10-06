@@ -17,6 +17,8 @@ import {
   type DrawEnv,
   type EffectCache,
 } from '../../editor/flatten';
+import type { EditorAssets } from '../../editor/assets';
+import { pictureIn } from '../../editor/import-image';
 import { measureText } from '../../editor/measure';
 import { snapMove, type Guide } from '../../editor/model/arrange';
 import type { Command } from '../../editor/model/commands';
@@ -115,6 +117,10 @@ export interface EditorStageProps {
   onZoom: (zoom: number) => void;
   /** A step badge was placed: the counter moves on. */
   onStepPlaced: () => void;
+  /** The pictures of the document's image layers. */
+  assets: EditorAssets;
+  /** A picture file was dropped on the canvas, at this point (image px). */
+  onDropImage: (file: File, at: Point) => void;
 }
 
 /** The text being typed on the canvas: a new or existing text or callout. */
@@ -304,6 +310,7 @@ export function EditorStage(props: EditorStageProps) {
         forExport: true,
         cache: effectCache.current,
         shadowScale: fitted.zoom,
+        assets: L.assets,
       });
       ctx.restore();
       return;
@@ -340,6 +347,7 @@ export function EditorStage(props: EditorStageProps) {
       skipId: L.editing?.id ?? null,
       cache: effectCache.current,
       shadowScale: scale,
+      assets: L.assets,
     });
     const draft = draftRef.current;
     if (draft) {
@@ -1083,6 +1091,16 @@ export function EditorStage(props: EditorStageProps) {
       ref={containerRef}
       className="checkerboard relative min-h-0 flex-1 overflow-hidden"
       data-testid="editor-stage"
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        const file = pictureIn(event.dataTransfer.files);
+        if (!file) return;
+        event.preventDefault();
+        const L = latest.current;
+        props.onDropImage(file, screenToImage(L.view, L.dpr, cssPoint(event)));
+      }}
     >
       <canvas
         ref={canvasRef}

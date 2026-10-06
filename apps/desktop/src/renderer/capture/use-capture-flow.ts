@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { notify } from '../lib/notify';
-import type { ShotKind } from '../../shared/shots';
+import type { CaptureTarget } from '../../shared/shots';
 
 export interface CaptureFlow {
   /** The target of the running flow, or null when idle. */
-  running: ShotKind | null;
+  running: CaptureTarget | null;
   /** The running flow captures every screen in one image. */
   allScreens: boolean;
   /**
@@ -12,7 +12,7 @@ export interface CaptureFlow {
    * or fails (after a completed flow the result view takes over).
    */
   start: (
-    target: ShotKind,
+    target: CaptureTarget,
     trigger: HTMLElement | null,
     sourceId?: string,
     allScreens?: boolean,
@@ -21,7 +21,7 @@ export interface CaptureFlow {
 
 /** Drives `capture:startScreenshot` and follows its outcome events from main. */
 export function useCaptureFlow(): CaptureFlow {
-  const [running, setRunning] = useState<ShotKind | null>(null);
+  const [running, setRunning] = useState<CaptureTarget | null>(null);
   const [allScreens, setAllScreens] = useState(false);
   const triggerRef = useRef<HTMLElement | null>(null);
   const refocus = useRef(false);

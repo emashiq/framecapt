@@ -31,7 +31,7 @@ import {
 } from '../../shared/recorder-machine';
 import type { ToastEvent } from '../../shared/settings-ipc';
 import type { OverlayInit } from '../../shared/shot-ipc';
-import type { ShotKind } from '../../shared/shots';
+import type { CaptureTarget } from '../../shared/shots';
 import type { Role } from '../../shared/types';
 import {
   placeToolbar,
@@ -117,7 +117,7 @@ export interface RecorderDeps {
   synthetic: boolean;
   /** Saves a screenshot taken during the recording (a file in the screenshots folder, plus history). */
   saveScreenshot: (shot: {
-    kind: ShotKind;
+    kind: CaptureTarget;
     width: number;
     height: number;
     png: Buffer;
@@ -810,9 +810,9 @@ export class RecorderController implements SelectionHost {
 
   private async grabStill(
     ctx: SessionContext,
-  ): Promise<{ kind: ShotKind; width: number; height: number; png: Buffer }> {
+  ): Promise<{ kind: CaptureTarget; width: number; height: number; png: Buffer }> {
     const { display, regionPx } = ctx;
-    const kind: ShotKind = ctx.target;
+    const kind: CaptureTarget = ctx.target;
     if (kind !== 'window' && display && !this.deps.synthetic) {
       // Pixel-exact desktopCapturer image; the worker's video frame is the fallback.
       const grab = await grabScreensExact([display]).catch(() => undefined);

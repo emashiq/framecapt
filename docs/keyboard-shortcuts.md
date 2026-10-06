@@ -45,12 +45,13 @@ refusing the registration ("used by another app"). A global shortcut also cannot
 
 ## Command center and menus (customizable)
 
-The title bar has a menu bar (**File**, **View**, **Help**) and a search box in the middle, the command center. These two keys open it from anywhere in the main window (the editor included); they are in-app keys, not registered with the operating system, and are edited on the same Settings, Shortcuts page (group **Command center**) and listed in the Keyboard shortcuts help:
+The title bar has a menu bar (**File**, **View**, **Help**) and a search box in the middle, the command center. These two keys open it from anywhere in the main window (the editor included); they are in-app keys, not registered with the operating system, and are edited on the same Settings, Shortcuts page (group **Main window**) and listed in the Keyboard shortcuts help. **Open image** (`Ctrl+O`) is in the same group: it picks a picture file (PNG, JPEG, WebP, GIF or BMP) and opens it in the editor like a screenshot; nothing is saved until you save.
 
 | Action                                       | Default        |
 | -------------------------------------------- | -------------- |
 | Command center: search commands and captures | `Ctrl+K`       |
 | Command center: commands only                | `Ctrl+Shift+P` |
+| Open an image to edit                        | `Ctrl+O`       |
 
 In the command center: type to search, `Up` / `Down` choose, `Enter` runs the highlighted command (a saved capture opens in History), `Shift+Enter` on a saved capture shows it in its folder, `Esc` closes it. A command that cannot run now (signed out, Viewer role, a recording in progress) is listed with the reason and `Enter` does nothing. The menu bar works with the arrow keys (`Down` or `Enter` opens a menu, `Left` / `Right` move between menus, `Esc` closes and returns to the menu button); each item shows its live shortcut. There is no `Alt` access key for the menus.
 
@@ -79,6 +80,7 @@ focus (the Text tool's box, any input), so a letter bound to a tool never gets i
 | Magnifier                     | `M`                                                                              |
 | Stamp                         | `E`                                                                              |
 | Ruler                         | `I`                                                                              |
+| Insert an image from a file   | `Ctrl+Shift+O`                                                                   |
 | Duplicate                     | `Ctrl+D`                                                                         |
 | Bring forward / Send backward | `Ctrl+]` / `Ctrl+[`                                                              |
 | Bring to front / Send to back | `Ctrl+Shift+]` / `Ctrl+Shift+[`                                                  |

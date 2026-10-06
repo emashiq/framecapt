@@ -5,7 +5,7 @@ import type { Rect } from '../shared/rect';
 import { stitchBitmaps, StitchError } from '../shared/stitch';
 import type { ToastEvent } from '../shared/settings-ipc';
 import type { FlowEndedEvent, OverlayMode, StartScreenshotRequest } from '../shared/shot-ipc';
-import { isBlankBitmap, type ShotKind } from '../shared/shots';
+import { isBlankBitmap, type CaptureTarget } from '../shared/shots';
 import { grabScreensExact, grabWindowExact } from './capture/exact-capture';
 import type { CaptureProvider, DisplayInfo } from './capture/types';
 import { sendEvent } from './events';
@@ -36,7 +36,7 @@ export interface CaptureFlowDeps {
   isRecording?: () => boolean;
   /** Saves a capture with no editor (during a recording); throws when it could not be saved. */
   saveDirect?: (shot: {
-    kind: ShotKind;
+    kind: CaptureTarget;
     width: number;
     height: number;
     png: Buffer;
@@ -45,7 +45,7 @@ export interface CaptureFlowDeps {
   toast?: (event: ToastEvent) => void;
   /** The "after a capture" setting: copy or save before the editor opens (a failure is ignored). */
   afterCapture?: (shot: {
-    kind: ShotKind;
+    kind: CaptureTarget;
     width: number;
     height: number;
     png: Buffer;
@@ -476,7 +476,7 @@ export class CaptureFlow {
 
   private async completeWith(
     flowId: number,
-    shot: { kind: ShotKind; width: number; height: number; png: Buffer },
+    shot: { kind: CaptureTarget; width: number; height: number; png: Buffer },
   ): Promise<void> {
     if (!this.state.isCurrent(flowId)) return;
     if (this.recordingFlow) return this.saveDirectly(flowId, shot);
@@ -502,7 +502,7 @@ export class CaptureFlow {
   /** During a recording: no session, no editor; the file goes straight to the screenshots folder. */
   private async saveDirectly(
     flowId: number,
-    shot: { kind: ShotKind; width: number; height: number; png: Buffer },
+    shot: { kind: CaptureTarget; width: number; height: number; png: Buffer },
   ): Promise<void> {
     if (!this.deps.saveDirect) throw new FlowFailure('CAPTURE_FAILED', SCREEN_FAILED);
     await this.deps.saveDirect(shot);

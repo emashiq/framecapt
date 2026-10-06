@@ -241,6 +241,27 @@ describe('the all screens shortcut (added after version 1 shipped)', () => {
   });
 });
 
+describe('the Open image and Insert image shortcuts (added with image layers)', () => {
+  it('a settings file from before them gets Ctrl+O and Ctrl+Shift+O', () => {
+    const { openImage, insertImage, ...older } = DEFAULT_SETTINGS.editorShortcuts;
+    expect([openImage, insertImage]).toEqual(['Ctrl+O', 'Ctrl+Shift+O']);
+    const parsed = parseSettings({ ...structuredClone(DEFAULT_SETTINGS), editorShortcuts: older });
+    expect(parsed.ok && parsed.settings.editorShortcuts.openImage).toBe('Ctrl+O');
+    expect(parsed.ok && parsed.settings.editorShortcuts.insertImage).toBe('Ctrl+Shift+O');
+  });
+
+  it('a user key that clashes with the new default leaves the new action unbound', () => {
+    const { openImage: _open, ...keys } = DEFAULT_SETTINGS.editorShortcuts;
+    void _open;
+    const parsed = parseSettings({
+      ...structuredClone(DEFAULT_SETTINGS),
+      editorShortcuts: { ...keys, toolText: 'Ctrl+O' },
+    });
+    expect(parsed.ok && parsed.settings.editorShortcuts.toolText).toBe('Ctrl+O');
+    expect(parsed.ok && parsed.settings.editorShortcuts.openImage).toBeNull();
+  });
+});
+
 describe('the quick save editor shortcut (added after version 1 shipped)', () => {
   it('a settings file from before it loads unchanged and gets the default key', () => {
     const { quickSave, ...olderEditorKeys } = DEFAULT_SETTINGS.editorShortcuts;
