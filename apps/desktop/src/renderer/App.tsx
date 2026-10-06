@@ -10,7 +10,6 @@ import { useAnnouncement } from './lib/announce';
 import { requestLaunch } from './lib/launch-bus';
 import { notify } from './lib/notify';
 import { useRecorderState, useRecorderToasts } from './recorder/use-recorder';
-import { startSettingsSync } from './settings/store';
 import { CaptureView } from './views/CaptureView';
 import { RecordingResultView } from './views/RecordingResultView';
 import { EditorView, type EditorShot } from './views/editor/EditorView';
@@ -20,7 +19,10 @@ import { VideoEditorView } from './views/video-editor/VideoEditorView';
 import { listenToBulk } from './history/bulk-store';
 import { listenToExports } from './history/export-store';
 import { listenToVideoExports } from './history/video-export-store';
+import { importPicture, pictureIn } from './editor/import-image';
 import { openFromHistory } from './editor/reedit';
+import { matchEditorAction } from '../shared/shortcuts';
+import { getSettings, startSettingsSync } from './settings/store';
 
 /** What the discard confirmation will do when the user agrees. */
 type PendingLeave = { kind: 'leave'; then?: () => void } | { kind: 'close' };
@@ -279,6 +281,34 @@ export function App() {
   );
 
   /**
+   * A new editor session from a picture (Open image, a drop, a paste): an unsaved editor asks
+   * first. The picture is not saved anywhere; it is only an editable copy.
+   */
+  const openPicture = useCallback(
+    (picture: Blob) => {
+      requestLeave(() => {
+        void importPicture(window.framecapt, picture).then((result) => {
+          if (!result.ok) {
+            notify.error(result.error);
+            return;
+          }
+          setShot({ session: result.session, png: result.png, imported: true });
+          setDirty(false);
+          setView('capture');
+        });
+      });
+    },
+    [requestLeave],
+  );
+
+  /** File > Open image: the Open dialog first (cancelling keeps the editor as it is). */
+  const openImage = useCallback(async () => {
+    const response = await window.framecapt.invoke('shot:openImage');
+    if (!response.ok) notify.error(response.error);
+    else if ('bytes' in response.data) openPicture(new Blob([response.data.bytes]));
+  }, [openPicture]);
+
+  /**
    * Starts a screenshot or recording through the Capture view's own handlers (its buttons, with the
    * window picker for "window"): a tray or shortcut action, and the menus and command center. An
    * unsaved editor asks first.
@@ -293,9 +323,9 @@ export function App() {
   );
 
   // The tray menu asks for a view; a shortcut or the tray asks to start something here.
-  const latest = useRef({ navigate, startRequest });
+  const latest = useRef({ navigate, startRequest, openImage, openPicture, view });
   useEffect(() => {
-    latest.current = { navigate, startRequest };
+    latest.current = { navigate, startRequest, openImage, openPicture, view };
   });
   useEffect(
     () =>
@@ -309,6 +339,55 @@ export function App() {
       window.framecapt.on('app:startRequest', (request) => latest.current.startRequest(request)),
     [],
   );
+
+  // Open image: its key (Settings, Shortcuts; Ctrl+O by default) works in the whole main window.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.repeat || event.defaultPrevented) return;
+      if (matchEditorAction(event, getSettings().editorShortcuts) !== 'openImage') return;
+      // A dialog (help, a confirmation, the command center) owns the keyboard while it is open.
+      if (document.querySelector('dialog[open]')) return;
+      event.preventDefault();
+      void latest.current.openImage();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // A picture dropped on the window or pasted on the Capture view opens in the editor. Dropping a
+  // file anywhere must never navigate the window, so every file drag is claimed here; while the
+  // editor is open the canvas takes the drop (as an image layer) and the window only ignores it.
+  useEffect(() => {
+    const hasFiles = (event: DragEvent): boolean =>
+      event.dataTransfer?.types.includes('Files') === true;
+    const onDragOver = (event: DragEvent): void => {
+      if (hasFiles(event)) event.preventDefault();
+    };
+    const onDrop = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      const takenByCanvas = event.defaultPrevented;
+      event.preventDefault();
+      const picture = pictureIn(event.dataTransfer?.files);
+      if (picture && !takenByCanvas && !shotRef.current) latest.current.openPicture(picture);
+    };
+    // The DOM paste event carries the clipboard's files: no clipboard permission is involved.
+    const onPaste = (event: ClipboardEvent): void => {
+      if (event.defaultPrevented || shotRef.current || latest.current.view !== 'capture') return;
+      if (isTyping(event.target)) return;
+      const picture = pictureIn(event.clipboardData?.files);
+      if (!picture) return;
+      event.preventDefault();
+      latest.current.openPicture(picture);
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    window.addEventListener('paste', onPaste);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+      window.removeEventListener('paste', onPaste);
+    };
+  }, []);
 
   // `?` or F1 opens the keyboard help (not while typing, not over a dialog).
   useEffect(() => {
@@ -327,18 +406,22 @@ export function App() {
   const titleBar = useMemo(
     () => ({
       actions: {
-        startCapture: (kind: StartRequestEvent['kind'], target: StartRequestEvent['target']) =>
-          startRequest({ kind, target }),
+        startCapture: (
+          kind: StartRequestEvent['kind'],
+          target: StartRequestEvent['target'],
+          allScreens?: boolean,
+        ) => startRequest({ kind, target, ...(allScreens && { allScreens }) }),
         navigate: (next: ViewId, section?: SettingsSectionId) => navigate(next, section),
         showKeyboardHelp: () => setHelpOpen(true),
         editVideo: editLatestVideo,
+        openImage: () => void openImage(),
       },
       onOpenCapture: (id: string) => {
         setHistoryFocus(id);
         navigate('history');
       },
     }),
-    [startRequest, navigate, editLatestVideo],
+    [startRequest, navigate, editLatestVideo, openImage],
   );
 
   const showVideoEditor = view === 'video-editor' && videoId !== null;
@@ -383,6 +466,7 @@ export function App() {
           />
         ) : view === 'capture' ? (
           <CaptureView
+            onOpenImage={() => void openImage()}
             onOpenHistory={(id) => {
               setHistoryFocus(id ?? null);
               navigate('history');
@@ -415,11 +499,13 @@ export function App() {
       />
       <AlertConfirm
         open={pending !== null}
-        title={shot?.edit ? 'Discard your changes?' : 'Discard this screenshot?'}
+        title={shot?.edit || shot?.imported ? 'Discard your changes?' : 'Discard this screenshot?'}
         description={
           shot?.edit
             ? 'Your changes have not been saved. The saved screenshot in History stays as it is.'
-            : 'It has not been saved or copied since your last change. Discarding deletes it for good.'
+            : shot?.imported
+              ? 'Your changes have not been saved. The picture you opened is not changed.'
+              : 'It has not been saved or copied since your last change. Discarding deletes it for good.'
         }
         cancelLabel="Keep editing"
         confirmLabel="Discard"

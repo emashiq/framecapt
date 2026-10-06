@@ -83,7 +83,7 @@ const value = (action: string) => page.getByTestId(`shortcut-value-${action}`);
 test('a taken combination offers "Swap", and the swap saves both in one change', async () => {
   await openShortcuts();
   const before = await held();
-  expect(before).toHaveLength(8);
+  expect(before).toHaveLength(9);
 
   await page.getByTestId('shortcut-change-recordRegion').click();
   // Ctrl+Shift+3 is "Screenshot: region".
@@ -102,7 +102,7 @@ test('a taken combination offers "Swap", and the swap saves both in one change',
   await expect(value('screenshotRegion')).toContainText('7');
   await expect.poll(() => readSettings().shortcuts?.recordRegion).toBe('Ctrl+Shift+3');
   expect(readSettings().shortcuts?.screenshotRegion).toBe('Ctrl+Shift+7');
-  // The same eight combinations are registered, each for its new action.
+  // The same nine combinations are registered, each for its new action.
   await expect.poll(held).toEqual(before);
   await expect(page.getByTestId('shortcut-problems')).toHaveCount(0);
 });

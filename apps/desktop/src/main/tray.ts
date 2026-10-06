@@ -21,6 +21,8 @@ export interface TrayState {
   shortcuts: ShortcutStates | null;
   /** A screenshot flow is running (the screenshot items wait). */
   screenshotBusy: boolean;
+  /** More than one display is connected ("All screens" is offered). */
+  multiDisplay: boolean;
 }
 
 export interface TrayHandlers {
@@ -97,28 +99,36 @@ export function buildTrayTemplate(
     );
   }
 
-  const screenshotEnabled = !recording && !preRecording && !state.screenshotBusy;
+  // A live recording still allows a screenshot (saved directly); saving it or setting it up does not.
+  const screenshotEnabled = (live || (!recording && !preRecording)) && !state.screenshotBusy;
   const recordEnabled = !recording && !state.screenshotBusy;
   const targets = [
     ['Screen', 'screen'],
     ['Window', 'window'],
     ['Region', 'region'],
   ] as const;
+  const shotItems: MenuItemConstructorOptions[] = targets.map(([label, target]) => {
+    const action = `screenshot${label}` as ShortcutAction;
+    return {
+      id: `screenshot-${target}`,
+      label,
+      // The window picker needs the main window, which must stay out of a recording.
+      enabled: screenshotEnabled && !(live && target === 'window'),
+      ...acceleratorOf(state.shortcuts, action),
+      click: () => handlers.run(action),
+    };
+  });
+  if (state.multiDisplay) {
+    shotItems.push({
+      id: 'screenshot-all-screens',
+      label: 'All screens',
+      enabled: screenshotEnabled,
+      ...acceleratorOf(state.shortcuts, 'screenshotAllScreens'),
+      click: () => handlers.run('screenshotAllScreens'),
+    });
+  }
   items.push(
-    {
-      id: 'screenshot',
-      label: 'Screenshot',
-      submenu: targets.map(([label, target]) => {
-        const action = `screenshot${label}` as ShortcutAction;
-        return {
-          id: `screenshot-${target}`,
-          label,
-          enabled: screenshotEnabled,
-          ...acceleratorOf(state.shortcuts, action),
-          click: () => handlers.run(action),
-        };
-      }),
-    },
+    { id: 'screenshot', label: 'Screenshot', submenu: shotItems },
     {
       id: 'record',
       label: 'Record',
@@ -166,6 +176,7 @@ export class TrayController {
     activeMs: 0,
     shortcuts: null,
     screenshotBusy: false,
+    multiDisplay: false,
   };
   private lastRecording = false;
 

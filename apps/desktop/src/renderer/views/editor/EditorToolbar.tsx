@@ -5,6 +5,8 @@ import {
   ChevronDown,
   Copy,
   FileImage,
+  FolderOpen,
+  Images,
   Maximize,
   PanelRight,
   Redo2,
@@ -21,7 +23,15 @@ import { Kbd } from '../../components/ui/Kbd';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { cn } from '../../lib/cn';
 import { useSettings } from '../../settings/store';
-import { BLUR_TIP, REDACT_TIP, TOOL_GROUPS, TOOLS, type ToolDef, type ToolId } from './tools';
+import {
+  BLUR_TIP,
+  INSERT_IMAGE,
+  REDACT_TIP,
+  TOOL_GROUPS,
+  TOOLS,
+  type ToolDef,
+  type ToolId,
+} from './tools';
 
 /**
  * Roving tabindex for a role="toolbar": exactly one control is in the tab order, the arrow keys,
@@ -187,6 +197,10 @@ export interface EditorToolbarProps {
   onSaveOver: () => void;
   /** Saves into the screenshots folder with no dialog (a new history item). */
   onQuickSave: () => void;
+  /** Insert image > From file. */
+  onInsertFile: () => void;
+  /** Insert image > From History. */
+  onInsertHistory: () => void;
 }
 
 export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarProps) {
@@ -200,6 +214,7 @@ export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarPro
     return accelerator ? acceleratorKeys(accelerator) : undefined;
   };
   const saveKeys = keysOf('save');
+  const insertKeys = keysOf(INSERT_IMAGE.action);
   const quickKeys = keysOf('quickSave');
   const percent = `${Math.round(props.zoom * 100)}%`;
   const { reedit } = props;
@@ -253,6 +268,64 @@ export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarPro
             })}
           </div>
         ))}
+        <div role="group" aria-label="Insert" className="flex items-center gap-1">
+          <Divider />
+          <DropdownMenu.Root>
+            <Tooltip
+              content={
+                <span className="flex flex-col gap-1">
+                  <span className="flex items-center gap-2">
+                    {INSERT_IMAGE.label} {insertKeys ? <Kbd keys={insertKeys} /> : null}
+                  </span>
+                  <span className="font-normal opacity-80">{INSERT_IMAGE.hint}</span>
+                </span>
+              }
+              side="bottom"
+              passthrough
+            >
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  data-roving=""
+                  data-testid="editor-insert-image"
+                  aria-label={INSERT_IMAGE.label}
+                  className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-fg-muted transition-colors duration-150 hover:bg-surface-3 hover:text-fg"
+                >
+                  <INSERT_IMAGE.icon className="size-[18px]" aria-hidden="true" />
+                  <ChevronDown className="size-3.5" aria-hidden="true" />
+                </button>
+              </DropdownMenu.Trigger>
+            </Tooltip>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="start"
+                sideOffset={6}
+                className="z-50 min-w-60 rounded-xl border border-line bg-surface p-1.5 text-sm text-fg shadow-raised"
+              >
+                <DropdownMenu.Item
+                  data-testid="editor-insert-file"
+                  onSelect={() => props.onInsertFile()}
+                  className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 outline-none data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent-fg"
+                >
+                  <FolderOpen className="size-4 text-fg-subtle" aria-hidden="true" />
+                  <span className="flex-1">From file…</span>
+                  {insertKeys ? <Kbd keys={insertKeys} /> : null}
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  data-testid="editor-insert-history"
+                  onSelect={() => props.onInsertHistory()}
+                  className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 outline-none data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent-fg"
+                >
+                  <Images className="size-4 text-fg-subtle" aria-hidden="true" />
+                  <span className="flex-1">From History…</span>
+                </DropdownMenu.Item>
+                <p className="px-2.5 pt-1.5 pb-1 text-xs text-fg-subtle">
+                  You can also paste a picture (Ctrl+V) or drop a file on the canvas.
+                </p>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </div>
       </div>
 
       <div className="flex items-center gap-1" role="group" aria-label="Zoom">

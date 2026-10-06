@@ -13,15 +13,20 @@ import {
   EditorSetDirtyRequestSchema,
   FlowEndedEventSchema,
   GrabFramesEventSchema,
+  HistoryImageRequestSchema,
+  HistoryImageResponseSchema,
   OverlayConfirmRequestSchema,
   OverlayInitSchema,
   OverlayPickDisplayRequestSchema,
+  PickImageResponseSchema,
   ShotCopyRequestSchema,
   ShotExportRequestSchema,
   ShotExportResponseSchema,
   ShotQuickSaveResponseSchema,
   ShotGetRequestSchema,
   ShotGetResponseSchema,
+  ShotImportRequestSchema,
+  ShotImportResponseSchema,
   ShotReadyEventSchema,
   ShowItemInFolderRequestSchema,
   StartScreenshotRequestSchema,
@@ -69,7 +74,11 @@ import {
   VideoExportFailedEventSchema,
   VideoExportProgressEventSchema,
   VideoExportRequestSchema,
+  VideoAddImageRequestSchema,
+  VideoAddImageResponseSchema,
   VideoExportResponseSchema,
+  VideoPickAudioRequestSchema,
+  VideoPickAudioResponseSchema,
   VideoOpenRequestSchema,
   VideoOpenResponseSchema,
   VideoSaveRequestSchema,
@@ -221,6 +230,30 @@ export const ipcContract = {
     response: OpenFromHistoryResponseSchema,
     roles: ['main'],
   },
+  /** File > Open image: a main-process dialog; returns the picked picture's validated bytes. */
+  'shot:openImage': {
+    request: z.undefined(),
+    response: PickImageResponseSchema,
+    roles: ['main'],
+  },
+  /** Starts an editor session from a PNG the renderer made from a picture (opened, dropped, pasted). */
+  'shot:importImage': {
+    request: ShotImportRequestSchema,
+    response: ShotImportResponseSchema,
+    roles: ['main'],
+  },
+  /** Insert image > From file: the same dialog, for an image layer inside the open editor. */
+  'editor:pickImage': {
+    request: z.undefined(),
+    response: PickImageResponseSchema,
+    roles: ['main'],
+  },
+  /** Insert image > From History: the picture of an owned screenshot, as PNG. */
+  'editor:historyImage': {
+    request: HistoryImageRequestSchema,
+    response: HistoryImageResponseSchema,
+    roles: ['main'],
+  },
   'shot:copy': {
     request: ShotCopyRequestSchema,
     response: z.void(),
@@ -306,6 +339,8 @@ export const ipcContract = {
   'recorder:resume': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
   'recorder:stop': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
   'recorder:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  /** A screenshot of what is being recorded, saved straight to the screenshots folder. */
+  'recorder:screenshot': { request: z.undefined(), response: z.void(), roles: ['toolbar'] },
   'recorder:toggleMute': {
     request: ToggleMuteRequestSchema,
     response: z.void(),
@@ -393,6 +428,12 @@ export const ipcContract = {
     response: z.object({ removed: z.number() }),
     roles: ['main'],
   },
+  /** Adds captures found in the output folders that history does not list (files only read). */
+  'history:rescan': {
+    request: z.undefined(),
+    response: z.object({ added: z.number() }),
+    roles: ['main'],
+  },
   /** Recordings: "Save a copy as..." of the finished WebM (a save dialog in main). */
   'history:saveCopy': {
     request: HistoryIdRequestSchema,
@@ -427,6 +468,18 @@ export const ipcContract = {
     roles: ['main'],
   },
   'video:save': { request: VideoSaveRequestSchema, response: z.void(), roles: ['main'] },
+  /** Stores a picture (PNG bytes) as an asset of the project and returns its id (its SHA-256). */
+  'video:addImage': {
+    request: VideoAddImageRequestSchema,
+    response: VideoAddImageResponseSchema,
+    roles: ['main'],
+  },
+  /** An Open dialog in main for an audio file; the file is copied into the project's assets. */
+  'video:pickAudio': {
+    request: VideoPickAudioRequestSchema,
+    response: VideoPickAudioResponseSchema,
+    roles: ['main'],
+  },
   /** Renders the edit into a new file next to the source (a queued job; cancel with export:cancel). */
   'video:export': {
     request: VideoExportRequestSchema,
@@ -501,6 +554,8 @@ export const ipcEvents = {
   'recorder:state': RecorderSnapshotSchema,
   /** Mic and system levels (0..1) for the toolbar meters; only while recording. */
   'recorder:levels': LevelsEventSchema,
+  /** The result of a screenshot taken during a recording, for the toolbar's inline status. */
+  'recorder:toast': ToastEventSchema,
   /** The list of unfinished recordings may have changed (the startup scan finished). */
   'recovery:changed': z.object({}),
   /** History changed (an item was added, removed or got its thumbnail): lists should reload. */

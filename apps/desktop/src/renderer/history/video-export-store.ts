@@ -81,10 +81,17 @@ export async function startVideoExport(
   historyId: string,
   project: VideoProject,
   format: VideoExportFormat,
+  /** The picture of every text item (drawn by the editor). */
+  overlays: { itemId: string; png: ArrayBuffer }[] = [],
 ): Promise<void> {
   formats.set(historyId, format);
   set(historyId, { status: 'starting' });
-  const response = await window.framecapt.invoke('video:export', { historyId, project, format });
+  const response = await window.framecapt.invoke('video:export', {
+    historyId,
+    project,
+    format,
+    overlays,
+  });
   if (!response.ok) {
     set(historyId, null);
     notify.error(response.error);

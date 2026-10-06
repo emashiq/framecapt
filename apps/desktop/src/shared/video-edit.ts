@@ -45,12 +45,45 @@ export const PixelRectSchema = z.strictObject({
 });
 export type PixelRect = z.infer<typeof PixelRectSchema>;
 
-const itemBase = {
+const timeBase = {
   id: IdSchema,
   startMs: TimeSchema,
   endMs: TimeSchema,
-  rect: PixelRectSchema,
 };
+const itemBase = { ...timeBase, rect: PixelRectSchema };
+const HexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const FadeSchema = z.number().int().min(0).max(MAX_FADE_MS);
+
+/** Project assets (a picture, an audio file) are named by the SHA-256 (hex) of their bytes. */
+export const ASSET_ID_PATTERN = /^[0-9a-f]{64}$/;
+export const AssetIdSchema = z.string().regex(ASSET_ID_PATTERN);
+export const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'flac'] as const;
+export type AudioExtension = (typeof AUDIO_EXTENSIONS)[number];
+/** The longest audio file that may be added (a clip is cut to the recording anyway). */
+export const MAX_CLIP_MS = 2 * 60 * 60 * 1000;
+export const TEXT_MAX_CHARS = 500;
+/** Text and image overlays (each is one extra ffmpeg input) and audio clips a project may hold. */
+export const MAX_OVERLAYS = 40;
+export const MAX_AUDIO_CLIPS = 16;
+
+export const TEXT_FONTS = ['inter', 'arial', 'georgia', 'courier', 'impact'] as const;
+export type TextFont = (typeof TEXT_FONTS)[number];
+export const TEXT_WEIGHTS = [300, 400, 500, 600, 700, 800] as const;
+export const TEXT_ALIGNS = ['left', 'center', 'right'] as const;
+export type TextAlign = (typeof TEXT_ALIGNS)[number];
+
+const TextBackgroundSchema = z.strictObject({
+  color: HexColorSchema,
+  opacity: z.number().min(0).max(1),
+  padding: z.number().int().min(0).max(200),
+  radius: z.number().int().min(0).max(200),
+});
+const TextOutlineSchema = z.strictObject({
+  color: HexColorSchema,
+  width: z.number().int().min(1).max(20),
+});
+export type TextBackground = z.infer<typeof TextBackgroundSchema>;
+export type TextOutline = z.infer<typeof TextOutlineSchema>;
 
 /** A solid box that hides what is under it. */
 const RedactItemSchema = z.strictObject({
@@ -78,15 +111,98 @@ const HighlightItemSchema = z.strictObject({
   dim: z.number().min(0.1).max(0.9),
 });
 
+/**
+ * Text. The renderer draws it (the same code as the preview) into a transparent PNG of the box's
+ * size; the export overlays that picture, so the string itself never reaches ffmpeg.
+ */
+const TextItemSchema = z.strictObject({
+  ...itemBase,
+  kind: z.literal('text'),
+  text: z.string().min(1).max(TEXT_MAX_CHARS),
+  font: z.enum(TEXT_FONTS),
+  /** Font size in source pixels. */
+  size: z.number().int().min(8).max(600),
+  weight: z.union([
+    z.literal(300),
+    z.literal(400),
+    z.literal(500),
+    z.literal(600),
+    z.literal(700),
+    z.literal(800),
+  ]),
+  italic: z.boolean(),
+  color: HexColorSchema,
+  align: z.enum(TEXT_ALIGNS),
+  background: TextBackgroundSchema.nullable(),
+  outline: TextOutlineSchema.nullable(),
+  shadow: z.boolean(),
+  fadeInMs: FadeSchema,
+  fadeOutMs: FadeSchema,
+});
+/** A picture (a logo, a screenshot) stored in the project's assets by its SHA-256. */
+const ImageItemSchema = z.strictObject({
+  ...itemBase,
+  kind: z.literal('image'),
+  assetId: AssetIdSchema,
+  opacity: z.number().min(0.05).max(1),
+  fadeInMs: FadeSchema,
+  fadeOutMs: FadeSchema,
+});
+/**
+ * An audio clip on the audio track. `startMs`..`endMs` is where it plays on the source timeline;
+ * `inMs` is where in the file it starts; `clipMs` is the file's length (so the clip cannot be
+ * stretched past it).
+ */
+const AudioItemSchema = z.strictObject({
+  ...timeBase,
+  kind: z.literal('audio'),
+  assetId: AssetIdSchema,
+  ext: z.enum(AUDIO_EXTENSIONS),
+  /** The file's name, for the timeline label only. */
+  name: z.string().max(120),
+  clipMs: z.number().int().min(1).max(MAX_CLIP_MS),
+  inMs: z.number().int().min(0).max(MAX_CLIP_MS),
+  volume: z.number().min(0).max(2),
+  muted: z.boolean(),
+  fadeInMs: FadeSchema,
+  fadeOutMs: FadeSchema,
+});
+
 export const ItemSchema = z.discriminatedUnion('kind', [
   RedactItemSchema,
   BlurItemSchema,
   PixelateItemSchema,
   HighlightItemSchema,
+  TextItemSchema,
+  ImageItemSchema,
+  AudioItemSchema,
 ]);
 export type Item = z.infer<typeof ItemSchema>;
 export type ItemKind = Item['kind'];
-export const ITEM_KINDS: readonly ItemKind[] = ['redact', 'blur', 'pixelate', 'highlight'];
+/** Everything on the picture (all but the audio clips): has a box. */
+export type VisualItem = Exclude<Item, { kind: 'audio' }>;
+export type TextItem = Extract<Item, { kind: 'text' }>;
+export type ImageItem = Extract<Item, { kind: 'image' }>;
+export type AudioItem = Extract<Item, { kind: 'audio' }>;
+export const isVisual = (item: Item): item is VisualItem => item.kind !== 'audio';
+/** The box of an item, or undefined for an audio clip (and for no item). */
+export const rectOf = (item: Item | undefined): PixelRect | undefined =>
+  item && isVisual(item) ? item.rect : undefined;
+/** The kinds that hide or mark an area (drawn by ffmpeg filters from numbers alone). */
+export const MASK_KINDS = ['redact', 'blur', 'pixelate', 'highlight'] as const;
+export type MaskKind = (typeof MASK_KINDS)[number];
+export const ITEM_KINDS: readonly ItemKind[] = [...MASK_KINDS, 'text', 'image', 'audio'];
+
+/** At most MAX_OVERLAYS text and image items and MAX_AUDIO_CLIPS audio clips. */
+const ItemsSchema = z
+  .array(ItemSchema)
+  .max(MAX_ITEMS)
+  .superRefine((items, ctx) => {
+    const overlays = items.filter((item) => item.kind === 'text' || item.kind === 'image').length;
+    const clips = items.filter((item) => item.kind === 'audio').length;
+    if (overlays > MAX_OVERLAYS) ctx.addIssue({ code: 'custom', message: 'Too many overlays.' });
+    if (clips > MAX_AUDIO_CLIPS) ctx.addIssue({ code: 'custom', message: 'Too many audio clips.' });
+  });
 
 export const CutSchema = z.strictObject({ id: IdSchema, startMs: TimeSchema, endMs: TimeSchema });
 export type Cut = z.infer<typeof CutSchema>;
@@ -109,7 +225,7 @@ export const VideoProjectSchema = z.strictObject({
   trim: z.strictObject({ startMs: TimeSchema, endMs: TimeSchema }),
   cuts: z.array(CutSchema).max(MAX_CUTS),
   crop: PixelRectSchema.nullable(),
-  items: z.array(ItemSchema).max(MAX_ITEMS),
+  items: ItemsSchema,
   audio: z.strictObject({ volume: z.number().min(0).max(2), muted: z.boolean() }),
   fadeInMs: z.number().int().min(0).max(MAX_FADE_MS),
   fadeOutMs: z.number().int().min(0).max(MAX_FADE_MS),
@@ -300,7 +416,10 @@ export function normalizeItem(item: Item, source: VideoSource): Item {
     endMs = Math.min(source.durationMs, startMs + length);
     startMs = endMs - length;
   }
+  if (item.kind === 'audio') return normalizeAudio(item, startMs, endMs, source);
   const base = { id: item.id, startMs, endMs, rect: normalizeRect(item.rect, source, MIN_BOX_PX) };
+  const fades = (fadeIn: number, fadeOut: number): { fadeInMs: number; fadeOutMs: number } =>
+    normalizeFades(fadeIn, fadeOut, endMs - startMs);
   switch (item.kind) {
     case 'redact':
       return { ...base, kind: 'redact', color: item.color };
@@ -310,7 +429,91 @@ export function normalizeItem(item: Item, source: VideoSource): Item {
       return { ...base, kind: 'pixelate', block: clamp(round(item.block), 2, 128) };
     case 'highlight':
       return { ...base, kind: 'highlight', dim: clamp(item.dim, 0.1, 0.9) };
+    case 'image':
+      return {
+        ...base,
+        kind: 'image',
+        assetId: item.assetId,
+        opacity: clamp(item.opacity, 0.05, 1),
+        ...fades(item.fadeInMs, item.fadeOutMs),
+      };
+    case 'text':
+      return {
+        ...base,
+        kind: 'text',
+        text: item.text.slice(0, TEXT_MAX_CHARS) || ' ',
+        font: item.font,
+        size: clamp(round(item.size), 8, 600),
+        weight: item.weight,
+        italic: item.italic,
+        color: item.color,
+        align: item.align,
+        background: item.background && {
+          color: item.background.color,
+          opacity: clamp(item.background.opacity, 0, 1),
+          padding: clamp(round(item.background.padding), 0, 200),
+          radius: clamp(round(item.background.radius), 0, 200),
+        },
+        outline: item.outline && {
+          color: item.outline.color,
+          width: clamp(round(item.outline.width), 1, 20),
+        },
+        shadow: item.shadow,
+        ...fades(item.fadeInMs, item.fadeOutMs),
+      };
   }
+}
+
+/** Fade lengths whose sum fits in the item's length. */
+function normalizeFades(
+  fadeIn: number,
+  fadeOut: number,
+  length: number,
+): { fadeInMs: number; fadeOutMs: number } {
+  const fadeInMs = clamp(round(fadeIn), 0, Math.min(MAX_FADE_MS, length));
+  return {
+    fadeInMs,
+    fadeOutMs: clamp(round(fadeOut), 0, Math.min(MAX_FADE_MS, length - fadeInMs)),
+  };
+}
+
+/** A clip stays inside the file (`inMs` + length <= `clipMs`) and inside the recording. */
+function normalizeAudio(
+  item: AudioItem,
+  startMs: number,
+  endMs: number,
+  source: VideoSource,
+): AudioItem {
+  const clipMs = clamp(round(item.clipMs), 1, MAX_CLIP_MS);
+  const minLength = Math.min(MIN_ITEM_MS, clipMs);
+  const inMs = clamp(round(item.inMs), 0, clipMs - minLength);
+  const end = Math.min(endMs, startMs + (clipMs - inMs), source.durationMs);
+  const length = Math.max(end - startMs, Math.min(minLength, source.durationMs - startMs));
+  return {
+    id: item.id,
+    kind: 'audio',
+    startMs,
+    endMs: startMs + length,
+    assetId: item.assetId,
+    ext: item.ext,
+    name: item.name.slice(0, 120),
+    clipMs,
+    inMs,
+    volume: clamp(item.volume, 0, 2),
+    muted: item.muted,
+    ...normalizeFades(item.fadeInMs, item.fadeOutMs, length),
+  };
+}
+
+/** 0..1: how visible an item with fades is at a source time (1 outside the fades). */
+export function fadeAlpha(
+  item: Pick<Item, 'startMs' | 'endMs'> & { fadeInMs: number; fadeOutMs: number },
+  ms: number,
+): number {
+  let alpha = 1;
+  if (item.fadeInMs > 0) alpha = Math.min(alpha, (ms - item.startMs) / item.fadeInMs);
+  if (item.fadeOutMs > 0) alpha = Math.min(alpha, (item.endMs - ms) / item.fadeOutMs);
+  return clamp(alpha, 0, 1);
 }
 
 /** A crop inside the source, even-aligned and at least MIN_CROP_PX; the whole frame is "no crop". */
@@ -370,7 +573,7 @@ export function parseProject(data: unknown): VideoProject | null {
 // --- default items ----------------------------------------------------------------------------
 
 export function newItem(
-  kind: ItemKind,
+  kind: MaskKind,
   id: string,
   rect: PixelRect,
   startMs: number,
@@ -389,16 +592,118 @@ export function newItem(
   }
 }
 
+export function newText(id: string, rect: PixelRect, startMs: number, endMs: number): TextItem {
+  return {
+    id,
+    kind: 'text',
+    startMs,
+    endMs,
+    rect,
+    text: 'Text',
+    font: 'inter',
+    size: Math.max(12, Math.min(96, Math.round(rect.height * 0.5))),
+    weight: 600,
+    italic: false,
+    color: '#ffffff',
+    align: 'center',
+    background: null,
+    outline: null,
+    shadow: true,
+    fadeInMs: 0,
+    fadeOutMs: 0,
+  };
+}
+
+export function newImage(
+  id: string,
+  assetId: string,
+  rect: PixelRect,
+  startMs: number,
+  endMs: number,
+): ImageItem {
+  return {
+    id,
+    kind: 'image',
+    startMs,
+    endMs,
+    rect,
+    assetId,
+    opacity: 1,
+    fadeInMs: 0,
+    fadeOutMs: 0,
+  };
+}
+
+export function newAudio(
+  id: string,
+  clip: { assetId: string; ext: AudioExtension; name: string; clipMs: number },
+  startMs: number,
+): AudioItem {
+  return {
+    id,
+    kind: 'audio',
+    startMs,
+    endMs: startMs + clip.clipMs,
+    assetId: clip.assetId,
+    ext: clip.ext,
+    name: clip.name,
+    clipMs: clip.clipMs,
+    inMs: 0,
+    volume: 1,
+    muted: false,
+    fadeInMs: 0,
+    fadeOutMs: 0,
+  };
+}
+
+/**
+ * A rough size of the exported file in bytes: for the user's information only ("about 12 MB").
+ * Screen content compresses far better than video of the real world, so the rates are low.
+ */
+export function estimateSizeBytes(project: VideoProject, outputMs: number): number {
+  const { width, height } = outputGeometry(project);
+  const seconds = outputMs / 1000;
+  const fps = Math.min(60, Math.round(project.source.fps ?? DEFAULT_FPS));
+  switch (project.export.format) {
+    case 'gif': {
+      const gifFps = Math.min(GIF_MAX_FPS, project.export.gifFps ?? GIF_DEFAULT_FPS);
+      return Math.round(seconds * gifFps * width * height * 0.12);
+    }
+    case 'webm':
+      return Math.round(seconds * ((width * height * fps * 0.03) / 8 + 16_000));
+    case 'mp4':
+      return Math.round(seconds * ((width * height * fps * 0.045) / 8 + 20_000));
+  }
+}
+
 // --- commands ---------------------------------------------------------------------------------
 
+/** The fields of an item a command may change; fields that do not belong to the item's kind are ignored. */
 export type ItemPatch = Partial<{
   startMs: number;
   endMs: number;
   rect: PixelRect;
+  /** The colour of a redact box or of text. */
   color: string;
   amount: number;
   block: number;
   dim: number;
+  text: string;
+  font: TextFont;
+  size: number;
+  weight: TextItem['weight'];
+  italic: boolean;
+  align: TextAlign;
+  background: TextBackground | null;
+  outline: TextOutline | null;
+  shadow: boolean;
+  fadeInMs: number;
+  fadeOutMs: number;
+  /** Image opacity. */
+  opacity: number;
+  inMs: number;
+  volume: number;
+  muted: boolean;
 }>;
 
 export type VideoCommand =
@@ -427,6 +732,14 @@ function reduce(project: VideoProject, command: VideoCommand): VideoProject {
     case 'addItem':
       if (project.items.length >= MAX_ITEMS) return project;
       if (project.items.some((item) => item.id === command.item.id)) return project;
+      if (command.item.kind === 'audio') {
+        if (project.items.filter((item) => item.kind === 'audio').length >= MAX_AUDIO_CLIPS) {
+          return project;
+        }
+      } else if (command.item.kind === 'text' || command.item.kind === 'image') {
+        const overlays = project.items.filter((i) => i.kind === 'text' || i.kind === 'image');
+        if (overlays.length >= MAX_OVERLAYS) return project;
+      }
       return { ...project, items: [...project.items, command.item] };
     case 'updateItem': {
       if (!project.items.some((item) => item.id === command.id)) return project;
@@ -478,12 +791,48 @@ function reduce(project: VideoProject, command: VideoCommand): VideoProject {
 }
 
 function patchItem(item: Item, patch: ItemPatch): Item {
-  const common = {
+  const times = {
     startMs: patch.startMs ?? item.startMs,
     endMs: patch.endMs ?? item.endMs,
-    rect: patch.rect ?? item.rect,
   };
+  if (item.kind === 'audio') {
+    return {
+      ...item,
+      ...times,
+      inMs: patch.inMs ?? item.inMs,
+      volume: patch.volume ?? item.volume,
+      muted: patch.muted ?? item.muted,
+      fadeInMs: patch.fadeInMs ?? item.fadeInMs,
+      fadeOutMs: patch.fadeOutMs ?? item.fadeOutMs,
+    };
+  }
+  const common = { ...times, rect: patch.rect ?? item.rect };
   switch (item.kind) {
+    case 'image':
+      return {
+        ...item,
+        ...common,
+        opacity: patch.opacity ?? item.opacity,
+        fadeInMs: patch.fadeInMs ?? item.fadeInMs,
+        fadeOutMs: patch.fadeOutMs ?? item.fadeOutMs,
+      };
+    case 'text':
+      return {
+        ...item,
+        ...common,
+        text: patch.text ?? item.text,
+        font: patch.font ?? item.font,
+        size: patch.size ?? item.size,
+        weight: patch.weight ?? item.weight,
+        italic: patch.italic ?? item.italic,
+        color: patch.color ?? item.color,
+        align: patch.align ?? item.align,
+        background: patch.background === undefined ? item.background : patch.background,
+        outline: patch.outline === undefined ? item.outline : patch.outline,
+        shadow: patch.shadow ?? item.shadow,
+        fadeInMs: patch.fadeInMs ?? item.fadeInMs,
+        fadeOutMs: patch.fadeOutMs ?? item.fadeOutMs,
+      };
     case 'redact':
       return { ...item, ...common, color: patch.color ?? item.color };
     case 'blur':

@@ -38,6 +38,8 @@ export interface Command {
 /** What the commands read to know whether they can run (display state). */
 export interface CommandEnv {
   recorderStatus: RecorderStatus;
+  /** More than one display is connected ("all screens" makes sense). */
+  multiDisplay?: boolean;
 }
 
 export type Target = 'screen' | 'window' | 'region';
@@ -45,13 +47,15 @@ export type Target = 'screen' | 'window' | 'region';
 /** The things a command can do: each one is an existing function of the app. */
 export interface CommandActions {
   /** Same as the Screenshot and Record buttons of the Capture view (and the tray). */
-  startCapture: (kind: 'screenshot' | 'record', target: Target) => void;
+  startCapture: (kind: 'screenshot' | 'record', target: Target, allScreens?: boolean) => void;
   stopRecording: () => void;
   togglePause: () => void;
   navigate: (view: 'capture' | 'history' | 'settings', section?: SettingsSectionId) => void;
   showKeyboardHelp: () => void;
   /** Opens the latest recording in the video editor (or says there is none). */
   editVideo: () => void;
+  /** Same as the Open image button of the Capture view (a picture file opens in the editor). */
+  openImage: () => void;
   toggleTheme: () => void;
   quit: () => void;
   openCommandCenter: () => void;
@@ -106,6 +110,18 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.startCapture('screenshot', target),
     });
   }
+  if (env.multiDisplay) {
+    add({
+      id: 'shot.all',
+      title: 'Take screenshot – all screens',
+      menuLabel: 'New screenshot – all screens',
+      group: 'Capture',
+      keywords: ['capture', 'screen shot', 'snip', 'every screen', 'monitors', 'displays'],
+      hint: { kind: 'global', action: 'screenshotAllScreens' },
+      disabledReason: captureBlockedReason(env),
+      run: () => actions.startCapture('screenshot', 'screen', true),
+    });
+  }
   for (const { target, record } of TARGETS) {
     add({
       id: `rec.${target}`,
@@ -118,6 +134,14 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.startCapture('record', target),
     });
   }
+  add({
+    id: 'file.openImage',
+    title: 'Open image…',
+    group: 'Capture',
+    keywords: ['picture', 'photo', 'file', 'import', 'edit', 'png', 'jpg'],
+    hint: { kind: 'editor', action: 'openImage' },
+    run: actions.openImage,
+  });
   // Stop and pause belong to the recording that runs: they stay available while it runs.
   if (env.recorderStatus === 'recording' || env.recorderStatus === 'paused') {
     add({
@@ -310,9 +334,12 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
     id: 'file',
     label: 'File',
     items: [
+      'file.openImage',
+      null,
       'shot.region',
       'shot.window',
       'shot.screen',
+      'shot.all',
       null,
       'rec.region',
       'rec.window',

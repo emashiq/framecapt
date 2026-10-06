@@ -185,7 +185,7 @@ test('Screenshot and Record buttons are all enabled', async () => {
   for (const mode of ['mode-screenshot', 'mode-record']) {
     const card = page.getByTestId(mode);
     for (const name of ['Screen', 'Window', 'Region']) {
-      await expect(card.getByRole('button', { name })).toBeEnabled();
+      await expect(card.getByRole('button', { name, exact: true })).toBeEnabled();
     }
   }
 });
@@ -388,6 +388,21 @@ test('screen flow with two displays: click the highlight on display B', async ()
   void a;
   await b.mouse.click(400, 300);
   await expect(page.getByTestId('editor-dimensions')).toHaveText('3440 × 1440');
+  await expectNoOverlays();
+  await expectMainVisible();
+  await leaveResult();
+});
+
+test('All screens (two displays) captures every screen at once, with no overlays', async () => {
+  await page.getByTestId('shot-all-screens').click();
+  await expect(page.getByTestId('editor-dimensions')).toBeVisible();
+  // The synthetic frames are 2560 x 1440 and 3440 x 1440; the joined image is at least as big as
+  // the larger one (where they sit on the desktop depends on the real displays under the test).
+  const [width, height] = ((await page.getByTestId('editor-dimensions').textContent()) ?? '')
+    .split('×')
+    .map((part) => Number(part.trim()));
+  expect(width).toBeGreaterThanOrEqual(3440);
+  expect(height).toBeGreaterThanOrEqual(1440);
   await expectNoOverlays();
   await expectMainVisible();
   await leaveResult();

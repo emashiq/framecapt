@@ -282,6 +282,12 @@ const QUALITY = [
   { value: '1080p', label: '1080p' },
   { value: 'source', label: 'Source' },
 ] as const;
+const FOLLOW = [
+  { value: 'off', label: 'Off' },
+  { value: '1.5', label: '1.5×' },
+  { value: '2', label: '2×' },
+  { value: '3', label: '3×' },
+] as const;
 const STORAGE = [
   { value: 'original', label: 'Original (best quality, larger files)' },
   { value: 'compressed', label: 'Compressed (smaller files)' },
@@ -330,6 +336,20 @@ export function RecordingSection({ onReset }: SectionProps) {
             value={recording.fps}
             options={FPS}
             onChange={(fps) => void updateSettings({ recording: { fps } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Follow mouse"
+        description="Zoom in and pan smoothly to the mouse, so what you point at stays in view. Screen recordings only."
+      >
+        {() => (
+          <Segmented
+            label="Follow mouse"
+            data-testid="setting-follow"
+            value={recording.followMouseZoom}
+            options={FOLLOW}
+            onChange={(followMouseZoom) => void updateSettings({ recording: { followMouseZoom } })}
           />
         )}
       </SettingRow>
@@ -450,7 +470,7 @@ interface ShortcutGroup {
 const SHORTCUT_GROUPS: ShortcutGroup[] = [
   { title: 'Screenshots', actions: SHORTCUT_ACTIONS.slice(0, 3) },
   { title: 'Recording', actions: SHORTCUT_ACTIONS.slice(3) },
-  { title: 'Command center', actions: COMMAND_ACTIONS },
+  { title: 'Main window', actions: COMMAND_ACTIONS },
   { title: 'Editor', actions: EDITOR_ACTIONS.filter((action) => !isCommandAction(action)) },
 ];
 
@@ -581,6 +601,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Open the search box in the title bar: commands and saved captures.';
     case 'commandPalette':
       return 'Open the search box with commands only.';
+    case 'openImage':
+      return 'Pick a picture file and edit it like a screenshot.';
     case 'toolSelect':
       return 'Select and move marks.';
     case 'toolCrop':
@@ -615,6 +637,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Place a check, cross, star or other stamp.';
     case 'toolRuler':
       return 'Measure a distance in pixels.';
+    case 'insertImage':
+      return 'Pick a picture file and place it on the screenshot as a layer.';
     case 'duplicate':
       return 'Copy the selected marks next to the originals.';
     case 'bringForward':
@@ -651,6 +675,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Pick a window, then capture it.';
     case 'screenshotRegion':
       return 'Drag over the part of the screen you want.';
+    case 'screenshotAllScreens':
+      return 'Capture every screen in one image.';
     case 'recordScreen':
       return 'Record a whole screen. Press again to stop.';
     case 'recordWindow':

@@ -12,7 +12,7 @@ const bytes = (max: number) =>
 /** Version of `project.json` (the container). The editor document inside carries its own `schema`. */
 export const PROJECT_VERSION = 1;
 /** Version of the editor tool set that wrote a project (recorded in project.json for diagnostics). */
-export const EDITOR_TOOL_VERSION = 2;
+export const EDITOR_TOOL_VERSION = 3;
 /** Largest editor document main stores for one project (serialized JSON). */
 export const MAX_PROJECT_DOC_BYTES = 8 * 1024 * 1024;
 
@@ -28,8 +28,33 @@ export const ProjectDocSchema = z
   );
 export type ProjectDoc = z.infer<typeof ProjectDocSchema>;
 
+/** Pictures an editor document uses as image layers: at most this many, this large (PNG bytes). */
+export const MAX_PROJECT_ASSETS = 32;
+export const MAX_ASSET_BYTES = 32 * 1024 * 1024;
+export const MAX_ASSETS_TOTAL_BYTES = 64 * 1024 * 1024;
+
+/** An image layer's picture: PNG bytes, named by their own SHA-256 (hex), which main verifies. */
+export const ProjectAssetSchema = z.strictObject({
+  id: z.string().regex(/^[0-9a-f]{64}$/),
+  png: bytes(MAX_ASSET_BYTES),
+});
+export type ProjectAssetPayload = z.infer<typeof ProjectAssetSchema>;
+
+export const ProjectAssetsSchema = z
+  .array(ProjectAssetSchema)
+  .max(MAX_PROJECT_ASSETS)
+  .refine(
+    (assets) =>
+      assets.reduce((sum, asset) => sum + asset.png.byteLength, 0) <= MAX_ASSETS_TOTAL_BYTES,
+    'Too many image layers.',
+  );
+
 /** Sent with an export: the editable state to keep next to the flattened image. */
-export const ShotProjectPayloadSchema = z.strictObject({ doc: ProjectDocSchema });
+export const ShotProjectPayloadSchema = z.strictObject({
+  doc: ProjectDocSchema,
+  /** The pictures of the document's image layers (only those it uses). */
+  assets: ProjectAssetsSchema.optional(),
+});
 
 /** Overwrites the history item the session was opened from (no dialog). */
 export const ShotSaveOverRequestSchema = z.strictObject({
@@ -67,6 +92,8 @@ export const OpenFromHistoryResponseSchema = z.strictObject({
     doc: ProjectDocSchema.nullable(),
     /** Why the project could not be used (corrupt, newer version...), or null. */
     notice: z.string().max(300).nullable(),
+    /** The pictures of the document's image layers (project mode; empty otherwise). */
+    assets: ProjectAssetsSchema,
   }),
 });
 export type OpenFromHistoryResponse = z.infer<typeof OpenFromHistoryResponseSchema>;

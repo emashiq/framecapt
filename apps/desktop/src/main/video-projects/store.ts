@@ -1,7 +1,11 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { HISTORY_ID_PATTERN } from '../../shared/history-ipc';
+import { MAX_ASSET_BYTES } from '../../shared/project-ipc';
+import { detectImageFormat, MAX_FRAME_DIMENSION, readImageSize } from '../../shared/shots';
 import {
+  AUDIO_EXTENSIONS,
   MAX_VIDEO_PROJECT_BYTES,
   VIDEO_PROJECT_VERSION,
   VideoProjectSchema,
@@ -11,6 +15,9 @@ import {
 import { writeFileAtomic } from '../shots/atomic-write';
 
 export const VIDEO_PROJECT_FILE = 'project.json';
+export const VIDEO_ASSET_DIR = 'assets';
+/** `<sha256 hex>.<extension>`: the only names an asset file may have. */
+const ASSET_NAME = new RegExp(`^([0-9a-f]{64})\\.(png|${AUDIO_EXTENSIONS.join('|')})$`);
 /** Projects with no history item stay this long before the startup sweep removes them. */
 export const VIDEO_PROJECT_SWEEP_GRACE_MS = 24 * 60 * 60 * 1000;
 
@@ -94,6 +101,115 @@ export class VideoProjectStore {
   private async setAside(file: string, reason: string): Promise<void> {
     const target = path.join(path.dirname(file), `project.${reason}-${this.now()}.json`);
     await fs.promises.rename(file, target).catch(() => undefined);
+  }
+
+  // --- assets: the pictures and audio files a project's items use -------------------------------
+
+  private assetDirOf(id: string): string | null {
+    const dir = this.dirFor(id);
+    return dir ? path.join(dir, VIDEO_ASSET_DIR) : null;
+  }
+
+  /**
+   * The file of an asset, or null when the id or extension is not a valid one. An asset is
+   * `assets/<sha256 hex>.<ext>` and nothing else: no name or path of a renderer is ever used.
+   */
+  assetPath(id: string, assetId: string, ext: string): string | null {
+    const dir = this.assetDirOf(id);
+    const name = `${assetId}.${ext}`;
+    return dir && ASSET_NAME.test(name) ? path.join(dir, name) : null;
+  }
+
+  /** The file behind a `vproject` media URL name (`<sha256>.<ext>`), or undefined. */
+  assetPathByName(id: string, name: string): string | undefined {
+    const match = ASSET_NAME.exec(name);
+    return (match && this.assetPath(id, match[1] ?? '', match[2] ?? '')) || undefined;
+  }
+
+  /**
+   * Stores a picture: a PNG of at most MAX_ASSET_BYTES whose sides are within the frame limit and
+   * whose SHA-256 is its id. Returns the id (the same picture twice is stored once).
+   */
+  async writePicture(id: string, png: Uint8Array): Promise<string> {
+    const size = readImageSize(png);
+    if (
+      png.length > MAX_ASSET_BYTES ||
+      detectImageFormat(png) !== 'png' ||
+      !size ||
+      size.width > MAX_FRAME_DIMENSION ||
+      size.height > MAX_FRAME_DIMENSION
+    ) {
+      throw new Error('That picture cannot be used.');
+    }
+    const assetId = createHash('sha256').update(png).digest('hex');
+    const file = this.assetPath(id, assetId, 'png');
+    if (!file) throw new Error('Invalid project id.');
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await writeFileAtomic(file, Buffer.from(png));
+    return assetId;
+  }
+
+  /**
+   * Copies an audio file into the project's assets as `<sha256>.<ext>` (hashing it as it is read;
+   * the copy goes through a temporary file and a rename). Returns the id and the copy's path.
+   */
+  async importAudio(
+    id: string,
+    sourceFile: string,
+    ext: string,
+  ): Promise<{ assetId: string; file: string }> {
+    const dir = this.assetDirOf(id);
+    if (!dir || !AUDIO_EXTENSIONS.some((known) => known === ext)) throw new Error('Invalid asset.');
+    await fs.promises.mkdir(dir, { recursive: true });
+    const hash = createHash('sha256');
+    for await (const chunk of fs.createReadStream(sourceFile)) hash.update(chunk as Buffer);
+    const assetId = hash.digest('hex');
+    const file = path.join(dir, `${assetId}.${ext}`);
+    const partial = path.join(dir, `.${assetId}.${ext}.partial`);
+    try {
+      await fs.promises.copyFile(sourceFile, partial);
+      await fs.promises.rename(partial, file);
+    } finally {
+      await fs.promises.rm(partial, { force: true }).catch(() => undefined);
+    }
+    return { assetId, file };
+  }
+
+  /** Deletes an asset (idempotent), e.g. an audio file that failed its checks. */
+  async removeAsset(id: string, assetId: string, ext: string): Promise<void> {
+    const file = this.assetPath(id, assetId, ext);
+    if (file) await fs.promises.rm(file, { force: true });
+  }
+
+  /**
+   * Deletes the assets no item of the project uses any more and that are older than `minAgeMs`
+   * (an item that was just removed can still come back with Undo, a picture that was just added
+   * may be waiting for its item). Files that are not named like assets are left alone.
+   */
+  async pruneAssets(id: string, project: VideoProject, minAgeMs: number): Promise<number> {
+    const dir = this.assetDirOf(id);
+    if (!dir) return 0;
+    const used = new Set<string>();
+    for (const item of project.items) {
+      if (item.kind === 'image') used.add(`${item.assetId}.png`);
+      else if (item.kind === 'audio') used.add(`${item.assetId}.${item.ext}`);
+    }
+    let names: string[];
+    try {
+      names = await fs.promises.readdir(dir);
+    } catch {
+      return 0;
+    }
+    let removed = 0;
+    for (const name of names) {
+      if (!ASSET_NAME.test(name) || used.has(name)) continue;
+      const file = path.join(dir, name);
+      const stat = await fs.promises.stat(file).catch(() => null);
+      if (!stat || this.now() - stat.mtimeMs < minAgeMs) continue;
+      await fs.promises.rm(file, { force: true }).catch(() => undefined);
+      removed += 1;
+    }
+    return removed;
   }
 
   /** Deletes one project folder (idempotent). Only plain ids inside the root are ever touched. */

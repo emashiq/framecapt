@@ -19,20 +19,27 @@ import {
   StepForward,
   Undo2,
 } from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
-  ITEM_KINDS,
+  MASK_KINDS,
+  MIN_ITEM_MS,
+  newAudio,
+  newImage,
   outputDurationMs,
   projectSegments,
   sourceToOutput,
-  type ItemKind,
+  type PixelRect,
+  type TextItem,
 } from '../../../shared/video-edit';
+import { decodeToPng } from '../../editor/decode';
+import { HistoryImagePicker } from '../editor/HistoryImagePicker';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { IconButton } from '../../components/ui/IconButton';
 import { Kbd } from '../../components/ui/Kbd';
 import { Loader } from '../../components/Loader';
 import { Tooltip } from '../../components/ui/Tooltip';
-import { announce } from '../../lib/notify';
+import { announce, notify } from '../../lib/notify';
 import { cn } from '../../lib/cn';
 import {
   cancelVideoExport,
@@ -43,7 +50,9 @@ import { ExportControls } from './ExportControls';
 import { Inspector } from './Inspector';
 import { KIND_STYLES } from './item-kinds';
 import { Player } from './player';
-import { PreviewStage } from './PreviewStage';
+import { clipSpecs } from './clip-spec';
+import { PreviewStage, type DrawTool } from './PreviewStage';
+import { rasterizeText } from './text-draw';
 import { ASPECTS, type AspectId } from './rect-drag';
 import { Timeline, type TimeRange, type TimelineSelection } from './Timeline';
 import { formatTimecode } from './timeline-math';
@@ -121,7 +130,8 @@ export function VideoEditorView({
   const exportState = useVideoExport(historyId);
   const [picked, setSelection] = useState<TimelineSelection>(null);
   const [range, setRange] = useState<TimeRange | null>(null);
-  const [tool, setTool] = useState<ItemKind | null>(null);
+  const [tool, setTool] = useState<DrawTool | null>(null);
+  const [historyPicker, setHistoryPicker] = useState(false);
   const [cropMode, setCropMode] = useState(false);
   const [cropAspect, setCropAspect] = useState<AspectId>('free');
 
@@ -202,14 +212,128 @@ export function VideoEditorView({
     [player],
   );
 
-  const exportNow = useCallback(() => {
+  // Text is drawn here (the same code as the preview) and handed to the export as pictures.
+  const exportNow = useCallback(async () => {
     const current = projectRef.current;
-    if (current) void startVideoExport(historyId, current, current.export.format);
+    if (!current) return;
+    const texts = current.items.filter((item): item is TextItem => item.kind === 'text');
+    try {
+      const overlays = await Promise.all(
+        texts.map(async (item) => ({ itemId: item.id, png: await rasterizeText(item) })),
+      );
+      await startVideoExport(historyId, current, current.export.format, overlays);
+    } catch {
+      notify.error('A text box is too large to export. Make it smaller and try again.');
+    }
   }, [historyId]);
+
+  // The audio clips play along in the preview; the player's audio elements go with the editor.
+  const specs = useMemo(
+    () => (project ? clipSpecs(historyId, project.items) : []),
+    [project, historyId],
+  );
+  useEffect(() => player.setClips(specs), [player, specs]);
+  useEffect(() => () => player.dispose(), [player]);
+
+  /** Where a new item goes in time: from the playhead for three seconds, inside the trim. */
+  const defaultSpan = useCallback((): { startMs: number; endMs: number } | null => {
+    const current = projectRef.current;
+    if (!current) return null;
+    const { trim } = current;
+    const now = player.getSnapshot().timeMs;
+    const endMs = Math.min(trim.endMs, Math.max(trim.startMs, now) + 3000);
+    return { startMs: Math.max(trim.startMs, Math.min(now, endMs - MIN_ITEM_MS)), endMs };
+  }, [player]);
+
+  /** A picture (PNG bytes) becomes an image item in the middle of the frame, a few seconds long. */
+  const addPicture = useCallback(
+    async (png: ArrayBuffer) => {
+      const current = projectRef.current;
+      const span = defaultSpan();
+      if (!current || !span) return;
+      const response = await window.framecapt.invoke('video:addImage', { historyId, png });
+      if (!response.ok) {
+        notify.error(response.error);
+        return;
+      }
+      const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }));
+      const natural = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+      const { width: frameWidth, height: frameHeight } = current.source;
+      const scale = Math.min(
+        1,
+        (frameWidth * 0.4) / natural.width,
+        (frameHeight * 0.4) / natural.height,
+      );
+      const width = Math.max(8, Math.round(natural.width * scale));
+      const height = Math.max(8, Math.round(natural.height * scale));
+      const rect: PixelRect = {
+        x: Math.round((frameWidth - width) / 2),
+        y: Math.round((frameHeight - height) / 2),
+        width,
+        height,
+      };
+      const id = newId();
+      commit({
+        type: 'addItem',
+        item: newImage(id, response.data.assetId, rect, span.startMs, span.endMs),
+      });
+      setSelection({ kind: 'item', id });
+    },
+    [commit, defaultSpan, historyId],
+  );
+
+  const pictureFromFile = useCallback(async () => {
+    const response = await window.framecapt.invoke('editor:pickImage');
+    if (!response.ok) {
+      notify.error(response.error);
+      return;
+    }
+    if (!('bytes' in response.data)) return;
+    try {
+      await addPicture((await decodeToPng(new Blob([response.data.bytes]))).png);
+    } catch {
+      notify.error('That picture could not be read.');
+    }
+  }, [addPicture]);
+
+  const pictureFromHistory = useCallback(
+    async (id: string) => {
+      setHistoryPicker(false);
+      const response = await window.framecapt.invoke('editor:historyImage', { historyId: id });
+      if (response.ok) await addPicture(response.data.png);
+      else notify.error(response.error);
+    },
+    [addPicture],
+  );
+
+  /** Add audio: a file dialog in main, then a clip at the playhead (it can be moved and trimmed). */
+  const addAudio = useCallback(async () => {
+    const response = await window.framecapt.invoke('video:pickAudio', { historyId });
+    if (!response.ok) {
+      notify.error(response.error);
+      return;
+    }
+    if ('cancelled' in response.data) return;
+    const { assetId, ext, name, durationMs } = response.data;
+    const current = projectRef.current;
+    if (!current) return;
+    const at = Math.min(
+      current.source.durationMs - MIN_ITEM_MS,
+      Math.max(current.trim.startMs, player.getSnapshot().timeMs),
+    );
+    const id = newId();
+    commit({
+      type: 'addItem',
+      item: newAudio(id, { assetId, ext, name, clipMs: durationMs }, at),
+    });
+    setSelection({ kind: 'item', id });
+    announce('Audio clip added');
+  }, [commit, historyId, player]);
 
   // Keyboard.
   useEffect(() => {
-    if (blocked || !loaded) return;
+    if (blocked || historyPicker || !loaded) return;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || event.isComposing) return;
       const typing = ownsKeys(event.target);
@@ -267,6 +391,7 @@ export function VideoEditorView({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     blocked,
+    historyPicker,
     loaded,
     api,
     player,
@@ -282,7 +407,7 @@ export function VideoEditorView({
   // A pointer click on a button must not leave it holding the keyboard (Space would press it again).
   const releaseFocus = (event: React.MouseEvent): void => {
     const target = event.target;
-    if (event.detail > 0 && target instanceof HTMLElement) {
+    if (event.detail > 0 && target instanceof Element) {
       const button = target.closest('button');
       if (button && !button.hasAttribute('aria-haspopup') && !button.closest('[role="menu"]'))
         button.blur();
@@ -309,7 +434,12 @@ export function VideoEditorView({
   }
 
   const total = outputDurationMs(segments);
-  const toolDefs = ITEM_KINDS.map((kind) => ({ kind, ...KIND_STYLES[kind] }));
+  const toolDefs = [...MASK_KINDS, 'text' as const].map((kind) => ({
+    kind,
+    ...KIND_STYLES[kind],
+  }));
+  const ImageIcon = KIND_STYLES.image.icon;
+  const AudioIcon = KIND_STYLES.audio.icon;
 
   return (
     <div
@@ -366,7 +496,7 @@ export function VideoEditorView({
             project={project}
             state={exportState}
             commit={commit}
-            onExport={exportNow}
+            onExport={() => void exportNow()}
             onCancel={() => void cancelVideoExport(historyId)}
           />
         </div>
@@ -440,16 +570,66 @@ export function VideoEditorView({
                     variant={tool === kind ? 'primary' : 'secondary'}
                     data-testid={`tool-${kind}`}
                     aria-pressed={tool === kind}
+                    aria-label={label}
                     icon={<Icon className="size-4" aria-hidden="true" />}
                     onClick={() => {
                       setCropMode(false);
                       setTool(tool === kind ? null : kind);
                     }}
                   >
-                    {label}
+                    <span className="hidden 2xl:inline">{label}</span>
                   </Button>
                 </Tooltip>
               ))}
+              <DropdownMenu.Root>
+                <Tooltip content={KIND_STYLES.image.hint} side="top">
+                  <DropdownMenu.Trigger asChild>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      data-testid="tool-image"
+                      aria-label="Image"
+                      icon={<ImageIcon className="size-4" aria-hidden="true" />}
+                    >
+                      <span className="hidden 2xl:inline">Image</span>
+                    </Button>
+                  </DropdownMenu.Trigger>
+                </Tooltip>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content
+                    align="end"
+                    sideOffset={6}
+                    className="z-50 min-w-48 rounded-xl border border-line bg-surface p-1.5 text-[13px] text-fg shadow-raised"
+                  >
+                    <DropdownMenu.Item
+                      data-testid="image-from-file"
+                      onSelect={() => void pictureFromFile()}
+                      className="flex cursor-default items-center rounded-lg px-2.5 py-2 outline-none data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent-fg"
+                    >
+                      From a file…
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item
+                      data-testid="image-from-history"
+                      onSelect={() => setHistoryPicker(true)}
+                      className="flex cursor-default items-center rounded-lg px-2.5 py-2 outline-none data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent-fg"
+                    >
+                      From History…
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+              <Tooltip content={KIND_STYLES.audio.hint} side="top">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="tool-audio"
+                  aria-label="Audio"
+                  icon={<AudioIcon className="size-4" aria-hidden="true" />}
+                  onClick={() => void addAudio()}
+                >
+                  <span className="hidden 2xl:inline">Audio</span>
+                </Button>
+              </Tooltip>
               <Tooltip content="Crop the picture" side="top">
                 <Button
                   size="sm"
@@ -499,6 +679,11 @@ export function VideoEditorView({
         onCutRange={cutRange}
         onMarkIn={() => mark('in')}
         onMarkOut={() => mark('out')}
+      />
+      <HistoryImagePicker
+        open={historyPicker}
+        onClose={() => setHistoryPicker(false)}
+        onPick={(id) => void pictureFromHistory(id)}
       />
     </div>
   );

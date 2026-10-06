@@ -1,7 +1,14 @@
 import { z } from 'zod';
 
-/** What was captured. Stored with the session so the editor/history can say where it came from. */
-export const ShotKindSchema = z.enum(['screen', 'window', 'region']);
+/** What a screenshot capture can target. */
+export const CaptureTargetSchema = z.enum(['screen', 'window', 'region']);
+export type CaptureTarget = z.infer<typeof CaptureTargetSchema>;
+
+/**
+ * Where an editor session came from. Stored with the session so the editor/history can say so:
+ * a capture of a screen, window or region, or an image the user opened (`import`).
+ */
+export const ShotKindSchema = z.enum([...CaptureTargetSchema.options, 'import']);
 export type ShotKind = z.infer<typeof ShotKindSchema>;
 
 /** Renderer-visible session metadata. The original's file path stays in main. */
@@ -37,6 +44,27 @@ export function detectImageFormat(bytes: Uint8Array): ImageFormat | null {
   if (startsWith(bytes, PNG_MAGIC)) return 'png';
   if (startsWith(bytes, JPEG_MAGIC)) return 'jpeg';
   return null;
+}
+
+/** Largest image file the user may open or insert (before it is re-encoded as PNG). */
+export const MAX_IMPORT_BYTES = 100 * 1024 * 1024;
+
+const GIF_MAGIC = [0x47, 0x49, 0x46, 0x38] as const; // "GIF8"
+const BMP_MAGIC = [0x42, 0x4d] as const; // "BM"
+const RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46] as const;
+const WEBP_TAG = [0x57, 0x45, 0x42, 0x50] as const; // "WEBP" at byte 8 of a RIFF file
+
+/**
+ * True for the picture formats the app can open (PNG, JPEG, WebP, GIF, BMP), by magic bytes only.
+ * Decoding happens in the renderer; main only refuses what is plainly not a picture.
+ */
+export function isImportableImage(bytes: Uint8Array): boolean {
+  return (
+    detectImageFormat(bytes) !== null ||
+    startsWith(bytes, GIF_MAGIC) ||
+    startsWith(bytes, BMP_MAGIC) ||
+    (startsWith(bytes, RIFF_MAGIC) && WEBP_TAG.every((value, index) => bytes[8 + index] === value))
+  );
 }
 
 export type ImageCheck = { ok: true } | { ok: false; reason: string };

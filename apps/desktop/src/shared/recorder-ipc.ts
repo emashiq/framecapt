@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { RectSchema } from './capture-schemas';
+import { FOLLOW_ZOOMS } from './compositor-layout';
 import { HistoryIdSchema } from './history-ipc';
 import { FPS_VALUES, QUALITY_VALUES } from './recording';
 import { RECORDER_STATUSES } from './recorder-machine';
@@ -9,6 +10,12 @@ import { SourceIdSchema } from './shot-ipc';
 
 export const RecordTargetSchema = z.enum(['screen', 'window', 'region']);
 export type RecordTarget = z.infer<typeof RecordTargetSchema>;
+
+const FOLLOW_ZOOM_LITERALS = [
+  z.literal(FOLLOW_ZOOMS[0]),
+  z.literal(FOLLOW_ZOOMS[1]),
+  z.literal(FOLLOW_ZOOMS[2]),
+] as const;
 
 export const RecordOptionsSchema = z.strictObject({
   mic: z.strictObject({
@@ -21,6 +28,11 @@ export const RecordOptionsSchema = z.strictObject({
   fps: z.union([z.literal(FPS_VALUES[0]), z.literal(FPS_VALUES[1])]),
   /** A 3-2-1 countdown before recording starts. */
   countdown: z.boolean(),
+  /**
+   * Screen recordings only: the picture is a zoomed window that follows the mouse. Optional so
+   * manifests written before it existed still parse.
+   */
+  follow: z.strictObject({ zoom: z.union(FOLLOW_ZOOM_LITERALS) }).optional(),
   /** Compressed storage: record at a lower bitrate. Optional, so older manifests still parse. */
   compressed: z.boolean().optional(),
 });
@@ -148,6 +160,12 @@ export const EngineCommandSchema = z.discriminatedUnion('cmd', [
   z.object({ cmd: z.literal('abort') }),
   z.object({ cmd: z.literal('mute'), source: AudioSourceSchema, muted: z.boolean() }),
   z.object({ cmd: z.literal('levels'), enabled: z.boolean() }),
+  /** Follow-mouse recordings: the mouse, 0..1 across the recorded display (main sends ~30 per second). */
+  z.object({
+    cmd: z.literal('cursor'),
+    nx: z.number().min(0).max(1),
+    ny: z.number().min(0).max(1),
+  }),
 ]);
 export type EngineCommand = z.infer<typeof EngineCommandSchema>;
 export type EnginePrepareCommand = z.infer<typeof EnginePrepareSchema>;

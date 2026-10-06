@@ -11,10 +11,10 @@ export interface Point {
 /**
  * Version of the serialized editor document (see model/migrate.ts). 1 = the first editor (arrow,
  * rect, text, redact; no version field); 2 = the professional editor (more elements, styles and
- * the beautify frame). Every field added in version 2 is optional, so a version 1 document is a
- * valid version 2 document.
+ * the beautify frame); 3 = image layers (the `image` element). Every field added after version 1 is
+ * optional or a new element type, so an older document is a valid version 3 document.
  */
-export const DOC_SCHEMA = 2;
+export const DOC_SCHEMA = 3;
 
 /** An optional drop shadow under a shape. Blur and offset are in image px. */
 export interface Shadow {
@@ -230,6 +230,20 @@ export interface RedactAnnotation {
   rect: Rect;
 }
 
+/**
+ * A picture placed on the canvas (an image layer). `assetId` is the SHA-256 (hex) of the picture's
+ * PNG bytes, which the editor and the project keep separately (see editor/assets.ts); the picture
+ * is drawn stretched to `rect`, so resizing it never changes the stored pixels.
+ */
+export interface ImageAnnotation extends Styled {
+  type: 'image';
+  id: string;
+  rect: Rect;
+  assetId: string;
+  /** Corner radius in image px. */
+  radius?: number;
+}
+
 export type Annotation =
   | ArrowAnnotation
   | LineAnnotation
@@ -245,6 +259,7 @@ export type Annotation =
   | MagnifierAnnotation
   | StampAnnotation
   | RulerAnnotation
+  | ImageAnnotation
   | RedactAnnotation;
 export type AnnotationType = Annotation['type'];
 

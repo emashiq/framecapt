@@ -1,19 +1,26 @@
 import { z } from 'zod';
+import type { FollowZoom } from './compositor-layout';
 import type { RecordOptions } from './recorder-ipc';
 import {
   DEFAULT_EDITOR_SHORTCUTS,
   DEFAULT_SHORTCUTS,
   EDITOR_ACTIONS,
   checkEditorShortcuts,
+  actionUsing,
   editorActionUsing,
   checkShortcuts,
   type EditorAction,
   type EditorShortcutsMap,
+  type ShortcutAction,
   type ShortcutsMap,
 } from './shortcuts';
 
 /** Current version of settings.json. Bump it and add a step to `migrateSettings` to change the shape. */
 export const SETTINGS_VERSION = 1;
+
+/** The follow-mouse setting: off, or the zoom as text (1.5x, 2x, 3x). */
+export const FOLLOW_MOUSE_VALUES = ['off', '1.5', '2', '3'] as const;
+export type FollowMouseSetting = (typeof FOLLOW_MOUSE_VALUES)[number];
 
 const AcceleratorOrNull = z.string().min(1).max(64).nullable();
 const OutputDirSchema = z.string().min(1).max(1024).nullable();
@@ -51,6 +58,8 @@ export const RecordingSettingsSchema = z.object({
   /** Null = Videos/FrameCapt. Set only through `settings:chooseOutputDir`. */
   outputDir: OutputDirSchema,
   autoExportMp4: z.boolean(),
+  /** Follow-mouse recording of a screen: the zoom of the window that follows the mouse, or off. */
+  followMouseZoom: z.enum(FOLLOW_MOUSE_VALUES),
   /** "compressed": after saving, the WebM is re-encoded to a smaller MP4 (post-processing only). */
   storage: z.enum(['original', 'compressed']),
 });
@@ -59,6 +68,7 @@ export const ShortcutSettingsSchema = z.object({
   screenshotScreen: AcceleratorOrNull,
   screenshotWindow: AcceleratorOrNull,
   screenshotRegion: AcceleratorOrNull,
+  screenshotAllScreens: AcceleratorOrNull,
   recordScreen: AcceleratorOrNull,
   recordWindow: AcceleratorOrNull,
   recordRegion: AcceleratorOrNull,
@@ -115,6 +125,7 @@ export const DEFAULT_SETTINGS: Settings = {
     systemAudio: false,
     outputDir: null,
     autoExportMp4: false,
+    followMouseZoom: 'off',
     storage: 'original',
   },
   shortcuts: { ...DEFAULT_SHORTCUTS },
@@ -224,6 +235,7 @@ function withDefaults(partial: Record<string, unknown>): Record<string, unknown>
     };
   }
   keepUserEditorKeys(merged.editorShortcuts as Record<string, unknown>, partial.editorShortcuts);
+  keepUserGlobalKeys(merged.shortcuts as Record<string, unknown>, partial.shortcuts);
   return merged;
 }
 
@@ -237,6 +249,8 @@ const EDITOR_ACTIONS_ADDED_LATER: readonly EditorAction[] = [
   'quickSave',
   'commandCenter',
   'commandPalette',
+  'openImage',
+  'insertImage',
 ];
 
 function keepUserEditorKeys(merged: Record<string, unknown>, given: unknown): void {
@@ -246,6 +260,24 @@ function keepUserEditorKeys(merged: Record<string, unknown>, given: unknown): vo
     if (action in had) continue;
     const key = DEFAULT_EDITOR_SHORTCUTS[action];
     if (editorActionUsing(bindings, key, action) !== null) merged[action] = null;
+  }
+}
+
+/**
+ * "Screenshot: all screens" was added after version 1 shipped: a file without it gets its default
+ * key, unless the user already uses that key for another action (then it starts with no key).
+ */
+function keepUserGlobalKeys(merged: Record<string, unknown>, given: unknown): void {
+  if (isRecord(given) && 'screenshotAllScreens' in given) return;
+  const key = DEFAULT_SHORTCUTS.screenshotAllScreens;
+  if (
+    actionUsing(
+      merged as Partial<Record<ShortcutAction, string | null>>,
+      key,
+      'screenshotAllScreens',
+    )
+  ) {
+    merged.screenshotAllScreens = null;
   }
 }
 
@@ -323,9 +355,19 @@ export function recordOptionsFromSettings(recording: Settings['recording']): Rec
     quality: recording.quality,
     fps: recording.fps,
     countdown: recording.countdown,
+    ...followOption(recording.followMouseZoom),
     // Only the recorder's bitrate depends on it; the re-encode itself reads the setting at save time.
     ...(recording.storage === 'compressed' && { compressed: true }),
   };
+}
+
+function followOption(setting: FollowMouseSetting): Pick<RecordOptions, 'follow'> {
+  return setting === 'off' ? {} : { follow: { zoom: Number(setting) as FollowZoom } };
+}
+
+/** The `follow` record option of a setting value; undefined when off. */
+export function followFromSetting(setting: FollowMouseSetting): RecordOptions['follow'] {
+  return followOption(setting).follow;
 }
 
 /** The settings patch that carries the phase-05 localStorage record options over (done once). */
@@ -338,6 +380,7 @@ export function patchFromRecordOptions(options: RecordOptions): SettingsPatch {
       quality: options.quality,
       fps: options.fps,
       countdown: options.countdown,
+      followMouseZoom: options.follow ? (String(options.follow.zoom) as FollowMouseSetting) : 'off',
     },
   };
 }

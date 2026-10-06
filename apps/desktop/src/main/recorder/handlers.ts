@@ -25,6 +25,7 @@ export function registerRecorderHandlers(
   handle('recorder:stop', { roles: ['main', 'toolbar'] }, () => {
     void controller.stop('user');
   });
+  handle('recorder:screenshot', { roles: ['toolbar'] }, () => controller.screenshotNow());
   handle('recorder:cancel', { roles: ['main', 'toolbar'] }, () => controller.cancel());
   handle('recorder:toggleMute', { roles: ['main', 'toolbar'] }, (request) =>
     controller.toggleMute(request.source),

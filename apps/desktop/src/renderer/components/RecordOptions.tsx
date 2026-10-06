@@ -2,6 +2,7 @@ import { useId, type ReactNode } from 'react';
 import { Settings2 } from 'lucide-react';
 import type { RecordOptions as Options } from '../../shared/recorder-ipc';
 import type { RecordFps, RecordQuality } from '../../shared/recording';
+import { followFromSetting, type FollowMouseSetting } from '../../shared/settings';
 import { usePlatformCapabilities } from '../lib/use-platform-capabilities';
 import { useMicrophones } from '../recorder/use-microphones';
 import { MicrophoneSelect } from './MicrophoneSelect';
@@ -27,6 +28,13 @@ const QUALITY = [
 const FPS = [
   { value: 30, label: '30' },
   { value: 60, label: '60' },
+] as const;
+
+const FOLLOW = [
+  { value: 'off', label: 'Off' },
+  { value: '1.5', label: '1.5×' },
+  { value: '2', label: '2×' },
+  { value: '3', label: '3×' },
 ] as const;
 
 function Cell({
@@ -73,6 +81,7 @@ export function RecordOptions({
   const systemId = useId();
   const qualityId = useId();
   const fpsId = useId();
+  const followId = useId();
   const countdownId = useId();
   const microphones = useMicrophones();
   const noMic = microphones.loaded && microphones.devices.length === 0;
@@ -172,6 +181,24 @@ export function RecordOptions({
             options={FPS}
             disabled={disabled}
             onChange={(fps) => onChange({ ...options, fps })}
+          />
+        </Cell>
+        <Cell
+          id={followId}
+          label="Follow mouse"
+          hint="Zooms in and pans to the mouse. Screen recordings only: window and region recordings ignore it."
+        >
+          <Segmented<FollowMouseSetting>
+            label="Follow mouse"
+            data-testid="opt-follow"
+            value={options.follow ? (String(options.follow.zoom) as FollowMouseSetting) : 'off'}
+            options={FOLLOW}
+            disabled={disabled}
+            onChange={(value) => {
+              const { follow: _drop, ...rest } = options;
+              const follow = followFromSetting(value);
+              onChange({ ...rest, ...(follow && { follow }) });
+            }}
           />
         </Cell>
         {outputDir ? (

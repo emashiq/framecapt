@@ -1,4 +1,4 @@
-import { renderDoc, type DrawContext } from './flatten';
+import { renderDoc, type DrawAsset, type DrawContext } from './flatten';
 import { exportSize, textFont, type EditorDoc } from './model/types';
 import type { ImageFormat } from '../../shared/shots';
 
@@ -50,21 +50,26 @@ function newCanvas(width: number, height: number): OffscreenCanvas {
 
 /**
  * The flattened result as a canvas: exactly the crop size (or the whole image), never scaled by
- * the editor zoom or devicePixelRatio. Redactions are solid #000 pixels in this raster.
+ * the editor zoom or devicePixelRatio. Redactions are solid #000 pixels in this raster. `assets`
+ * are the pictures of the document's image layers.
  */
 export async function flattenToCanvas(
   baseImage: ImageBitmap,
   doc: EditorDoc,
   format: ImageFormat = 'png',
+  assets?: ReadonlyMap<string, DrawAsset>,
 ): Promise<OffscreenCanvas> {
   await loadEditorFonts(doc);
   const { width, height } = exportSize(doc);
   const canvas = newCanvas(width, height);
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Could not create a 2D canvas context.');
+  // Pictures scaled down into a layer look smooth rather than jagged.
+  context.imageSmoothingQuality = 'high';
   renderDoc(context as unknown as DrawContext, baseImage, doc, {
     forExport: true,
     format,
+    ...(assets && { assets }),
     ...(format === 'jpeg' && { background: '#ffffff' }),
   });
   return canvas;
@@ -76,8 +81,9 @@ export async function flattenToBlob(
   doc: EditorDoc,
   format: ImageFormat,
   quality: number = JPEG_QUALITY,
+  assets?: ReadonlyMap<string, DrawAsset>,
 ): Promise<Blob> {
-  const canvas = await flattenToCanvas(baseImage, doc, format);
+  const canvas = await flattenToCanvas(baseImage, doc, format, assets);
   return canvas.convertToBlob(
     format === 'png' ? { type: 'image/png' } : { type: 'image/jpeg', quality },
   );
@@ -91,8 +97,9 @@ export async function flattenThumbnail(
   baseImage: ImageBitmap,
   doc: EditorDoc,
   maxWidth: number = THUMBNAIL_MAX_WIDTH,
+  assets?: ReadonlyMap<string, DrawAsset>,
 ): Promise<Blob> {
-  const full = await flattenToCanvas(baseImage, doc);
+  const full = await flattenToCanvas(baseImage, doc, 'png', assets);
   const scale = Math.min(1, maxWidth / full.width);
   const thumb = newCanvas(Math.round(full.width * scale), Math.round(full.height * scale));
   const context = thumb.getContext('2d');

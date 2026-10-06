@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VideoProjectStore, VIDEO_PROJECT_FILE } from '../../src/main/video-projects/store';
-import { applyCommand, createProject, newItem } from '../../src/shared/video-edit';
+import { applyCommand, createProject, newItem, rectOf } from '../../src/shared/video-edit';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -86,7 +86,7 @@ describe('VideoProjectStore', () => {
     };
     fs.writeFileSync(fileOf(ID), JSON.stringify(wide));
     const read = await store.read(ID);
-    expect(read.ok && read.project.items[0]?.rect).toEqual({
+    expect(read.ok && rectOf(read.project.items[0])).toEqual({
       x: 980,
       y: 420,
       width: 300,

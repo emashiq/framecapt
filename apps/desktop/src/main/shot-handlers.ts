@@ -6,7 +6,10 @@ import type { ProjectFailure, ProjectStore } from './projects/store';
 import {
   defaultShotFileName,
   detectImageFormat,
+  isImportableImage,
   MAX_FRAME_DIMENSION,
+  MAX_FRAME_PNG_BYTES,
+  MAX_IMPORT_BYTES,
   readImageSize,
   type ShotKind,
   validateImageBytes,
@@ -40,6 +43,59 @@ function toArrayBuffer(buffer: Buffer): ArrayBuffer {
     buffer.byteOffset,
     buffer.byteOffset + buffer.byteLength,
   ) as ArrayBuffer;
+}
+
+const IMAGE_OPEN_FILTERS: Electron.FileFilter[] = [
+  { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
+];
+
+/** A PNG for a PNG or JPEG file (a JPEG is decoded and re-encoded). Throws for anything else. */
+function pngOf(bytes: Buffer): Buffer {
+  const format = detectImageFormat(bytes);
+  if (format === null)
+    throw new IpcError('INVALID_PAYLOAD', 'The file is not a PNG or JPEG image.');
+  return format === 'png' ? bytes : nativeImage.createFromBuffer(bytes, { scaleFactor: 1 }).toPNG();
+}
+
+/** The size of a PNG whose sides are within the frame limit, or throws. */
+function checkedSize(png: Buffer): { width: number; height: number } {
+  const size = readImageSize(png);
+  if (!size || size.width > MAX_FRAME_DIMENSION || size.height > MAX_FRAME_DIMENSION) {
+    throw new IpcError('INVALID_PAYLOAD', 'The image could not be read.');
+  }
+  return size;
+}
+
+/** The image-layer pictures of a project payload as buffers (the store verifies their hashes). */
+function assetsOf(project: { assets?: { id: string; png: ArrayBuffer }[] | undefined }) {
+  return (project.assets ?? []).map((asset) => ({ id: asset.id, png: Buffer.from(asset.png) }));
+}
+
+/**
+ * Shows the Open dialog for a picture and returns its bytes, checked for size and magic bytes (the
+ * extension is not trusted). The path never leaves main; the renderer decodes the picture.
+ */
+async function pickImage(title: string) {
+  const options: Electron.OpenDialogOptions = {
+    title,
+    filters: IMAGE_OPEN_FILTERS,
+    properties: ['openFile'],
+  };
+  const main = getMainWindow();
+  const result = main
+    ? await dialog.showOpenDialog(main, options)
+    : await dialog.showOpenDialog(options);
+  const file = result.filePaths[0];
+  if (result.canceled || !file) return { cancelled: true as const };
+  const stat = await fs.promises.stat(file).catch(() => null);
+  if (!stat?.isFile()) throw new IpcError('NOT_FOUND', 'The file could not be opened.');
+  if (stat.size > MAX_IMPORT_BYTES)
+    throw new IpcError('INVALID_PAYLOAD', 'The image is too large.');
+  const bytes = await fs.promises.readFile(file);
+  if (!isImportableImage(bytes)) {
+    throw new IpcError('INVALID_PAYLOAD', 'The file is not a PNG, JPEG, WebP, GIF or BMP image.');
+  }
+  return { name: path.basename(file), bytes: toArrayBuffer(bytes) };
 }
 
 function dialogFilters(format: ImageFormat): Electron.FileFilter[] {
@@ -145,7 +201,7 @@ export function registerShotHandlers(
         height: size.height,
         sizeBytes: bytes.byteLength,
         format: request.format,
-        source: session.kind,
+        source: session.kind === 'import' ? 'unknown' : session.kind,
         thumbnail,
         ...(sourceId && { derivedFrom: sourceId }),
         ...(original &&
@@ -153,6 +209,7 @@ export function registerShotHandlers(
             project: {
               png: original,
               doc: request.project.doc,
+              assets: assetsOf(request.project),
               width: session.width,
               height: session.height,
               appVersion: projects?.appVersion ?? '',
@@ -226,6 +283,7 @@ export function registerShotHandlers(
     let png: Buffer | undefined;
     let doc: Record<string, unknown> | null = null;
     let notice: string | null = null;
+    let assets: { id: string; png: ArrayBuffer }[] = [];
     // The project is looked up by the ITEM's id (never by a stored name), so it is only ever the
     // one that belongs to this item.
     if (item.projectId !== undefined && projects && request.flattened !== true) {
@@ -233,24 +291,14 @@ export function registerShotHandlers(
       if (project.ok) {
         png = project.png;
         doc = project.doc;
+        assets = project.assets.map((asset) => ({ id: asset.id, png: toArrayBuffer(asset.png) }));
       } else {
         notice = projectNotice(project.reason);
       }
     }
-    if (!png) {
-      const bytes = await fs.promises.readFile(item.path);
-      const format = detectImageFormat(bytes);
-      if (format === null) {
-        throw new IpcError('INVALID_PAYLOAD', 'The file is not a PNG or JPEG image.');
-      }
-      png =
-        format === 'png' ? bytes : nativeImage.createFromBuffer(bytes, { scaleFactor: 1 }).toPNG();
-    }
-    const size = readImageSize(png);
-    if (!size || size.width > MAX_FRAME_DIMENSION || size.height > MAX_FRAME_DIMENSION) {
-      throw new IpcError('INVALID_PAYLOAD', 'The image could not be read.');
-    }
-    const kind: ShotKind = item.source === 'unknown' ? 'region' : item.source;
+    png ??= pngOf(await fs.promises.readFile(item.path));
+    const size = checkedSize(png);
+    const kind: ShotKind = item.source === 'unknown' ? 'import' : item.source;
     const session = await store.create({ kind, width: size.width, height: size.height, png });
     links.set(session.id, item.id);
     editorSessionId = session.id;
@@ -263,8 +311,39 @@ export function registerShotHandlers(
         mode: doc ? ('project' as const) : ('flattened' as const),
         doc,
         notice,
+        assets,
       },
     };
+  });
+
+  handle('shot:openImage', { roles: ['main'] }, () => pickImage('Open image'));
+  handle('editor:pickImage', { roles: ['main'] }, () => pickImage('Insert image'));
+
+  // A picture the user opened, dropped or pasted, already decoded and re-encoded as PNG by the
+  // renderer: validated again here, then an editor session of its own. It is NOT saved anywhere
+  // (the after-capture settings are for captures only).
+  handle('shot:importImage', { roles: ['main'] }, async (request) => {
+    const png = Buffer.from(request.png);
+    const check = validateImageBytes('png', png, MAX_FRAME_PNG_BYTES);
+    if (!check.ok) throw new IpcError('INVALID_PAYLOAD', check.reason);
+    const size = checkedSize(png);
+    const session = await store.create({ kind: 'import', ...size, png });
+    editorSessionId = session.id;
+    return { session: store.meta(session) };
+  });
+
+  handle('editor:historyImage', { roles: ['main'] }, async (request) => {
+    const item = history.get(request.historyId);
+    if (!item || item.type !== 'screenshot') {
+      throw new IpcError('NOT_FOUND', 'That screenshot is not in history.');
+    }
+    const stat = await fs.promises.stat(item.path).catch(() => null);
+    if (!stat?.isFile()) throw new IpcError('NOT_FOUND', 'The file was moved or deleted.');
+    if (stat.size > MAX_IMPORT_BYTES)
+      throw new IpcError('INVALID_PAYLOAD', 'The image is too large.');
+    const png = pngOf(await fs.promises.readFile(item.path));
+    checkedSize(png);
+    return { png: toArrayBuffer(png) };
   });
 
   handle('shot:saveOver', { roles: ['main'] }, async (request) => {
@@ -306,6 +385,7 @@ export function registerShotHandlers(
       ...(wanted && {
         project: {
           doc: wanted.doc,
+          assets: assetsOf(wanted),
           appVersion: projects?.appVersion ?? '',
           ...(original && {
             base: { png: original, width: session.width, height: session.height },

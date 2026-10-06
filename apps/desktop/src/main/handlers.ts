@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, session, shell } from 'electron';
+import { app, nativeImage, session, shell } from 'electron';
 import { BulkExportService } from './history/bulk-export';
 import { CompressService, postSaveAction } from './history/compress-service';
 import { ExportService } from './history/export-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
-import { createAfterCapture } from './shots/after-capture';
+import { rescanLibrary } from './history/rescan';
+import { createAfterCapture, createSaveCaptureDirect } from './shots/after-capture';
 import { rememberExported } from './shots/exported-paths';
 import type { AppSettings } from './settings';
 import { probeWritable } from './settings/output-dirs';
@@ -26,7 +27,7 @@ import { isMockCaptureEnabled } from './capture';
 import { registerShotHandlers } from './shot-handlers';
 import { ProjectStore } from './projects/store';
 import { VideoEditService, editedDestination } from './video-projects/service';
-import { registerVideoHandlers } from './video-projects/handlers';
+import { pickAudioFile, registerVideoHandlers } from './video-projects/handlers';
 import { VideoProjectStore } from './video-projects/store';
 import { freeFileName } from './shots/free-name';
 import { ShotSessionStore, SWEEP_MAX_AGE_MS } from './shots/session-store';
@@ -236,6 +237,7 @@ export function registerHandlers(
     new VideoEditService({
       history,
       store: videoProjects,
+      pickAudioFile,
       tools,
       runner,
       destination: (source, extension) => editedDestination(source, extension, freeFileName),
@@ -256,9 +258,21 @@ export function registerHandlers(
     history,
   });
   const media = new MediaRegistry();
-  installMediaProtocol(media, history);
+  installMediaProtocol(media, {
+    thumbPathOf: (id) => history.thumbPathOf(id),
+    filePathOf: (id) => history.filePathOf(id),
+    videoAssetPathOf: (id, name) =>
+      history.get(id) ? videoProjects.assetPathByName(id, name) : undefined,
+  });
+  const captureSaving = {
+    settings: () => settings.store.get(),
+    screenshotsDir: () => settings.dirs().screenshotsDir,
+    history,
+  };
+  const saveDirect = createSaveCaptureDirect(captureSaving);
   const recorder: RecorderController = new RecorderController({
     provider,
+    saveScreenshot: saveDirect,
     sessions,
     media,
     synthetic,
@@ -296,12 +310,16 @@ export function registerHandlers(
     provider,
     store,
     synthetic,
-    isBlocked: () => recorder.busy,
-    afterCapture: createAfterCapture({
-      settings: () => settings.store.get(),
-      screenshotsDir: () => settings.dirs().screenshotsDir,
-      history,
-    }),
+    // A screenshot may start while a recording runs (saved directly), not while one is set up or saved.
+    isBlocked: () => recorder.busy && !recorder.isLive,
+    isRecording: () => recorder.isLive,
+    saveDirect,
+    toast: (event) => recorder.toastToolbar(event),
+    afterCapture: createAfterCapture(captureSaving),
+  });
+  // The recording ended (or was stopped) while a screenshot selection was open: drop the selection.
+  recorder.onChange(() => {
+    if (flow.duringRecording && !recorder.isLive) flow.cancel();
   });
   registerWorkerHandlers();
   registerShotHandlers(
@@ -322,7 +340,17 @@ export function registerHandlers(
     onSaved: rememberExported,
     onProgress: (done, total) => emitToMain('history:bulkProgress', { done, total }),
   });
-  registerHistoryHandlers(history, exports, bulk, () => mp4Capability, outputDir);
+  const rescan = (): Promise<number> =>
+    rescanLibrary({
+      dirs: [settings.dirs().screenshotsDir, settings.dirs().recordingsDir],
+      history,
+      tools,
+      thumbnail: async (file, width) => {
+        const image = nativeImage.createFromPath(file);
+        return image.isEmpty() ? undefined : image.resize({ width }).toPNG();
+      },
+    });
+  registerHistoryHandlers(history, exports, bulk, () => mp4Capability, outputDir, rescan);
   registerRecorderHandlers(recorder, sessions, media);
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.
@@ -346,10 +374,18 @@ export function registerHandlers(
     (error: unknown) =>
       log.error('ffmpeg is not usable (run "npm run fetch:ffmpeg" in development)', error),
   );
-  void history.backfillFromCompleted(recordingsDir).then(
-    (added) => added > 0 && log.info(`History: added ${added} earlier recordings`),
-    (error: unknown) => log.error('History backfill failed', error),
-  );
+  // A fresh start (no history.json: first run, a reinstall, lost app data): earlier recordings,
+  // then any capture files already sitting in the output folders. Once; later it is a button.
+  void history.ready
+    .then(async () => {
+      const firstRun = history.isFirstRun;
+      const backfilled = await history.backfillFromCompleted(recordingsDir);
+      if (backfilled > 0) log.info(`History: added ${backfilled} earlier recordings`);
+      if (!firstRun) return;
+      const found = await rescan();
+      if (found > 0) log.info(`History: found ${found} existing captures`);
+    })
+    .catch((error: unknown) => log.error('History backfill failed', error));
   void recovery
     .startup()
     .catch((error: unknown) => log.error('Recovery scan failed', error))

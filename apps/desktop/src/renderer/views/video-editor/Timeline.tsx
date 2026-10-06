@@ -14,7 +14,9 @@ import {
   MIN_CUT_MS,
   MIN_ITEM_MS,
   MIN_SEGMENT_MS,
+  isVisual,
   normalizeCuts,
+  type AudioItem,
   type Item,
   type VideoCommand,
   type VideoProject,
@@ -279,18 +281,31 @@ export function Timeline(props: TimelineProps) {
         } else if (mode === 'start') {
           const snapped = snap(item.startMs + delta);
           target = snapped.target;
-          startMs = clamp(snapped.ms, 0, item.endMs - MIN_ITEM_MS);
+          // A clip cannot start before the start of its file: its head is trimmed by moving `inMs`.
+          const earliest = item.kind === 'audio' ? Math.max(0, item.startMs - item.inMs) : 0;
+          startMs = clamp(snapped.ms, earliest, item.endMs - MIN_ITEM_MS);
         } else {
           const snapped = snap(item.endMs + delta);
           target = snapped.target;
-          endMs = clamp(snapped.ms, item.startMs + MIN_ITEM_MS, duration);
+          // ... nor run past the end of its file.
+          const latest =
+            item.kind === 'audio'
+              ? Math.min(duration, item.startMs + item.clipMs - item.inMs)
+              : duration;
+          endMs = clamp(snapped.ms, item.startMs + MIN_ITEM_MS, latest);
         }
         setGuide(target);
         props.commit(
           {
             type: 'updateItem',
             id: item.id,
-            patch: { startMs: Math.round(startMs), endMs: Math.round(endMs) },
+            patch: {
+              startMs: Math.round(startMs),
+              endMs: Math.round(endMs),
+              // The head of a clip moves with its start so the sound stays where it was.
+              ...(item.kind === 'audio' &&
+                mode === 'start' && { inMs: Math.round(item.inMs + (startMs - item.startMs)) }),
+            },
           },
           `item:${item.id}`,
         );
@@ -334,9 +349,17 @@ export function Timeline(props: TimelineProps) {
 
   // --- layout ---
 
-  const { lanes, count } = useMemo(() => packLanes(project.items), [project.items]);
+  const visualItems = useMemo(() => project.items.filter(isVisual), [project.items]);
+  const audioItems = useMemo(
+    () => project.items.filter((item): item is AudioItem => item.kind === 'audio'),
+    [project.items],
+  );
+  const { lanes, count } = useMemo(() => packLanes(visualItems), [visualItems]);
+  const audioLanes = useMemo(() => packLanes(audioItems), [audioItems]);
   const lanesTop = RULER_H + CLIP_H + GAP;
-  const totalHeight = lanesTop + count * LANE_H + GAP;
+  // The audio track sits under the items, with its own rows (clips may overlap).
+  const audioTop = lanesTop + count * LANE_H + GAP;
+  const totalHeight = audioTop + audioLanes.count * LANE_H + GAP;
   const spec = tickSpec(px);
   const ticks = ticksBetween(
     spec,
@@ -353,7 +376,7 @@ export function Timeline(props: TimelineProps) {
     <section
       aria-label="Timeline"
       data-testid="video-timeline"
-      className="flex h-[236px] shrink-0 flex-col border-t border-line bg-surface-2"
+      className="flex h-[272px] shrink-0 flex-col border-t border-line bg-surface-2"
     >
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-line px-3">
         <Button
@@ -561,7 +584,7 @@ export function Timeline(props: TimelineProps) {
           ) : null}
 
           {/* Items, one row per overlapping group */}
-          {project.items.map((item) => (
+          {visualItems.map((item) => (
             <ItemBar
               key={item.id}
               item={item}
@@ -569,6 +592,31 @@ export function Timeline(props: TimelineProps) {
               left={x(item.startMs)}
               width={Math.max(MIN_BAR_PX, (item.endMs - item.startMs) * px)}
               top={lanesTop + (lanes.get(item.id) ?? 0) * LANE_H}
+              onSelect={() => props.onSelect({ kind: 'item', id: item.id })}
+              onDrag={dragItem}
+            />
+          ))}
+
+          {/* The audio track: clips on their own rows */}
+          <div
+            data-testid="timeline-audio-track"
+            className="pointer-events-none absolute inset-x-0 border-t border-dashed border-line"
+            style={{ top: audioTop - GAP / 2, height: audioLanes.count * LANE_H + GAP }}
+          >
+            {audioItems.length === 0 ? (
+              <span className="sticky left-3 inline-block px-3 pt-1 text-[11px] text-fg-subtle">
+                Audio track: add a sound or music clip
+              </span>
+            ) : null}
+          </div>
+          {audioItems.map((item) => (
+            <ItemBar
+              key={item.id}
+              item={item}
+              selected={selection?.kind === 'item' && selection.id === item.id}
+              left={x(item.startMs)}
+              width={Math.max(MIN_BAR_PX, (item.endMs - item.startMs) * px)}
+              top={audioTop + (audioLanes.lanes.get(item.id) ?? 0) * LANE_H}
               onSelect={() => props.onSelect({ kind: 'item', id: item.id })}
               onDrag={dragItem}
             />
@@ -586,6 +634,13 @@ export function Timeline(props: TimelineProps) {
       </div>
     </section>
   );
+}
+
+/** What a bar says: its kind, or for text and audio what it holds (the text's first line, the file's name). */
+function barLabel(item: Item): string {
+  if (item.kind === 'text') return item.text.split(/\r?\n/)[0] || KIND_STYLES.text.label;
+  if (item.kind === 'audio') return item.name || KIND_STYLES.audio.label;
+  return KIND_STYLES[item.kind].label;
 }
 
 const ItemBar = memo(function ItemBar(props: {
@@ -629,7 +684,7 @@ const ItemBar = memo(function ItemBar(props: {
         onPointerDown={(event) => props.onDrag(event, item, 'start')}
       />
       <Icon className="size-3 shrink-0" aria-hidden="true" />
-      <span className="truncate">{style.label}</span>
+      <span className="truncate">{barLabel(item)}</span>
       <span
         aria-hidden="true"
         className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize"

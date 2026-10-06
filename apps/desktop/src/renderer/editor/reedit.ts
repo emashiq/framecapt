@@ -13,6 +13,8 @@ export interface ReeditInfo {
   doc: EditorDoc | null;
   /** One sentence for the user above the canvas, or null. */
   notice: string | null;
+  /** The pictures of the stored document's image layers (PNG bytes, id = their SHA-256). */
+  assets: { id: string; png: ArrayBuffer }[];
 }
 
 export interface ReeditShot {
@@ -74,6 +76,7 @@ export async function openFromHistory(
         mode: flattened ? 'flattened' : 'project',
         doc,
         notice: flattened ? [reason, FLATTENED_LABEL].filter(Boolean).join(' ') : reason,
+        assets: flattened ? [] : edit.assets,
       },
     },
   };

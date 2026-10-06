@@ -39,7 +39,18 @@ export const MEDIA_SCHEME_PRIVILEGES: Electron.CustomScheme = {
 export interface HistoryMedia {
   thumbPathOf(id: string): string | undefined;
   filePathOf(id: string): string | undefined;
+  /** The picture or audio file `<sha256>.<ext>` of a video project (the item must be in history). */
+  videoAssetPathOf?(historyId: string, name: string): string | undefined;
 }
+
+/**
+ * `//vproject/<history id>/<sha256 hex>.<ext>`: an asset of a video project (a picture or an audio
+ * file for the editor's preview). The extension is checked again by the store and by the content
+ * types the protocol serves.
+ */
+const VPROJECT_ROUTE = new RegExp(
+  '^/(' + HISTORY_ID_PATTERN.source.slice(1, -1) + ')/([0-9a-f]{64}\\.[a-z0-9]{2,4})$',
+);
 
 /**
  * Sent with EVERY response, errors included. A 404 without it can be remembered by the media
@@ -59,10 +70,11 @@ const HISTORY_ROUTE = new RegExp(
 );
 
 /**
- * The file a `framecapt-media:` URL names, or undefined. Exactly three shapes exist and nothing
+ * The file a `framecapt-media:` URL names, or undefined. Exactly four shapes exist and nothing
  * else resolves: `//<registry id>` (a recording of this run), `//thumb/<history id>` (a history
  * thumbnail) and `//file/<history id>` (the file of a history item), each history route with an
- * optional cache-busting nonce segment. No query, no other segments, no paths.
+ * optional cache-busting nonce segment, and `//vproject/<history id>/<sha256>.<ext>` (an asset of a
+ * video project). No query, no other segments, no paths.
  */
 export function resolveMediaUrl(
   url: URL,
@@ -71,6 +83,10 @@ export function resolveMediaUrl(
 ): string | undefined {
   if (url.search !== '' || url.hash !== '' || url.username !== '' || url.port !== '') {
     return undefined;
+  }
+  if (url.hostname === 'vproject') {
+    const match = VPROJECT_ROUTE.exec(url.pathname);
+    return match ? history?.videoAssetPathOf?.(match[1] ?? '', match[2] ?? '') : undefined;
   }
   if (url.hostname === 'thumb' || url.hostname === 'file') {
     const id = HISTORY_ROUTE.exec(url.pathname)?.[1];

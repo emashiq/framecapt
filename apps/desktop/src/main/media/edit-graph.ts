@@ -6,8 +6,12 @@ import {
   outputDurationMs,
   outputGeometry,
   projectSegments,
+  type AudioItem,
+  type ImageItem,
   type Item,
+  type TextItem,
   type VideoProject,
+  type VisualItem,
 } from '../../shared/video-edit';
 import { localInput, mediaPath } from './ffmpeg';
 
@@ -28,6 +32,35 @@ import { localInput, mediaPath } from './ffmpeg';
 export interface EditArgsOptions {
   /** Where the caller wrote `filterScript` (an absolute path). */
   filterScriptPath: string;
+  /**
+   * The absolute path of the file behind each text item (its PNG), image item (its asset) and audio
+   * clip (its asset), by item id. Made by main; never a renderer path.
+   */
+  inputFiles?: Readonly<Record<string, string>>;
+}
+
+/** An item that is an extra ffmpeg input: input 0 is the recording, these are 1, 2, ... in item order. */
+export interface PlannedInput {
+  item: TextItem | ImageItem | AudioItem;
+  index: number;
+}
+
+/**
+ * The extra inputs: every text and image item, and every audio clip that is not muted (none for a
+ * GIF). The order of the project's items decides the input numbers, so a graph and its arguments
+ * agree without passing numbers around.
+ */
+export function plannedInputs(project: VideoProject): PlannedInput[] {
+  const gif = project.export.format === 'gif';
+  const planned: PlannedInput[] = [];
+  for (const item of project.items) {
+    const wanted =
+      item.kind === 'text' ||
+      item.kind === 'image' ||
+      (item.kind === 'audio' && !gif && !item.muted);
+    if (wanted) planned.push({ item, index: planned.length + 1 });
+  }
+  return planned;
 }
 
 export interface EditCommand {
@@ -58,7 +91,7 @@ function hex(color: string): string {
 }
 
 /** Rounds a box outward to even coordinates (4:2:0 chroma), inside the source. */
-function evenBox(item: Item, source: VideoProject['source']): Item['rect'] {
+function evenBox(item: VisualItem, source: VideoProject['source']): VisualItem['rect'] {
   const x = item.rect.x - (item.rect.x % 2);
   const y = item.rect.y - (item.rect.y % 2);
   const right = Math.min(source.width, item.rect.x + item.rect.width);
@@ -80,16 +113,55 @@ function frameRate(project: VideoProject): number {
   return Math.max(1, Math.min(60, fps));
 }
 
+/**
+ * A text or image overlay: its looped picture (input `input`) is put in the rgba format, scaled to
+ * the box (images), given its opacity and fades (`alpha=1`: only the alpha channel fades; the fade
+ * times are on the picture's own clock, which starts at 0 like the recording's) and laid over the
+ * picture while the item is on.
+ */
+function overlayLines(
+  item: TextItem | ImageItem,
+  index: number,
+  input: number,
+  from: string,
+  to: string,
+): string[] {
+  const { x, y, width, height } = item.rect;
+  const chain = ['format=rgba'];
+  if (item.kind === 'image') {
+    chain.push(`scale=${px(width)}:${px(height)}`);
+    if (item.opacity < 1) chain.push(`colorchannelmixer=aa=${ratio(item.opacity)}`);
+  }
+  if (item.fadeInMs > 0) {
+    chain.push(`fade=t=in:st=${sec(item.startMs)}:d=${sec(item.fadeInMs)}:alpha=1`);
+  }
+  if (item.fadeOutMs > 0) {
+    chain.push(
+      `fade=t=out:st=${sec(item.endMs - item.fadeOutMs)}:d=${sec(item.fadeOutMs)}:alpha=1`,
+    );
+  }
+  return [
+    `[${input}:v]${chain.join(',')}[ov${index}]`,
+    `[${from}][ov${index}]overlay=${px(x)}:${px(y)}:${between(item)}[${to}]`,
+  ];
+}
+
 /** The graph lines of one item: they take `from` and produce `to`. */
 function itemLines(
-  item: Item,
+  item: VisualItem,
   index: number,
   from: string,
   to: string,
   project: VideoProject,
+  input: number | undefined,
 ): string[] {
   const { source } = project;
   switch (item.kind) {
+    case 'text':
+    case 'image': {
+      if (input === undefined) throw new Error('An overlay needs its picture.');
+      return overlayLines(item, index, input, from, to);
+    }
     case 'redact': {
       const { x, y, width, height } = item.rect;
       return [
@@ -132,6 +204,47 @@ function itemLines(
   }
 }
 
+/**
+ * The audio bus when there are clips: the original (with the project's volume) or silence the
+ * length of the recording, mixed with every clip. A clip is cut to its part of the file, put on 48
+ * kHz stereo, given its volume and fades and delayed to its start on the source timeline. `amix`
+ * with `normalize=0` keeps every level as set; the result is as long as the original.
+ */
+function mixLines(
+  project: VideoProject,
+  clips: readonly PlannedInput[],
+  original: boolean,
+  lines: string[],
+): string {
+  const format = 'aformat=sample_rates=48000:channel_layouts=stereo';
+  if (original) {
+    const volume = project.audio.volume !== 1 ? `volume=${ratio(project.audio.volume)},` : '';
+    lines.push(`[0:a]${volume}${format}[ab]`);
+  } else {
+    lines.push(`anullsrc=r=48000:cl=stereo:d=${sec(project.source.durationMs)}[ab]`);
+  }
+  const labels = ['[ab]'];
+  clips.forEach(({ item, index }, n) => {
+    if (item.kind !== 'audio') return;
+    const length = item.endMs - item.startMs;
+    const chain = [
+      `atrim=start=${sec(item.inMs)}:duration=${sec(length)}`,
+      'asetpts=PTS-STARTPTS',
+      format,
+    ];
+    if (item.volume !== 1) chain.push(`volume=${ratio(item.volume)}`);
+    if (item.fadeInMs > 0) chain.push(`afade=t=in:st=0:d=${sec(item.fadeInMs)}`);
+    if (item.fadeOutMs > 0) {
+      chain.push(`afade=t=out:st=${sec(length - item.fadeOutMs)}:d=${sec(item.fadeOutMs)}`);
+    }
+    chain.push(`adelay=${px(item.startMs)}|${px(item.startMs)}`);
+    lines.push(`[${index}:a]${chain.join(',')}[ac${n}]`);
+    labels.push(`[ac${n}]`);
+  });
+  lines.push(`${labels.join('')}amix=inputs=${labels.length}:normalize=0:duration=first[amixed]`);
+  return 'amixed';
+}
+
 /** The whole filter graph. Exported for tests; `buildEditArgs` is the entry point. */
 export function buildFilterScript(project: VideoProject): string {
   const lines: string[] = [];
@@ -144,9 +257,13 @@ export function buildFilterScript(project: VideoProject): string {
   // 1. Constant frame rate, one pixel format, then the items on the source timeline.
   let current = 'v0';
   lines.push(`[0:v]fps=${frameRate(project)},format=yuv420p[${current}]`);
+  const inputs = plannedInputs(project);
+  const inputOf = (item: Item): number | undefined =>
+    inputs.find((planned) => planned.item.id === item.id)?.index;
   project.items.forEach((item, index) => {
+    if (item.kind === 'audio') return;
     const next = `v${index + 1}`;
-    lines.push(...itemLines(item, index, current, next, project));
+    lines.push(...itemLines(item, index, current, next, project, inputOf(item)));
     current = next;
   });
 
@@ -165,7 +282,16 @@ export function buildFilterScript(project: VideoProject): string {
 
   // 3. One trim per kept segment, video and audio from the same list, then concat.
   const count = segments.length;
-  const withAudio = !gif && project.source.hasAudio && !project.audio.muted;
+  const clips = inputs.filter((planned) => planned.item.kind === 'audio');
+  const original = project.source.hasAudio && !project.audio.muted;
+  const withAudio = !gif && (original || clips.length > 0);
+  // With clips, the audio is mixed BEFORE it is cut (clips sit on the source timeline like every
+  // item) and the original's volume is applied to the original alone; without, it is applied after.
+  const volumeFirst = clips.length > 0;
+  let audioSource = '0:a';
+  if (withAudio && volumeFirst) {
+    audioSource = mixLines(project, clips, original, lines);
+  }
   const names = (prefix: string): string[] => segments.map((_, i) => `${prefix}${i}`);
   const split = (input: string, filter: string, outputs: string[]): void => {
     if (outputs.length === 1)
@@ -183,17 +309,17 @@ export function buildFilterScript(project: VideoProject): string {
     );
   });
   if (withAudio) {
-    split('0:a', 'asplit', names('as'));
+    split(audioSource, 'asplit', names('as'));
     segments.forEach((segment, i) => {
       lines.push(
         `[as${i}]atrim=start=${sec(segment.startMs)}:end=${sec(segment.endMs)},asetpts=PTS-STARTPTS[at${i}]`,
       );
     });
-    const inputs = segments.map((_, i) => `[vt${i}][at${i}]`).join('');
-    lines.push(`${inputs}concat=n=${count}:v=1:a=1[vcat][acat]`);
+    const pairs = segments.map((_, i) => `[vt${i}][at${i}]`).join('');
+    lines.push(`${pairs}concat=n=${count}:v=1:a=1[vcat][acat]`);
   } else {
-    const inputs = segments.map((_, i) => `[vt${i}]`).join('');
-    lines.push(`${inputs}concat=n=${count}:v=1:a=0[vcat]`);
+    const pieces = segments.map((_, i) => `[vt${i}]`).join('');
+    lines.push(`${pieces}concat=n=${count}:v=1:a=0[vcat]`);
   }
 
   // 4. Fades, frame rate (GIF), scale, pixel format.
@@ -220,7 +346,9 @@ export function buildFilterScript(project: VideoProject): string {
   // 5. Audio: the cut audio with volume and fades, or silence of the output's length.
   if (withAudio) {
     const audio: string[] = [];
-    if (project.audio.volume !== 1) audio.push(`volume=${ratio(project.audio.volume)}`);
+    if (!volumeFirst && project.audio.volume !== 1) {
+      audio.push(`volume=${ratio(project.audio.volume)}`);
+    }
     if (project.fadeInMs > 0) audio.push(`afade=t=in:st=0:d=${sec(project.fadeInMs)}`);
     if (project.fadeOutMs > 0) {
       audio.push(`afade=t=out:st=${sec(total - project.fadeOutMs)}:d=${sec(project.fadeOutMs)}`);
@@ -290,6 +418,15 @@ export function buildEditArgs(
     inputPath,
     path.extname(inputPath).toLowerCase() === '.webm' ? 'matroska' : undefined,
   );
+  const fps = frameRate(project);
+  const extra = plannedInputs(project).flatMap(({ item }) => {
+    const file = options.inputFiles?.[item.id];
+    if (file === undefined) throw new Error('An input file is missing.');
+    // A picture is looped for as long as its item lasts; an audio file is read as it is.
+    return item.kind === 'audio'
+      ? localInput(file)
+      : ['-loop', '1', '-framerate', String(fps), '-t', sec(item.endMs), ...localInput(file)];
+  });
   const args = [
     '-hide_banner',
     '-nostats',
@@ -297,6 +434,7 @@ export function buildEditArgs(
     'pipe:1',
     '-y',
     ...input,
+    ...extra,
     '-/filter_complex',
     mediaPath(options.filterScriptPath),
     '-map',

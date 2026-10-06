@@ -1,12 +1,18 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown, Download, X } from 'lucide-react';
+import { Check, ChevronDown, Download, FolderOpen, X } from 'lucide-react';
 import {
   GIF_DEFAULT_FPS,
+  estimateSizeBytes,
+  outputDurationMs,
+  outputGeometry,
+  projectSegments,
   type VideoCommand,
   type VideoExportFormat,
   type VideoProject,
 } from '../../../shared/video-edit';
+import { formatBytes } from '../../../shared/recording';
 import { Button } from '../../components/ui/Button';
+import { formatTimecode } from './timeline-math';
 import type { VideoExportState } from '../../history/video-export-store';
 
 const FORMATS: { value: VideoExportFormat; label: string; hint: string }[] = [
@@ -101,108 +107,143 @@ export function ExportControls({
     );
   }
 
+  const outputMs = outputDurationMs(projectSegments(project));
+  const geometry = outputGeometry(project);
+  const summary = `${formatTimecode(outputMs).replace(/\.\d+$/, '')} · ${geometry.width} × ${geometry.height} · about ${formatBytes(estimateSizeBytes(project, outputMs))}`;
+
   return (
-    <div className="flex items-center">
-      <Button
-        size="sm"
-        variant="primary"
-        data-testid="video-export"
-        className="rounded-r-none"
-        icon={<Download className="size-4" aria-hidden="true" />}
-        onClick={onExport}
-      >
-        Export {label}
-      </Button>
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
-            data-testid="video-export-options"
-            aria-label="Export options"
-            className="-ml-px inline-flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-white/25 bg-accent-solid text-white shadow-card transition-colors duration-150 hover:bg-accent-solid-hover"
+    <div className="flex items-center gap-2">
+      {state?.status === 'done' && state.itemId ? (
+        <div
+          className="flex items-center gap-1.5 text-[13px] text-fg-muted"
+          data-testid="video-export-done"
+        >
+          <Check className="size-3.5 text-success" aria-hidden="true" />
+          Exported
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid="video-export-reveal"
+            icon={<FolderOpen className="size-4" aria-hidden="true" />}
+            onClick={() => {
+              const id = state.itemId;
+              if (id) void window.framecapt.invoke('history:reveal', { id });
+            }}
           >
-            <ChevronDown className="size-4" aria-hidden="true" />
-          </button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            align="end"
-            sideOffset={6}
-            className="z-50 min-w-72 rounded-xl border border-line bg-surface p-1.5 text-[13px] text-fg shadow-raised"
-          >
-            <DropdownMenu.Label className="px-2.5 pt-1 pb-1 text-[11px] font-semibold tracking-wide text-fg-muted uppercase">
-              Format
-            </DropdownMenu.Label>
-            <DropdownMenu.RadioGroup
-              value={format}
-              onValueChange={(value) =>
-                commit({ type: 'setExport', patch: { format: value as VideoExportFormat } })
-              }
+            Show in folder
+          </Button>
+        </div>
+      ) : null}
+      <div className="flex items-center">
+        <Button
+          size="sm"
+          variant="primary"
+          data-testid="video-export"
+          className="rounded-r-none"
+          icon={<Download className="size-4" aria-hidden="true" />}
+          onClick={onExport}
+          title={summary}
+        >
+          Export {label}
+        </Button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              data-testid="video-export-options"
+              aria-label="Export options"
+              className="-ml-px inline-flex h-8 w-8 items-center justify-center rounded-r-lg border-l border-white/25 bg-accent-solid text-white shadow-card transition-colors duration-150 hover:bg-accent-solid-hover"
             >
-              {FORMATS.map((entry) => (
-                <Radio
-                  key={entry.value}
-                  value={entry.value}
-                  label={entry.label}
-                  hint={entry.hint}
-                  testId={`export-format-${entry.value}`}
-                />
-              ))}
-            </DropdownMenu.RadioGroup>
-            <DropdownMenu.Separator className="my-1 h-px bg-line" />
-            <DropdownMenu.Label className="px-2.5 pt-1 pb-1 text-[11px] font-semibold tracking-wide text-fg-muted uppercase">
-              Size
-            </DropdownMenu.Label>
-            <DropdownMenu.RadioGroup
-              value={scale === undefined ? 'original' : String(scale)}
-              onValueChange={(value) =>
-                commit({
-                  type: 'setExport',
-                  patch: { scale: value === 'original' ? undefined : Number(value) },
-                })
-              }
+              <ChevronDown className="size-4" aria-hidden="true" />
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={6}
+              className="z-50 min-w-72 rounded-xl border border-line bg-surface p-1.5 text-[13px] text-fg shadow-raised"
             >
-              {WIDTHS.map((entry) => (
-                <Radio
-                  key={entry.value}
-                  value={entry.value}
-                  label={entry.label}
-                  testId={`export-size-${entry.value}`}
-                />
-              ))}
-            </DropdownMenu.RadioGroup>
-            {format === 'gif' ? (
-              <>
-                <DropdownMenu.Separator className="my-1 h-px bg-line" />
-                <DropdownMenu.Label className="px-2.5 pt-1 pb-1 text-[11px] font-semibold tracking-wide text-fg-muted uppercase">
-                  GIF frame rate
-                </DropdownMenu.Label>
-                <DropdownMenu.RadioGroup
-                  value={String(gifFps ?? GIF_DEFAULT_FPS)}
-                  onValueChange={(value) =>
-                    commit({ type: 'setExport', patch: { gifFps: Number(value) } })
-                  }
-                >
-                  {[...new Set([...GIF_RATES, GIF_DEFAULT_FPS])]
-                    .sort((a, b) => a - b)
-                    .map((rate) => (
-                      <Radio
-                        key={rate}
-                        value={String(rate)}
-                        label={`${rate} frames per second`}
-                        testId={`export-gif-fps-${rate}`}
-                      />
-                    ))}
-                </DropdownMenu.RadioGroup>
-                <p className="px-2.5 pt-1.5 pb-1 text-xs text-fg-subtle">
-                  GIFs are large: keep them short and small. Their width is limited to 960 px unless
-                  you choose another size.
-                </p>
-              </>
-            ) : null}
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
+              <p
+                data-testid="export-summary"
+                className="mx-1 mb-1 rounded-lg bg-surface-2 px-2.5 py-2 text-xs text-fg-muted tabular-nums"
+              >
+                <span className="font-medium text-fg">Result</span> {summary}
+                <span className="block text-fg-subtle">The size is a rough guess.</span>
+              </p>
+              <DropdownMenu.Label className="px-2.5 pt-1 pb-1 text-[11px] font-semibold tracking-wide text-fg-muted uppercase">
+                Format
+              </DropdownMenu.Label>
+              <DropdownMenu.RadioGroup
+                value={format}
+                onValueChange={(value) =>
+                  commit({ type: 'setExport', patch: { format: value as VideoExportFormat } })
+                }
+              >
+                {FORMATS.map((entry) => (
+                  <Radio
+                    key={entry.value}
+                    value={entry.value}
+                    label={entry.label}
+                    hint={entry.hint}
+                    testId={`export-format-${entry.value}`}
+                  />
+                ))}
+              </DropdownMenu.RadioGroup>
+              <DropdownMenu.Separator className="my-1 h-px bg-line" />
+              <DropdownMenu.Label className="px-2.5 pt-1 pb-1 text-[11px] font-semibold tracking-wide text-fg-muted uppercase">
+                Size
+              </DropdownMenu.Label>
+              <DropdownMenu.RadioGroup
+                value={scale === undefined ? 'original' : String(scale)}
+                onValueChange={(value) =>
+                  commit({
+                    type: 'setExport',
+                    patch: { scale: value === 'original' ? undefined : Number(value) },
+                  })
+                }
+              >
+                {WIDTHS.map((entry) => (
+                  <Radio
+                    key={entry.value}
+                    value={entry.value}
+                    label={entry.label}
+                    testId={`export-size-${entry.value}`}
+                  />
+                ))}
+              </DropdownMenu.RadioGroup>
+              {format === 'gif' ? (
+                <>
+                  <DropdownMenu.Separator className="my-1 h-px bg-line" />
+                  <DropdownMenu.Label className="px-2.5 pt-1 pb-1 text-[11px] font-semibold tracking-wide text-fg-muted uppercase">
+                    GIF frame rate
+                  </DropdownMenu.Label>
+                  <DropdownMenu.RadioGroup
+                    value={String(gifFps ?? GIF_DEFAULT_FPS)}
+                    onValueChange={(value) =>
+                      commit({ type: 'setExport', patch: { gifFps: Number(value) } })
+                    }
+                  >
+                    {[...new Set([...GIF_RATES, GIF_DEFAULT_FPS])]
+                      .sort((a, b) => a - b)
+                      .map((rate) => (
+                        <Radio
+                          key={rate}
+                          value={String(rate)}
+                          label={`${rate} frames per second`}
+                          testId={`export-gif-fps-${rate}`}
+                        />
+                      ))}
+                  </DropdownMenu.RadioGroup>
+                  <p className="px-2.5 pt-1.5 pb-1 text-xs text-fg-subtle">
+                    GIFs are large: keep them short and small. Their width is limited to 960 px
+                    unless you choose another size.
+                  </p>
+                </>
+              ) : null}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
     </div>
   );
 }

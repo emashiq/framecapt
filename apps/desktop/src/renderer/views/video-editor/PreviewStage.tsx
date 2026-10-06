@@ -4,13 +4,21 @@ import {
   MIN_BOX_PX,
   MIN_CROP_PX,
   MIN_ITEM_MS,
+  fadeAlpha,
+  isVisual,
   newItem,
+  newText,
   type Item,
-  type ItemKind,
+  type MaskKind,
   type PixelRect,
+  type TextItem,
   type VideoCommand,
   type VideoProject,
+  type VisualItem,
 } from '../../../shared/video-edit';
+import { assetUrl } from './clip-spec';
+import { drawTextItem, loadFontFor } from './text-draw';
+import { fontOf } from './text-layout';
 import { fileUrl, newNonce } from '../../history/media-url';
 import { revealDuration } from '../../lib/reveal-duration';
 import type { Player } from './player';
@@ -38,7 +46,7 @@ export interface PreviewStageProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   /** The item tool armed in the tool bar: dragging on the preview makes one. */
-  tool: ItemKind | null;
+  tool: DrawTool | null;
   onToolDone: () => void;
   cropMode: boolean;
   /** width / height the crop keeps while it is resized, or null. */
@@ -52,6 +60,9 @@ type Drag =
   | { kind: 'item'; id: string; handle: Handle; start: PixelRect; origin: { x: number; y: number } }
   | { kind: 'crop'; handle: Handle; start: PixelRect; origin: { x: number; y: number } }
   | { kind: 'create'; origin: { x: number; y: number }; rect: PixelRect | null; moved: boolean };
+
+/** The tools that make an item by dragging a box on the preview. */
+export type DrawTool = MaskKind | 'text';
 
 const isActive = (item: Item, ms: number): boolean => item.startMs <= ms && ms < item.endMs;
 
@@ -73,6 +84,10 @@ export function PreviewStage(props: PreviewStageProps) {
   const dragRef = useRef<Drag | null>(null);
   const live = useRef(props);
   const scratch = useRef<HTMLCanvasElement | null>(null);
+  /** The pictures of image items, loaded once from the project's assets. */
+  const images = useRef(new Map<string, HTMLImageElement>());
+  /** Counts pictures and fonts that finished loading: the overlay is drawn again. */
+  const [loaded, setLoaded] = useState(0);
 
   useLayoutEffect(() => {
     live.current = props;
@@ -106,13 +121,31 @@ export function PreviewStage(props: PreviewStageProps) {
     const k = canvas.width / current.source.width;
     const ready = video.readyState >= 2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const imageOf = (assetId: string): HTMLImageElement | null => {
+      let image = images.current.get(assetId);
+      if (!image) {
+        image = new Image();
+        image.onload = () => setLoaded((n) => n + 1);
+        image.src = assetUrl(live.current.historyId, assetId, 'png');
+        images.current.set(assetId, image);
+      }
+      return image.complete && image.naturalWidth > 0 ? image : null;
+    };
     for (const item of current.items) {
-      if (isActive(item, ms)) drawItem(ctx, video, item, k, ready, scratchCanvas(scratch));
+      if (isVisual(item) && isActive(item, ms)) {
+        drawItem(ctx, video, item, ms, k, ready, scratchCanvas(scratch), imageOf);
+      }
     }
     const creating = dragRef.current?.kind === 'create' ? dragRef.current.rect : null;
-    if (creating && live.current.tool) {
-      const preview = newItem(live.current.tool, 'preview', creating, ms, ms + 1);
-      drawItem(ctx, video, preview, k, ready, scratchCanvas(scratch));
+    const tool = live.current.tool;
+    if (creating && tool) {
+      const preview =
+        tool === 'text'
+          ? newText('preview', creating, ms, ms + 1)
+          : newItem(tool, 'preview', creating, ms, ms + 1);
+      if (isVisual(preview)) {
+        drawItem(ctx, video, preview, ms, k, ready, scratchCanvas(scratch), imageOf);
+      }
       outline(ctx, creating, k, false);
     }
     if (current.crop) dimOutside(ctx, current.crop, k, canvas, cropMode ? 0.6 : 0.5);
@@ -121,9 +154,29 @@ export function PreviewStage(props: PreviewStageProps) {
       outline(ctx, crop, k, true);
     } else {
       const selected = current.items.find((item) => item.id === selectedId);
-      if (selected) outline(ctx, selected.rect, k, true, !isActive(selected, ms));
+      if (selected && isVisual(selected)) {
+        outline(ctx, selected.rect, k, true, !isActive(selected, ms));
+      }
     }
   }, [player]);
+
+  // Text is drawn with fonts that load on first use: draw again once they are there.
+  const fonts = project.items
+    .filter((item): item is TextItem => item.kind === 'text')
+    .map(fontOf)
+    .join('|');
+  useEffect(() => {
+    let current = true;
+    const texts = live.current.project.items.filter(
+      (item): item is TextItem => item.kind === 'text',
+    );
+    void Promise.all(texts.map((item) => loadFontFor(item))).then(
+      () => current && setLoaded((n) => n + 1),
+    );
+    return () => {
+      current = false;
+    };
+  }, [fonts]);
 
   // Redraw when the picture changes (every presented frame), the time moves, or anything edited.
   useEffect(() => {
@@ -148,7 +201,7 @@ export function PreviewStage(props: PreviewStageProps) {
     };
   }, [player, draw]);
 
-  useEffect(draw, [draw, project, props.selectedId, props.cropMode, box, props.tool]);
+  useEffect(draw, [draw, project, props.selectedId, props.cropMode, box, props.tool, loaded]);
 
   // What you hear follows the project's mute and volume (the browser cannot play louder than 100 %).
   useEffect(
@@ -188,13 +241,15 @@ export function PreviewStage(props: PreviewStageProps) {
       drag = { kind: 'create', origin: point, rect: null, moved: false };
     } else {
       const selected = current.items.find((item) => item.id === selectedId);
-      const handle = selected ? hitHandle(point, selected.rect, reach()) : null;
-      if (selected && handle) {
+      const handle =
+        selected && isVisual(selected) ? hitHandle(point, selected.rect, reach()) : null;
+      if (selected && isVisual(selected) && handle) {
         drag = { kind: 'item', id: selected.id, handle, start: selected.rect, origin: point };
       } else {
         // The topmost item under the pointer that is on screen right now.
         const hit = [...current.items]
           .reverse()
+          .filter(isVisual)
           .find((item) => isActive(item, ms) && hitHandle(point, item.rect, 0) === 'move');
         onSelect(hit?.id ?? null);
         if (hit)
@@ -216,7 +271,7 @@ export function PreviewStage(props: PreviewStageProps) {
       if (cropMode) hover = hitHandle(point, current.crop ?? fullFrame(current), reach());
       else if (!tool) {
         const selected = current.items.find((item) => item.id === selectedId);
-        hover = selected ? hitHandle(point, selected.rect, reach()) : null;
+        hover = selected && isVisual(selected) ? hitHandle(point, selected.rect, reach()) : null;
       }
       canvas.style.cursor = tool || (cropMode && hover === null) ? 'crosshair' : cursorFor(hover);
       return;
@@ -277,7 +332,13 @@ export function PreviewStage(props: PreviewStageProps) {
     const endMs = Math.min(trim.endMs, Math.max(trim.startMs, now) + DEFAULT_ITEM_MS);
     const startMs = Math.max(trim.startMs, Math.min(now, endMs - MIN_ITEM_MS));
     const id = props.newId();
-    props.commit({ type: 'addItem', item: newItem(tool, id, rect, startMs, endMs) });
+    props.commit({
+      type: 'addItem',
+      item:
+        tool === 'text'
+          ? newText(id, rect, startMs, endMs)
+          : newItem(tool, id, rect, startMs, endMs),
+    });
     props.onSelect(id);
     props.onToolDone();
   };
@@ -345,14 +406,31 @@ function scratchCanvas(ref: { current: HTMLCanvasElement | null }): HTMLCanvasEl
 function drawItem(
   ctx: CanvasRenderingContext2D,
   video: HTMLVideoElement,
-  item: Item,
+  item: VisualItem,
+  ms: number,
   k: number,
   ready: boolean,
   scratch: HTMLCanvasElement,
+  imageOf: (assetId: string) => HTMLImageElement | null,
 ): void {
   const { x, y, width, height } = item.rect;
   const canvas = ctx.canvas;
-  if (item.kind === 'redact') {
+  if (item.kind === 'text') {
+    // The very code the export uses (see text-draw.ts), at the preview's scale.
+    ctx.save();
+    ctx.translate(x * k, y * k);
+    ctx.scale(k, k);
+    drawTextItem(ctx, item, fadeAlpha(item, ms));
+    ctx.restore();
+  } else if (item.kind === 'image') {
+    const image = imageOf(item.assetId);
+    if (image) {
+      ctx.save();
+      ctx.globalAlpha = item.opacity * fadeAlpha(item, ms);
+      ctx.drawImage(image, x * k, y * k, width * k, height * k);
+      ctx.restore();
+    }
+  } else if (item.kind === 'redact') {
     ctx.fillStyle = item.color;
     ctx.fillRect(x * k, y * k, width * k, height * k);
   } else if (item.kind === 'highlight') {

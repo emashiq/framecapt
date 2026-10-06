@@ -8,7 +8,7 @@ import { FfmpegError, type ProbeResult } from '../../src/main/media/ffmpeg';
 import { JobRunner } from '../../src/main/media/job-runner';
 import { VideoEditService, editedDestination } from '../../src/main/video-projects/service';
 import { freeFileName } from '../../src/main/shots/free-name';
-import { applyCommand, createProject, newItem } from '../../src/shared/video-edit';
+import { applyCommand, createProject, newItem, rectOf } from '../../src/shared/video-edit';
 import { fakeTools, PLAYABLE } from './fake-tools';
 
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -73,7 +73,13 @@ function setup(
         written.push(project);
         return Promise.resolve();
       },
+      writePicture: () => Promise.resolve('0'.repeat(64)),
+      importAudio: () => Promise.reject(new Error('not in this test')),
+      removeAsset: () => Promise.resolve(),
+      pruneAssets: () => Promise.resolve(0),
+      assetPath: () => null,
     },
+    pickAudioFile: () => Promise.resolve(null),
     tools: fakeTools({ probe: () => options.probe ?? PROBE }),
     runner,
     destination: (src, extension) => editedDestination(src, extension, freeFileName),
@@ -138,7 +144,7 @@ describe('VideoEditService.open', () => {
       hasAudio: true,
     });
     // The box now has to fit the smaller frame.
-    expect(project.items[0]?.rect.x).toBeLessThanOrEqual(1080);
+    expect(rectOf(project.items[0])?.x).toBeLessThanOrEqual(1080);
     expect(project.items[0]?.endMs).toBeLessThanOrEqual(12_000);
   });
 

@@ -14,7 +14,7 @@ import { detectImageFormat, validateImageBytes } from '../../shared/shots';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import { thumbnailArgs, type MediaTools } from '../media/ffmpeg';
-import type { ProjectInput, ProjectStore } from '../projects/store';
+import type { ProjectAsset, ProjectInput, ProjectStore } from '../projects/store';
 import type { VideoProjectStore } from '../video-projects/store';
 import type { ProjectDoc } from '../../shared/project-ipc';
 import { writeFileAtomic } from '../shots/atomic-write';
@@ -86,7 +86,9 @@ export interface ScreenshotOverwrite {
   project?: {
     doc: ProjectDoc;
     appVersion: string;
-    base?: Omit<ProjectInput, 'doc' | 'appVersion'>;
+    /** The pictures of the document's image layers. */
+    assets?: ProjectAsset[];
+    base?: Omit<ProjectInput, 'doc' | 'appVersion' | 'assets'>;
   };
 }
 
@@ -101,6 +103,8 @@ export interface NewVideo {
   source: HistorySource;
   derivedFrom?: string;
   createdAt?: number;
+  /** The frame rate the recording was made at (the video editor exports at it). */
+  fps?: number;
 }
 
 function formatOfVideoPath(file: string): 'webm' | 'mp4' | 'gif' {
@@ -197,6 +201,21 @@ export class HistoryService {
   /** An item of the history. */
   get(id: string): HistoryItem | undefined {
     return this.store.get(id);
+  }
+
+  /** The item that points at `file` (same path, any case on Windows), if any. */
+  findByPath(file: string): HistoryItem | undefined {
+    return this.existingFor(file);
+  }
+
+  /** Items in the list; unlisted items of a newer build are not counted here. */
+  get size(): number {
+    return this.store.count;
+  }
+
+  /** True when `history.json` did not exist at load and nothing was backfilled yet (a fresh start). */
+  get isFirstRun(): boolean {
+    return !this.existedAtLoad && !this.store.backfilled;
   }
 
   /** The file of an item, for the media protocol (history items only). */
@@ -358,12 +377,18 @@ export class HistoryService {
       try {
         const updated =
           projectId !== undefined &&
-          (await projects.updateDoc(id, input.project.doc, input.project.appVersion));
+          (await projects.updateDoc(
+            id,
+            input.project.doc,
+            input.project.appVersion,
+            input.project.assets,
+          ));
         if (!updated && input.project.base) {
           await projects.write(id, {
             ...input.project.base,
             doc: input.project.doc,
             appVersion: input.project.appVersion,
+            ...(input.project.assets && { assets: input.project.assets }),
           });
           projectId = id;
         }
@@ -424,6 +449,7 @@ export class HistoryService {
       hasAudio: input.hasAudio,
       source: input.source,
       derivedFrom: input.derivedFrom ?? null,
+      ...(input.fps !== undefined && { fps: input.fps }),
     };
     await this.put(item);
     this.queueThumbnail(item);

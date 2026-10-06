@@ -30,6 +30,7 @@ function actions(): CommandActions {
     navigate: vi.fn(),
     showKeyboardHelp: vi.fn(),
     editVideo: vi.fn(),
+    openImage: vi.fn(),
     toggleTheme: vi.fn(),
     quit: vi.fn(),
     openCommandCenter: vi.fn(),
@@ -154,8 +155,29 @@ describe('commands call the app actions', () => {
     expect(calls.showKeyboardHelp).toHaveBeenCalled();
   });
 
+  it('offers a screenshot of all screens only with more than one display', () => {
+    const calls = actions();
+    expect(buildCommands(env(), calls).some((command) => command.id === 'shot.all')).toBe(false);
+    const command = find(buildCommands(env({ multiDisplay: true }), calls), 'shot.all');
+    expect(command.hint).toEqual({ kind: 'global', action: 'screenshotAllScreens' });
+    command.run();
+    expect(calls.startCapture).toHaveBeenCalledWith('screenshot', 'screen', true);
+  });
+
+  it('Open image is in the palette and at the top of the File menu, and runs the app action', () => {
+    const calls = actions();
+    const commands = buildCommands(env(), calls);
+    expect(idsOf(rankCommands(commands, 'open image'))).toContain('file.openImage');
+    expect(MENUS.find((menu) => menu.id === 'file')?.items[0]).toBe('file.openImage');
+    expect(hintFor(find(commands, 'file.openImage'), DEFAULT_SETTINGS)).toEqual(['Ctrl', 'O']);
+    find(commands, 'file.openImage').run();
+    expect(calls.openImage).toHaveBeenCalledTimes(1);
+  });
+
   it('every menu entry is a known command', () => {
-    const ids = new Set(buildCommands(env(), actions()).map((command) => command.id));
+    const ids = new Set(
+      buildCommands(env({ multiDisplay: true }), actions()).map((command) => command.id),
+    );
     for (const menu of MENUS) {
       for (const id of menu.items) if (id !== null) expect(ids.has(id), id).toBe(true);
     }

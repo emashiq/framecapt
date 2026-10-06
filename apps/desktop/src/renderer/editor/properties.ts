@@ -59,6 +59,8 @@ export interface PropSupport {
   magnifier: boolean;
   step: boolean;
   stamp: boolean;
+  /** An image layer: "Reset size". */
+  image: boolean;
 }
 
 const NONE: PropSupport = {
@@ -78,6 +80,7 @@ const NONE: PropSupport = {
   magnifier: false,
   step: false,
   stamp: false,
+  image: false,
 };
 
 const SUPPORT: Record<AnnotationType, PropSupport> = {
@@ -112,6 +115,7 @@ const SUPPORT: Record<AnnotationType, PropSupport> = {
   magnifier: { ...NONE, color: true, stroke: true, opacity: true, shadow: true, magnifier: true },
   stamp: { ...NONE, color: true, opacity: true, shadow: true, stamp: true },
   ruler: { ...NONE, color: true, stroke: true, opacity: true, shadow: true },
+  image: { ...NONE, radius: true, opacity: true, shadow: true, image: true },
   redact: NONE,
 };
 
@@ -163,7 +167,7 @@ export function propsOf(annotation: Annotation | null, style: StyleDefaults): Pr
     next.fill = a.fill ?? null;
     next.fillOpacity = a.fillOpacity ?? 1;
   }
-  if (a.type === 'rect') next.radius = a.radius ?? 0;
+  if (a.type === 'rect' || a.type === 'image') next.radius = a.radius ?? 0;
   if (a.type === 'callout') {
     next.radius = a.radius ?? 10;
     next.textColor = a.textColor;

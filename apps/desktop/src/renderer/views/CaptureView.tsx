@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AppWindow,
   Camera,
+  Fullscreen,
+  FolderOpen,
+  ImagePlus,
   Keyboard,
   Lightbulb,
   Loader2,
@@ -16,7 +19,7 @@ import type { RecordTarget } from '../../shared/recorder-ipc';
 import { patchFromRecordOptions, recordOptionsFromSettings } from '../../shared/settings';
 import type { SettingsSectionId, StartRequestEvent } from '../../shared/settings-ipc';
 import { acceleratorKeys, type ShortcutAction } from '../../shared/shortcuts';
-import type { ShotKind } from '../../shared/shots';
+import type { CaptureTarget } from '../../shared/shots';
 import { Loader } from '../components/Loader';
 import { OnboardingCard } from '../components/OnboardingCard';
 import { PageHeader } from '../components/PageHeader';
@@ -30,6 +33,7 @@ import { Kbd } from '../components/ui/Kbd';
 import { useCaptureFlow } from '../capture/use-capture-flow';
 import { subscribeLaunch } from '../lib/launch-bus';
 import { notify } from '../lib/notify';
+import { useMultiDisplay } from '../lib/use-multi-display';
 import { useRecorderState } from '../recorder/use-recorder';
 import {
   problemCount,
@@ -46,7 +50,7 @@ const SOURCES = [
   { label: 'Region', target: 'region', icon: ScanLine },
 ] as const;
 
-const STATUS_TEXT: Record<ShotKind, string> = {
+const STATUS_TEXT: Record<CaptureTarget, string> = {
   screen: 'Choose a screen…',
   window: 'Capturing the window…',
   region: 'Select an area…',
@@ -107,9 +111,11 @@ interface ModeCardProps {
   testPrefix: 'shot' | 'record';
   /** The one primary button of the page (the main flow). */
   primaryTarget?: (typeof SOURCES)[number]['target'];
-  onStart: (target: ShotKind, trigger: HTMLElement) => void;
+  onStart: (target: CaptureTarget, trigger: HTMLElement) => void;
   /** While something runs, the card's buttons are disabled. */
   busy?: boolean;
+  /** One more row below the three sources. */
+  extra?: ReactNode;
 }
 
 function ModeCard({
@@ -121,6 +127,7 @@ function ModeCard({
   primaryTarget,
   onStart,
   busy = false,
+  extra,
 }: ModeCardProps) {
   return (
     <Card padding="lg" className="flex h-full flex-col" data-testid={`mode-${title.toLowerCase()}`}>
@@ -159,6 +166,7 @@ function ModeCard({
             </div>
           </li>
         ))}
+        {extra}
       </ul>
     </Card>
   );
@@ -196,17 +204,55 @@ function Banner({
 }
 
 export interface CaptureViewProps {
+  /** Opens a picture file in the editor (File > Open image). */
+  onOpenImage: () => void;
   /** Opens History, with one item selected when an id is given. */
   onOpenHistory: (id?: string) => void;
   onOpenSettings: (section?: SettingsSectionId) => void;
 }
 
-export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps) {
+/** An existing picture instead of a capture: open a file, drop one on the window or paste it. */
+function OpenImageRow({ onOpen }: { onOpen: () => void }) {
+  const { editorShortcuts } = useSettings();
+  const accelerator = editorShortcuts.openImage;
+  return (
+    <Card
+      padding="md"
+      className="mt-5 flex flex-wrap items-center gap-4"
+      data-testid="open-image-card"
+    >
+      <div
+        className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-fg"
+        aria-hidden="true"
+      >
+        <ImagePlus className="size-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-semibold text-fg">Edit an existing picture</h2>
+        <p className="text-sm text-fg-muted">
+          Open an image file, drop one on this window, or paste one with Ctrl+V.
+        </p>
+      </div>
+      {accelerator ? <Kbd keys={acceleratorKeys(accelerator)} /> : null}
+      <Button
+        variant="secondary"
+        icon={<FolderOpen className="size-4 text-fg-subtle" aria-hidden="true" />}
+        onClick={onOpen}
+        data-testid="open-image"
+      >
+        Open image…
+      </Button>
+    </Card>
+  );
+}
+
+export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: CaptureViewProps) {
   const flow = useCaptureFlow();
   const recorder = useRecorderState();
   const settings = useSettings();
   const dirs = useEffectiveDirs();
   const shortcutStates = useShortcutStates();
+  const multiDisplay = useMultiDisplay();
   const [picker, setPicker] = useState<'shot' | 'record' | null>(null);
   const [windowTrigger, setWindowTrigger] = useState<HTMLElement | null>(null);
 
@@ -221,13 +267,17 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
     regionShortcut !== null &&
     shortcutStates?.screenshotRegion.status === 'ok';
 
-  function startScreenshot(target: ShotKind, trigger: HTMLElement | null): void {
+  function startScreenshot(
+    target: CaptureTarget,
+    trigger: HTMLElement | null,
+    allScreens = false,
+  ): void {
     if (target === 'window') {
       setWindowTrigger(trigger);
       setPicker('shot');
       return;
     }
-    void flow.start(target, trigger);
+    void flow.start(target, trigger, undefined, allScreens);
   }
 
   async function startRecording(
@@ -259,14 +309,16 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
   const launchHandler = useRef<(request: StartRequestEvent) => void>(() => undefined);
   useEffect(() => {
     launchHandler.current = (request) => {
-      if (request.kind === 'screenshot') startScreenshot(request.target, null);
+      if (request.kind === 'screenshot') startScreenshot(request.target, null, request.allScreens);
       else onRecordClick(request.target, null);
     };
   });
   useEffect(() => subscribeLaunch((request) => launchHandler.current(request)), []);
 
   const statusText = flow.running
-    ? STATUS_TEXT[flow.running]
+    ? flow.allScreens
+      ? 'Capturing all screens…'
+      : STATUS_TEXT[flow.running]
     : recordingBusy
       ? `${RECORD_STATUS_TEXT[recorder.status] ?? ''}${
           recorder.progress !== null ? ` ${Math.round(recorder.progress * 100)}%` : ''
@@ -369,8 +421,27 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
           actions={['screenshotScreen', 'screenshotWindow', 'screenshotRegion']}
           testPrefix="shot"
           primaryTarget="region"
-          onStart={startScreenshot}
+          onStart={(target, trigger) => startScreenshot(target, trigger)}
           busy={anythingBusy}
+          extra={
+            multiDisplay ? (
+              <li className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1 justify-start"
+                  icon={<Fullscreen className="size-4 text-fg-subtle" aria-hidden="true" />}
+                  disabled={anythingBusy}
+                  onClick={(event) => startScreenshot('screen', event.currentTarget, true)}
+                  data-testid="shot-all-screens"
+                >
+                  All screens
+                </Button>
+                <div className="flex min-w-32 justify-end">
+                  <ShortcutHint action="screenshotAllScreens" />
+                </div>
+              </li>
+            ) : null
+          }
         />
         <ModeCard
           title="Record"
@@ -382,6 +453,8 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
           busy={anythingBusy}
         />
       </div>
+
+      <OpenImageRow onOpen={onOpenImage} />
 
       <div className="mt-5">
         <RecordOptions

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { globalShortcut, screen, type BrowserWindow } from 'electron';
+import { globalShortcut, nativeImage, screen, type BrowserWindow } from 'electron';
 import {
   framePixelsToDip,
+  globalDipToDisplayLocal,
   overlayRectToFramePixels,
   type DisplayGeom,
 } from '../../shared/geometry';
@@ -29,7 +30,9 @@ import {
   type RecorderEvent,
   type RecorderMachineState,
 } from '../../shared/recorder-machine';
+import type { ToastEvent } from '../../shared/settings-ipc';
 import type { OverlayInit } from '../../shared/shot-ipc';
+import type { CaptureTarget } from '../../shared/shots';
 import type { Role } from '../../shared/types';
 import {
   placeToolbar,
@@ -44,7 +47,8 @@ import { log } from '../logger';
 import { OverlaySet } from '../overlay';
 import type { SelectionHost } from '../selection-host';
 import { getMainWindow, getWorkerWindow, peekWorkerWindow, webContentsWithRoles } from '../windows';
-import { whenWorkerReady } from '../worker';
+import { grabScreensExact } from '../capture/exact-capture';
+import { requestFrames, whenWorkerReady } from '../worker';
 import type { MediaTools } from '../media/ffmpeg';
 import type { HistorySink } from '../history/service';
 import type { MediaRegistry } from '../recording/media-protocol';
@@ -63,6 +67,8 @@ const COUNTDOWN_FROM = 3;
 const PREPARE_TIMEOUT_MS = 20_000;
 const START_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_MS = 20_000;
+/** How often the mouse is sampled for a follow-mouse recording. */
+const CURSOR_INTERVAL_MS = 1000 / 30;
 /** On app quit the recording gets this long to finish before its session is left for recovery. */
 export const QUIT_FINALIZE_CAP_MS = 15_000;
 
@@ -112,6 +118,13 @@ export interface RecorderDeps {
   media: MediaRegistry;
   /** E2E mock builds: the engine draws a synthetic picture and positions use real displays. */
   synthetic: boolean;
+  /** Saves a screenshot taken during the recording (a file in the screenshots folder, plus history). */
+  saveScreenshot: (shot: {
+    kind: CaptureTarget;
+    width: number;
+    height: number;
+    png: Buffer;
+  }) => Promise<unknown>;
   /** True while a screenshot flow runs (the two never overlap). */
   isScreenshotBusy: () => boolean;
   /** Folder of the finished recordings (the setting, else `Videos/FrameCapt`). */
@@ -165,6 +178,11 @@ export class RecorderController implements SelectionHost {
   private removeDisplayListeners: (() => void) | undefined;
   private watchedWorker: BrowserWindow | undefined;
   private levelsOn = false;
+  /** A screenshot of the recording is being taken (a second click waits for it). */
+  private snapping = false;
+  /** Follow-mouse recordings: samples the mouse for the engine. */
+  private cursorTimer: ReturnType<typeof setInterval> | undefined;
+  private lastCursor: { nx: number; ny: number } | undefined;
   /** The main window was on screen when this recording was requested (a shortcut may start it from the tray). */
   private mainWasShown = true;
   private readonly changeListeners = new Set<() => void>();
@@ -192,12 +210,17 @@ export class RecorderController implements SelectionHost {
     );
   }
 
+  /** Recording or paused: the one state in which a screenshot may be taken (and a recording is on screen). */
+  get isLive(): boolean {
+    return this.machine.status === 'recording' || this.machine.status === 'paused';
+  }
+
   /** The recorder owns the overlay windows right now (selection step). */
   get selecting(): boolean {
     return this.overlays !== undefined;
   }
 
-  /** Anything that must keep a screenshot from starting. */
+  /** Anything that must keep a screenshot from starting (see isLive: a live recording allows one). */
   get busy(): boolean {
     return !isFinished(this.machine.status);
   }
@@ -326,6 +349,8 @@ export class RecorderController implements SelectionHost {
       result: null,
       sessionCreated: false,
     };
+    // Only a whole screen follows the mouse.
+    if (request.target !== 'screen') delete this.ctx.options.follow;
     this.dispatch({ type: 'START_REQUESTED', sessionId });
     const token = this.token;
     void this.runStart(token, request).catch((error: unknown) => this.failStart(token, error));
@@ -494,6 +519,7 @@ export class RecorderController implements SelectionHost {
     }
 
     this.dispatch({ type: 'PREFLIGHT_OK' });
+    this.pumpCursor(ctx); // the follow window starts where the mouse is, not mid-screen
     this.ensureToolbar(ctx);
     await this.hideMain();
     this.guard(token);
@@ -544,6 +570,7 @@ export class RecorderController implements SelectionHost {
       audio: ctx.audio,
     });
     this.token += 1; // start-up is over: late start-up work can no longer act
+    this.startCursorFollow(ctx);
     this.showToolbar();
     log.info(
       `Recording started: ${ctx.target}, ${ctx.width}x${ctx.height}, ` +
@@ -760,6 +787,73 @@ export class RecorderController implements SelectionHost {
     await sleep(120);
   }
 
+  // --- screenshots during a recording --------------------------------------------------------
+
+  /** A short result line in the toolbar's pill ("Screenshot saved"). */
+  toastToolbar(event: ToastEvent): void {
+    for (const contents of webContentsWithRoles(['toolbar']))
+      sendEvent(contents, 'recorder:toast', event);
+  }
+
+  /**
+   * The toolbar's camera button: a still of what is being recorded (the whole screen, the recorded
+   * region, or the recorded window), saved straight to the screenshots folder.
+   */
+  async screenshotNow(): Promise<void> {
+    const ctx = this.ctx;
+    if (!this.isLive || !ctx) throw new IpcError('NOT_FOUND', 'There is no recording to capture.');
+    if (this.snapping) throw new IpcError('BUSY', 'A screenshot is already being taken.');
+    this.snapping = true;
+    try {
+      const shot = await this.grabStill(ctx);
+      await this.deps.saveScreenshot(shot);
+      log.info(`Screenshot saved during a recording: ${shot.kind} ${shot.width}x${shot.height}`);
+      this.toastToolbar({ level: 'info', message: 'Screenshot saved' });
+    } catch (error) {
+      log.warn(`Screenshot during a recording failed: ${String(error)}`);
+      this.toastToolbar({ level: 'error', message: "Couldn't save the screenshot" });
+      throw error;
+    } finally {
+      this.snapping = false;
+    }
+  }
+
+  private async grabStill(
+    ctx: SessionContext,
+  ): Promise<{ kind: CaptureTarget; width: number; height: number; png: Buffer }> {
+    const { display, regionPx } = ctx;
+    const kind: CaptureTarget = ctx.target;
+    if (kind !== 'window' && display && !this.deps.synthetic) {
+      // Pixel-exact desktopCapturer image; the worker's video frame is the fallback.
+      const grab = await grabScreensExact([display]).catch(() => undefined);
+      const exact = grab?.frames.get(display.id);
+      if (exact) {
+        const image = regionPx ? exact.image.crop(regionPx) : exact.image;
+        const size = image.getSize();
+        return { kind, width: size.width, height: size.height, png: image.toPNG() };
+      }
+    }
+    const [frame] = await requestFrames(
+      [
+        {
+          sourceId: ctx.sourceId,
+          ...(display && { displayId: display.id }),
+          ...(this.deps.synthetic && {
+            syntheticSize: display ? { ...display.physicalSize } : { width: 1280, height: 720 },
+          }),
+        },
+      ],
+      { synthetic: this.deps.synthetic },
+    );
+    if (!frame) throw new Error('The capture returned no image.');
+    if (kind === 'window' || !regionPx) {
+      return { kind, width: frame.width, height: frame.height, png: frame.png };
+    }
+    const cropped = nativeImage.createFromBuffer(frame.png, { scaleFactor: 1 }).crop(regionPx);
+    const size = cropped.getSize();
+    return { kind, width: size.width, height: size.height, png: cropped.toPNG() };
+  }
+
   // --- the toolbar -------------------------------------------------------------------------
 
   private placementDisplays(): PlacementDisplay[] {
@@ -815,6 +909,34 @@ export class RecorderController implements SelectionHost {
     if (this.levelsOn === enabled) return;
     this.levelsOn = enabled;
     this.send({ cmd: 'levels', enabled });
+  }
+
+  // --- follow mouse ------------------------------------------------------------------------
+
+  /** Follow-mouse recordings: the mouse goes to the engine ~30 times a second, only when it moved. */
+  private startCursorFollow(ctx: SessionContext): void {
+    if (!ctx.options.follow || !ctx.display || this.cursorTimer !== undefined) return;
+    this.cursorTimer = setInterval(() => this.pumpCursor(ctx), CURSOR_INTERVAL_MS);
+  }
+
+  private stopCursorFollow(): void {
+    if (this.cursorTimer !== undefined) clearInterval(this.cursorTimer);
+    this.cursorTimer = undefined;
+    this.lastCursor = undefined;
+  }
+
+  /** Sends the mouse position on the recorded display; on another display the last one stays. */
+  private pumpCursor(ctx: SessionContext): void {
+    const { display } = ctx;
+    if (!ctx.options.follow || !display) return;
+    const local = globalDipToDisplayLocal(screen.getCursorScreenPoint(), toGeom(display));
+    const { width, height } = display.bounds;
+    if (local.x < 0 || local.y < 0 || local.x >= width || local.y >= height) return;
+    const nx = local.x / width;
+    const ny = local.y / height;
+    if (this.lastCursor?.nx === nx && this.lastCursor.ny === ny) return;
+    this.lastCursor = { nx, ny };
+    this.send({ cmd: 'cursor', nx, ny });
   }
 
   // --- stopping ----------------------------------------------------------------------------
@@ -922,6 +1044,7 @@ export class RecorderController implements SelectionHost {
       this.dispatch({ type: 'FAILED', code, message });
     } finally {
       this.finalizeAbort = undefined;
+      this.stopCursorFollow();
       this.send({ cmd: 'abort' });
       this.closeToolbar();
       this.restoreMain();
@@ -945,6 +1068,9 @@ export class RecorderController implements SelectionHost {
         sizeBytes: bytes,
         hasAudio: ctx.audio.mic || ctx.audio.system,
         source: ctx.target,
+        // The frame rate that was asked for: the video editor exports at it (the file itself is
+        // variable frame rate and does not say).
+        fps: ctx.options.fps,
       });
       return added?.id ?? null;
     } catch (error) {
@@ -1081,6 +1207,7 @@ export class RecorderController implements SelectionHost {
   /** Stops whatever start-up is waiting for. */
   private endStartup(reason: Error): void {
     this.token += 1;
+    this.stopCursorFollow();
     this.selectionWaiter?.reject(reason);
     this.selectionWaiter = undefined;
     const choice = this.choiceWaiter;
@@ -1099,6 +1226,7 @@ export class RecorderController implements SelectionHost {
   /** Releases the engine and the session of a recording that never started. */
   private afterStartupEnded(): void {
     const ctx = this.ctx;
+    this.stopCursorFollow();
     this.send({ cmd: 'abort' });
     this.closeToolbar();
     if (ctx?.sessionCreated) void this.deps.sessions.abort(ctx.sessionId);

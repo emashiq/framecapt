@@ -14,6 +14,7 @@ import {
   outputGeometry,
   outputToSource,
   parseProject,
+  rectOf,
   projectSegments,
   segmentAtOrAfter,
   sourceToOutput,
@@ -148,8 +149,8 @@ describe('normalizeProject and the schema', () => {
     const [item] = normalizeProject(project).items;
     expect(item?.endMs).toBeLessThanOrEqual(60_000);
     expect((item?.endMs ?? 0) - (item?.startMs ?? 0)).toBeGreaterThanOrEqual(MIN_ITEM_MS);
-    expect((item?.rect.x ?? 0) + (item?.rect.width ?? 0)).toBeLessThanOrEqual(1920);
-    expect((item?.rect.y ?? 0) + (item?.rect.height ?? 0)).toBeLessThanOrEqual(1080);
+    expect((rectOf(item)?.x ?? 0) + (rectOf(item)?.width ?? 0)).toBeLessThanOrEqual(1920);
+    expect((rectOf(item)?.y ?? 0) + (rectOf(item)?.height ?? 0)).toBeLessThanOrEqual(1080);
   });
 
   it('keeps trim valid and drops cuts that would remove everything', () => {
@@ -244,7 +245,7 @@ describe('reducer', () => {
       id: 'p',
       patch: { rect: { x: 1900, y: 1000, width: 500, height: 500 } },
     });
-    expect(project.items[0]?.rect).toEqual({ x: 1420, y: 580, width: 500, height: 500 });
+    expect(rectOf(project.items[0])).toEqual({ x: 1420, y: 580, width: 500, height: 500 });
   });
 
   it('sets the trim and re-normalizes the cuts', () => {
@@ -339,7 +340,7 @@ describe('undo and redo', () => {
       );
     }
     expect(history.past).toHaveLength(1);
-    expect(history.present.items[0]?.rect.x).toBe(40);
+    expect(rectOf(history.present.items[0])?.x).toBe(40);
     history = endVideoGesture(history);
     history = commitVideo(
       history,
@@ -348,7 +349,7 @@ describe('undo and redo', () => {
     );
     expect(history.past).toHaveLength(2);
     history = undoVideo(history);
-    expect(history.present.items[0]?.rect.x).toBe(40);
+    expect(rectOf(history.present.items[0])?.x).toBe(40);
   });
 
   it('does not add an entry for a no-op', () => {

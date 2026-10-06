@@ -1,10 +1,12 @@
 import { arrowDraw, quadPoint } from './arrow';
 import { calloutRadius, calloutTail } from './callout';
 import {
+  aspectFromAnchor,
   constrainTo45,
   containsPoint,
   distanceToRectOutline,
   distanceToSegment,
+  enforceAspect,
   expandRect,
   normalizeRect,
   squareFromAnchor,
@@ -160,6 +162,7 @@ export function annotationBounds(
     case 'highlight':
     case 'blur':
     case 'spotlight':
+    case 'image':
     case 'redact':
       return annotation.rect;
     case 'pen':
@@ -246,6 +249,7 @@ function hits(
       return inEllipse(annotation.rect, point, tolerance);
     case 'highlight':
     case 'blur':
+    case 'image':
     case 'redact':
       return containsPoint(expandRect(annotation.rect, tolerance), point);
     case 'spotlight':
@@ -346,6 +350,7 @@ export function handlesFor(
     case 'blur':
     case 'spotlight':
     case 'magnifier':
+    case 'image':
     case 'redact':
       return rectHandles(annotation.rect);
     case 'callout':
@@ -400,6 +405,25 @@ export function resizeRect(rect: Rect, handle: HandleId, point: Point, square = 
   return normalizeRect({ x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
 }
 
+const UNBOUNDED: Rect = { x: -1e6, y: -1e6, width: 2e6, height: 2e6 };
+
+/**
+ * Resizes a picture's rectangle by dragging `handle` to `point`, keeping its width:height ratio
+ * (the opposite corner or the opposite edge's middle stays put). With `free` the ratio changes.
+ */
+function resizeKeepingRatio(rect: Rect, handle: HandleId, point: Point, free: boolean): Rect {
+  if (free || rect.width <= 0 || rect.height <= 0) return resizeRect(rect, handle, point);
+  const ratio = rect.width / rect.height;
+  if (handle.length === 2) {
+    const anchor: Point = {
+      x: handle.includes('w') ? rect.x + rect.width : rect.x,
+      y: handle.includes('n') ? rect.y + rect.height : rect.y,
+    };
+    return aspectFromAnchor(anchor, point, ratio);
+  }
+  return enforceAspect(resizeRect(rect, handle, point), rect, handle, ratio, UNBOUNDED);
+}
+
 /** The patch that moves an annotation by (dx, dy). */
 export function moveAnnotation(annotation: Annotation, dx: number, dy: number): AnnotationPatch {
   switch (annotation.type) {
@@ -416,6 +440,7 @@ export function moveAnnotation(annotation: Annotation, dx: number, dy: number): 
     case 'blur':
     case 'spotlight':
     case 'magnifier':
+    case 'image':
     case 'redact':
       return { rect: translateRect(annotation.rect, dx, dy) };
     case 'callout':
@@ -470,6 +495,9 @@ export function resizeAnnotation(
     case 'magnifier':
     case 'redact':
       return { rect: resizeRect(annotation.rect, handle, point, shift) };
+    case 'image':
+      // A picture keeps its proportions; Shift frees them.
+      return { rect: resizeKeepingRatio(annotation.rect, handle, point, shift) };
     case 'callout':
       if (handle === 'tail') return { tail: point };
       return { rect: resizeRect(annotation.rect, handle, point, shift) };

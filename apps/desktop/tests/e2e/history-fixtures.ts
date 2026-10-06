@@ -17,6 +17,7 @@ export interface SeedFile {
   durationMs: number | null;
   sizeBytes: number;
   format: 'png' | 'jpeg' | 'webm' | 'mp4' | 'gif';
+  fps?: number;
   hasAudio: boolean | null;
   source: 'screen' | 'window' | 'region' | 'unknown';
   derivedFrom?: string | null;
@@ -159,6 +160,7 @@ export function seedHistory(userDataDir: string, items: SeedFile[]): void {
       hasAudio: item.hasAudio,
       source: item.source,
       derivedFrom: item.derivedFrom ?? null,
+      ...(item.fps !== undefined && { fps: item.fps }),
     };
   });
   fs.writeFileSync(

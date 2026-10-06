@@ -1,4 +1,6 @@
 import { DEFAULT_FPS, type Segment } from '../../../shared/video-edit';
+import { ClipAudio } from './clip-audio';
+import type { ClipSpec } from './clip-spec';
 import { playbackStep, playStart, stepTime } from './playback';
 
 export interface PlayerConfig {
@@ -27,10 +29,23 @@ export class Player {
   private readonly cleanups: (() => void)[] = [];
 
   private config: PlayerConfig = { segments: [], fps: undefined, durationMs: 0 };
+  private readonly clipAudio = new ClipAudio();
 
   /** What the player needs of the project: kept pieces, frame rate and length. Set whenever it changes. */
   configure(config: PlayerConfig): void {
     this.config = config;
+  }
+
+  /** The audio clips to play along with the video. */
+  setClips(clips: ClipSpec[]): void {
+    this.clipAudio.update(clips);
+    this.clipAudio.sync(this.snapshot.timeMs, this.snapshot.playing, true);
+  }
+
+  /** Stops the clips' audio elements for good (the editor was left). */
+  dispose(): void {
+    this.detach();
+    this.clipAudio.dispose();
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -64,6 +79,7 @@ export class Player {
     on('ended', () => this.afterPause());
     on('play', () => {
       this.set({ playing: true });
+      this.clipAudio.sync(this.snapshot.timeMs, true, true);
       cancelAnimationFrame(this.raf);
       this.raf = requestAnimationFrame(this.loop);
     });
@@ -72,6 +88,7 @@ export class Player {
   detach(): void {
     cancelAnimationFrame(this.raf);
     for (const cleanup of this.cleanups.splice(0)) cleanup();
+    this.clipAudio.pauseAll();
     this.video = null;
   }
 
@@ -82,6 +99,7 @@ export class Player {
   private afterPause(): void {
     cancelAnimationFrame(this.raf);
     this.set({ playing: false });
+    this.clipAudio.pauseAll();
     this.syncFromVideo();
   }
 
@@ -93,12 +111,14 @@ export class Player {
     if (step.kind === 'jump') {
       video.currentTime = step.toMs / 1000;
       this.set({ timeMs: step.toMs });
+      this.clipAudio.sync(step.toMs, true, true);
     } else if (step.kind === 'stop') {
       video.pause();
       this.seek(step.atMs);
       return;
     } else {
       this.set({ timeMs: Math.round(ms) });
+      this.clipAudio.sync(ms, true, false);
     }
     this.raf = requestAnimationFrame(this.loop);
   };
@@ -108,6 +128,7 @@ export class Player {
     const clamped = Math.max(0, Math.min(this.config.durationMs, Math.round(ms)));
     if (this.video) this.video.currentTime = clamped / 1000;
     this.set({ timeMs: clamped });
+    this.clipAudio.sync(clamped, this.snapshot.playing, true);
   }
 
   play(): void {

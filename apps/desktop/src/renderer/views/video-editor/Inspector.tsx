@@ -5,17 +5,28 @@ import {
   MIN_CROP_PX,
   MIN_CUT_MS,
   MIN_ITEM_MS,
+  TEXT_ALIGNS,
+  TEXT_FONTS,
+  TEXT_MAX_CHARS,
+  isVisual,
   outputDurationMs,
   outputGeometry,
   projectSegments,
+  type AudioItem,
   type Item,
+  type ItemPatch,
+  type PixelRect,
+  type TextFont,
+  type TextItem,
   type VideoCommand,
   type VideoProject,
 } from '../../../shared/video-edit';
 import { Button } from '../../components/ui/Button';
 import { Segmented } from '../../components/ui/Segmented';
+import { Select, type SelectOption } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
 import { KIND_STYLES } from './item-kinds';
+import { FONT_LABELS } from './text-layout';
 import type { Player } from './player';
 import { ASPECTS, fitAspect, type AspectId } from './rect-drag';
 import type { TimeRange, TimelineSelection } from './Timeline';
@@ -214,9 +225,9 @@ export function Inspector(props: InspectorProps) {
       ) : (
         <Section title="Getting started">
           <p className="text-[13px] leading-snug text-fg-muted">
-            Pick a tool under the preview and drag on the video to hide something for a while. Drag
-            on the clip in the timeline to select a range, then cut it out. Drag the ends of the
-            clip to trim.
+            Pick a tool under the preview and drag on the video to hide something or add text for a
+            while. Add a picture or a sound with the other tools. Drag on the clip in the timeline
+            to select a range to cut out, and drag the ends of the clip to trim.
           </p>
         </Section>
       )}
@@ -362,8 +373,10 @@ function ItemSection(props: InspectorProps & { item: Item; duration: number }) {
   const Icon = style.icon;
   const patch = (changes: Parameters<typeof updateItem>[1]): void =>
     commit(updateItem(item.id, changes));
-  const rectPatch = (changes: Partial<Item['rect']>): void =>
-    patch({ rect: { ...item.rect, ...changes } });
+  const box = isVisual(item) ? item : null;
+  const rectPatch = (changes: Partial<PixelRect>): void => {
+    if (box) patch({ rect: { ...box.rect, ...changes } });
+  };
 
   return (
     <Section title={style.label} testId="inspector-item">
@@ -435,40 +448,66 @@ function ItemSection(props: InspectorProps & { item: Item; duration: number }) {
           End at playhead
         </Button>
       </div>
-      <div className="grid grid-cols-4 gap-2">
-        <NumberField
-          label="X"
-          value={item.rect.x}
-          min={0}
-          step={1}
-          testId="rect-x"
-          onCommit={(value) => rectPatch({ x: Math.round(value) })}
-        />
-        <NumberField
-          label="Y"
-          value={item.rect.y}
-          min={0}
-          step={1}
-          testId="rect-y"
-          onCommit={(value) => rectPatch({ y: Math.round(value) })}
-        />
-        <NumberField
-          label="W"
-          value={item.rect.width}
-          min={MIN_BOX_PX}
-          step={1}
-          testId="rect-w"
-          onCommit={(value) => rectPatch({ width: Math.round(value) })}
-        />
-        <NumberField
-          label="H"
-          value={item.rect.height}
-          min={MIN_BOX_PX}
-          step={1}
-          testId="rect-h"
-          onCommit={(value) => rectPatch({ height: Math.round(value) })}
-        />
-      </div>
+      {box ? (
+        <div className="grid grid-cols-4 gap-2">
+          <NumberField
+            label="X"
+            value={box.rect.x}
+            min={0}
+            step={1}
+            testId="rect-x"
+            onCommit={(value) => rectPatch({ x: Math.round(value) })}
+          />
+          <NumberField
+            label="Y"
+            value={box.rect.y}
+            min={0}
+            step={1}
+            testId="rect-y"
+            onCommit={(value) => rectPatch({ y: Math.round(value) })}
+          />
+          <NumberField
+            label="W"
+            value={box.rect.width}
+            min={MIN_BOX_PX}
+            step={1}
+            testId="rect-w"
+            onCommit={(value) => rectPatch({ width: Math.round(value) })}
+          />
+          <NumberField
+            label="H"
+            value={box.rect.height}
+            min={MIN_BOX_PX}
+            step={1}
+            testId="rect-h"
+            onCommit={(value) => rectPatch({ height: Math.round(value) })}
+          />
+        </div>
+      ) : null}
+      {item.kind === 'text' ? (
+        <TextFields item={item} patch={patch} commit={commit} endGesture={endGesture} />
+      ) : null}
+      {item.kind === 'image' ? (
+        <>
+          <SliderField
+            label="Opacity"
+            value={Math.round(item.opacity * 100)}
+            min={5}
+            max={100}
+            step={5}
+            display={`${Math.round(item.opacity * 100)}%`}
+            testId="image-opacity"
+            onChange={(value) =>
+              commit(updateItem(item.id, { opacity: value / 100 }), `item:${item.id}:param`)
+            }
+            onEnd={endGesture}
+          />
+          <FadeFields item={item} patch={patch} />
+        </>
+      ) : null}
+      {item.kind === 'audio' ? (
+        <AudioFields item={item} patch={patch} commit={commit} endGesture={endGesture} />
+      ) : null}
       {item.kind === 'redact' ? (
         <div>
           <p className="mb-1.5 text-[11px] font-medium text-fg-muted">Colour</p>
@@ -546,4 +585,321 @@ function updateItem(
   patch: Extract<VideoCommand, { type: 'updateItem' }>['patch'],
 ): VideoCommand {
   return { type: 'updateItem', id, patch };
+}
+
+type PatchFn = (changes: ItemPatch) => void;
+type CommitFn = (command: VideoCommand, gesture?: string) => void;
+
+/** A labelled colour input. */
+function ColorField(props: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  testId: string;
+}) {
+  const id = useId();
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="mb-1 block text-[11px] font-medium text-fg-muted">
+        {props.label}
+      </label>
+      <input
+        id={id}
+        type="color"
+        value={props.value}
+        data-testid={props.testId}
+        onChange={(event) => props.onChange(event.target.value)}
+        className="h-8 w-full cursor-pointer rounded-lg border border-control bg-surface p-0.5"
+      />
+    </div>
+  );
+}
+
+/** Fade in and fade out of an item (seconds). */
+function FadeFields(props: {
+  item: { fadeInMs: number; fadeOutMs: number; startMs: number; endMs: number };
+  patch: PatchFn;
+}) {
+  const { item, patch } = props;
+  const length = seconds(item.endMs - item.startMs);
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <NumberField
+        label="Fade in (s)"
+        value={seconds(item.fadeInMs)}
+        digits={1}
+        min={0}
+        max={length}
+        step={0.1}
+        testId="item-fade-in"
+        onCommit={(value) => patch({ fadeInMs: toMs(value) })}
+      />
+      <NumberField
+        label="Fade out (s)"
+        value={seconds(item.fadeOutMs)}
+        digits={1}
+        min={0}
+        max={length}
+        step={0.1}
+        testId="item-fade-out"
+        onCommit={(value) => patch({ fadeOutMs: toMs(value) })}
+      />
+    </div>
+  );
+}
+
+const WEIGHT_OPTIONS: readonly SelectOption<string>[] = [
+  { value: '300', label: 'Light' },
+  { value: '400', label: 'Regular' },
+  { value: '500', label: 'Medium' },
+  { value: '600', label: 'Semibold' },
+  { value: '700', label: 'Bold' },
+  { value: '800', label: 'Extra bold' },
+];
+const FONT_OPTIONS: readonly SelectOption<TextFont>[] = TEXT_FONTS.map((font) => ({
+  value: font,
+  label: FONT_LABELS[font],
+}));
+
+function ToggleRow(props: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  testId: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[13px] text-fg">{props.label}</span>
+      <Switch
+        aria-label={props.label}
+        data-testid={props.testId}
+        checked={props.checked}
+        onCheckedChange={props.onChange}
+      />
+    </div>
+  );
+}
+
+/** Everything about a text item: the words, the look, the background, the outline and shadow. */
+function TextFields(props: {
+  item: TextItem;
+  patch: PatchFn;
+  commit: CommitFn;
+  endGesture: () => void;
+}) {
+  const { item, patch, commit, endGesture } = props;
+  const gesture = `item:${item.id}:text`;
+  const typed = (changes: ItemPatch): void => commit(updateItem(item.id, changes), gesture);
+  const background = item.background ?? { color: '#000000', opacity: 0.6, padding: 12, radius: 8 };
+  const outline = item.outline ?? { color: '#000000', width: 3 };
+  const textId = useId();
+  return (
+    <>
+      <div>
+        <label htmlFor={textId} className="mb-1 block text-[11px] font-medium text-fg-muted">
+          Text
+        </label>
+        <textarea
+          id={textId}
+          data-testid="text-content"
+          value={item.text}
+          maxLength={TEXT_MAX_CHARS}
+          rows={3}
+          onChange={(event) => typed({ text: event.target.value || ' ' })}
+          onBlur={endGesture}
+          className="selectable w-full resize-y rounded-lg border border-control bg-surface px-2 py-1.5 text-[13px] text-fg shadow-card"
+        />
+        <p className="mt-0.5 text-right text-[11px] text-fg-subtle tabular-nums">
+          {item.text.length} / {TEXT_MAX_CHARS}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <p className="mb-1 text-[11px] font-medium text-fg-muted">Font</p>
+          <Select
+            label="Font"
+            value={item.font}
+            options={FONT_OPTIONS}
+            data-testid="text-font"
+            onChange={(font) => patch({ font })}
+          />
+        </div>
+        <div>
+          <p className="mb-1 text-[11px] font-medium text-fg-muted">Weight</p>
+          <Select
+            label="Weight"
+            value={String(item.weight)}
+            options={WEIGHT_OPTIONS}
+            data-testid="text-weight"
+            onChange={(weight) => patch({ weight: Number(weight) as TextItem['weight'] })}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField
+          label="Size (px)"
+          value={item.size}
+          min={8}
+          max={600}
+          step={1}
+          testId="text-size"
+          onCommit={(value) => patch({ size: Math.round(value) })}
+        />
+        <ColorField
+          label="Colour"
+          value={item.color}
+          testId="text-color"
+          onChange={(color) => typed({ color })}
+        />
+      </div>
+      <Segmented
+        label="Alignment"
+        value={item.align}
+        options={TEXT_ALIGNS.map((align) => ({
+          value: align,
+          label: align.charAt(0).toUpperCase() + align.slice(1),
+        }))}
+        data-testid="text-align"
+        onChange={(align) => patch({ align })}
+      />
+      <ToggleRow
+        label="Italic"
+        checked={item.italic}
+        testId="text-italic"
+        onChange={(italic) => patch({ italic })}
+      />
+      <ToggleRow
+        label="Shadow"
+        checked={item.shadow}
+        testId="text-shadow"
+        onChange={(shadow) => patch({ shadow })}
+      />
+      <ToggleRow
+        label="Outline"
+        checked={item.outline !== null}
+        testId="text-outline"
+        onChange={(on) => patch({ outline: on ? outline : null })}
+      />
+      {item.outline ? (
+        <div className="grid grid-cols-2 gap-2">
+          <ColorField
+            label="Outline colour"
+            value={item.outline.color}
+            testId="text-outline-color"
+            onChange={(color) => typed({ outline: { ...outline, color } })}
+          />
+          <NumberField
+            label="Outline (px)"
+            value={item.outline.width}
+            min={1}
+            max={20}
+            step={1}
+            testId="text-outline-width"
+            onCommit={(value) => patch({ outline: { ...outline, width: Math.round(value) } })}
+          />
+        </div>
+      ) : null}
+      <ToggleRow
+        label="Background"
+        checked={item.background !== null}
+        testId="text-background"
+        onChange={(on) => patch({ background: on ? background : null })}
+      />
+      {item.background ? (
+        <>
+          <ColorField
+            label="Background colour"
+            value={item.background.color}
+            testId="text-background-color"
+            onChange={(color) => typed({ background: { ...background, color } })}
+          />
+          <SliderField
+            label="Background opacity"
+            value={Math.round(item.background.opacity * 100)}
+            min={0}
+            max={100}
+            step={5}
+            display={`${Math.round(item.background.opacity * 100)}%`}
+            testId="text-background-opacity"
+            onChange={(value) => typed({ background: { ...background, opacity: value / 100 } })}
+            onEnd={endGesture}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <NumberField
+              label="Padding (px)"
+              value={item.background.padding}
+              min={0}
+              max={200}
+              step={1}
+              testId="text-background-padding"
+              onCommit={(value) =>
+                patch({ background: { ...background, padding: Math.round(value) } })
+              }
+            />
+            <NumberField
+              label="Corners (px)"
+              value={item.background.radius}
+              min={0}
+              max={200}
+              step={1}
+              testId="text-background-radius"
+              onCommit={(value) =>
+                patch({ background: { ...background, radius: Math.round(value) } })
+              }
+            />
+          </div>
+        </>
+      ) : null}
+      <FadeFields item={item} patch={patch} />
+    </>
+  );
+}
+
+/** An audio clip: where it starts in the file, how long it plays, its level and fades. */
+function AudioFields(props: {
+  item: AudioItem;
+  patch: PatchFn;
+  commit: CommitFn;
+  endGesture: () => void;
+}) {
+  const { item, patch, commit, endGesture } = props;
+  return (
+    <>
+      <p className="truncate text-[13px] text-fg" data-testid="audio-name" title={item.name}>
+        {item.name || 'Audio clip'}
+        <span className="text-fg-muted"> · file {formatTimecode(item.clipMs)}</span>
+      </p>
+      <NumberField
+        label="Start in the file (s)"
+        value={seconds(item.inMs)}
+        digits={3}
+        min={0}
+        max={seconds(item.clipMs - MIN_ITEM_MS)}
+        step={0.1}
+        testId="audio-in"
+        onCommit={(value) => patch({ inMs: toMs(value) })}
+      />
+      <ToggleRow
+        label="Mute this clip"
+        checked={item.muted}
+        testId="audio-clip-mute"
+        onChange={(muted) => patch({ muted })}
+      />
+      <SliderField
+        label="Volume"
+        value={Math.round(item.volume * 100)}
+        min={0}
+        max={200}
+        step={5}
+        display={`${Math.round(item.volume * 100)}%`}
+        disabled={item.muted}
+        testId="audio-clip-volume"
+        onChange={(value) =>
+          commit(updateItem(item.id, { volume: value / 100 }), `item:${item.id}:param`)
+        }
+        onEnd={endGesture}
+      />
+      <FadeFields item={item} patch={patch} />
+    </>
+  );
 }

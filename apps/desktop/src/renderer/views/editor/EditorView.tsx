@@ -5,7 +5,10 @@ import { MAX_THUMBNAIL_BYTES } from '../../../shared/history-ipc';
 import { isCommandAction, matchEditorAction } from '../../../shared/shortcuts';
 import { shortPath } from '../../lib/short-path';
 import { getSettings, updateSettings, useSettings } from '../../settings/store';
+import { assetLimit, assetsToSave, type EditorAsset, type EditorAssets } from '../../editor/assets';
+import { decodeToPng, loadAsset } from '../../editor/decode';
 import { flattenThumbnail, flattenToBlob } from '../../editor/export';
+import { pictureIn } from '../../editor/import-image';
 import { measureText } from '../../editor/measure';
 import {
   alignCommand,
@@ -14,6 +17,7 @@ import {
   zOrderCommand,
 } from '../../editor/model/arrange';
 import type { Command } from '../../editor/model/commands';
+import { imageAt } from '../../editor/model/create';
 import { largestAspectRect } from '../../editor/model/geometry';
 import {
   canRedo,
@@ -34,6 +38,7 @@ import {
   exportSize,
   type Beautify,
   type EditorDoc,
+  type Point,
   type Rect,
 } from '../../editor/model/types';
 import {
@@ -56,6 +61,7 @@ import {
 import type { ReeditInfo } from '../../editor/reedit';
 import { EditorStage, type StageHandle } from './EditorStage';
 import { EditorToolbar } from './EditorToolbar';
+import { HistoryImagePicker } from './HistoryImagePicker';
 import { OptionsStrip } from './OptionsStrip';
 import { PropertiesPanel, type ArrangeAction } from './PropertiesPanel';
 import { TOOLS, toolForAction, type ToolId } from './tools';
@@ -70,6 +76,8 @@ export interface EditorShot {
   png: ArrayBuffer;
   /** Set when the screenshot was opened from History (Edit): Save writes over that item. */
   edit?: ReeditInfo;
+  /** An image the user opened, dropped or pasted: nothing is lost until it is edited. */
+  imported?: boolean;
 }
 
 export interface EditorViewProps {
@@ -121,11 +129,33 @@ function writeStored(key: string, value: string): void {
   }
 }
 
-/** Decodes the original once; everything else draws from this bitmap. */
+/** Decodes the original once (and the pictures of its image layers); everything else draws from these bitmaps. */
 export function EditorView(props: EditorViewProps) {
   const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
+  const [assets, setAssets] = useState<EditorAssets | null>(null);
   const [failed, setFailed] = useState(false);
   const { png } = props.shot;
+  const stored = props.shot.edit?.assets;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loaded: EditorAsset[] = [];
+    void Promise.all(
+      (stored ?? []).map((asset) =>
+        // A picture that cannot be read leaves its layer with the placeholder.
+        loadAsset(asset.png)
+          .then((value) => loaded.push(value))
+          .catch(() => undefined),
+      ),
+    ).then(() => {
+      if (cancelled) for (const asset of loaded) asset.image.close();
+      else setAssets(new Map(loaded.map((asset) => [asset.id, asset])));
+    });
+    return () => {
+      cancelled = true;
+      for (const asset of loaded) asset.image.close();
+    };
+  }, [stored]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,8 +188,10 @@ export function EditorView(props: EditorViewProps) {
       </div>
     );
   }
-  if (!bitmap) return <div className="h-full" data-testid="editor-loading" aria-busy="true" />;
-  return <EditorWorkspace {...props} bitmap={bitmap} />;
+  if (!bitmap || !assets) {
+    return <div className="h-full" data-testid="editor-loading" aria-busy="true" />;
+  }
+  return <EditorWorkspace {...props} bitmap={bitmap} initialAssets={assets} />;
 }
 
 function Banner({
@@ -199,7 +231,8 @@ function EditorWorkspace({
   blocked,
   onDirtyChange,
   onRequestLeave,
-}: EditorViewProps & { bitmap: ImageBitmap }) {
+  initialAssets,
+}: EditorViewProps & { bitmap: ImageBitmap; initialAssets: EditorAssets }) {
   const [history, dispatch] = useReducer(historyReducer, undefined, () =>
     createHistory(shot.edit?.doc ?? createDoc(bitmap.width, bitmap.height)),
   );
@@ -235,8 +268,12 @@ function EditorWorkspace({
   const overwriteOk = useRef(false);
   /** The document as of the last save or copy; null until the first one. */
   const [savedDoc, setSavedDoc] = useState<typeof doc | null>(() =>
-    shot.savedPath || shot.edit ? history.present : null,
+    shot.savedPath || shot.edit || shot.imported ? history.present : null,
   );
+  /** The pictures of the document's image layers (all inserted ones; only the used ones are saved). */
+  const [assets, setAssets] = useState(initialAssets);
+  const assetsRef = useRef(assets);
+  const [historyPicker, setHistoryPicker] = useState(false);
   const stageRef = useRef<StageHandle>(null);
   const settings = useSettings();
   const saveFormat = settings.screenshots.format;
@@ -438,6 +475,97 @@ function EditorWorkspace({
     [doc, selectedIds, onCommit, onEndGesture],
   );
 
+  // --- image layers -----------------------------------------------------------------------
+
+  /**
+   * Places a picture (PNG bytes) as a new image layer: centered on `center` (default the middle of
+   * the canvas), scaled to fit 60 % of it, selected. The picture is kept once per distinct content.
+   */
+  const insertPicture = useCallback(
+    async (png: ArrayBuffer, center?: Point) => {
+      try {
+        const asset = await loadAsset(png);
+        const limit = assetLimit(assetsRef.current, asset.id, png.byteLength);
+        if (limit) {
+          asset.image.close();
+          notify.error(limit);
+          return;
+        }
+        if (assetsRef.current.has(asset.id)) asset.image.close();
+        else {
+          assetsRef.current = new Map(assetsRef.current).set(asset.id, asset);
+          setAssets(assetsRef.current);
+        }
+        const layer = imageAt(
+          crypto.randomUUID(),
+          asset.id,
+          asset,
+          { width: doc.width, height: doc.height },
+          center,
+        );
+        stageRef.current?.commitText();
+        selectTool('select');
+        onCommit({ type: 'add', annotation: layer });
+        onEndGesture();
+        setSelectedIds([layer.id]);
+        announce('Image inserted');
+      } catch {
+        notify.error('That picture could not be inserted.');
+      }
+    },
+    [doc.width, doc.height, selectTool, onCommit, onEndGesture, announce],
+  );
+
+  /** A picture file, drop or paste of any format the browser decodes. */
+  const insertBlob = useCallback(
+    async (blob: Blob, center?: Point) => {
+      try {
+        await insertPicture((await decodeToPng(blob)).png, center);
+      } catch {
+        notify.error('That picture could not be read.');
+      }
+    },
+    [insertPicture],
+  );
+
+  const insertFromFile = useCallback(async () => {
+    const response = await window.framecapt.invoke('editor:pickImage');
+    if (!response.ok) notify.error(response.error);
+    else if ('bytes' in response.data) await insertBlob(new Blob([response.data.bytes]));
+  }, [insertBlob]);
+
+  const insertFromHistory = useCallback(
+    async (historyId: string) => {
+      setHistoryPicker(false);
+      const response = await window.framecapt.invoke('editor:historyImage', { historyId });
+      if (response.ok) await insertPicture(response.data.png);
+      else notify.error(response.error);
+    },
+    [insertPicture],
+  );
+
+  /** "Reset size": the selected picture goes back to its own pixel size, around its center. */
+  const resetImageSize = useCallback(() => {
+    if (single?.type !== 'image') return;
+    const asset = assetsRef.current.get(single.assetId);
+    if (!asset) return;
+    const { rect } = single;
+    onCommit({
+      type: 'update',
+      id: single.id,
+      patch: {
+        rect: {
+          x: Math.round(rect.x + rect.width / 2 - asset.width / 2),
+          y: Math.round(rect.y + rect.height / 2 - asset.height / 2),
+          width: asset.width,
+          height: asset.height,
+        },
+      },
+    });
+    onEndGesture();
+    announce('Image size reset');
+  }, [single, onCommit, onEndGesture, announce]);
+
   // The quick controls of the options strip are shortcuts to the same fields as the panel.
   const widthStep = nearestStep(
     values.strokeWidth,
@@ -477,7 +605,9 @@ function EditorWorkspace({
     const exporting = doc;
     setBusy('copy');
     try {
-      const bytes = await (await flattenToBlob(bitmap, exporting, 'png')).arrayBuffer();
+      const bytes = await (
+        await flattenToBlob(bitmap, exporting, 'png', undefined, assetsRef.current)
+      ).arrayBuffer();
       const result = await window.framecapt.invoke('shot:copy', {
         sessionId: shot.session.id,
         bytes,
@@ -497,19 +627,30 @@ function EditorWorkspace({
   /** The flattened bytes and thumbnail of `exporting`, plus the editable project to keep with them. */
   const prepareExport = useCallback(
     async (exporting: EditorDoc, format: ImageFormat) => {
+      const pictures = assetsRef.current;
       const bytes = await (
-        await flattenToBlob(bitmap, exporting, format, getSettings().screenshots.jpegQuality)
+        await flattenToBlob(
+          bitmap,
+          exporting,
+          format,
+          getSettings().screenshots.jpegQuality,
+          pictures,
+        )
       ).arrayBuffer();
       // History shows a thumbnail of the FLATTENED result (redactions applied), never of the
       // original capture. Without one the entry just has no thumbnail; saving still works.
-      const thumbnail = await flattenThumbnail(bitmap, exporting)
+      const thumbnail = await flattenThumbnail(bitmap, exporting, undefined, pictures)
         .then((blob) => (blob.size <= MAX_THUMBNAIL_BYTES ? blob.arrayBuffer() : undefined))
         .catch(() => undefined);
       const keep = getSettings().screenshots.keepEditableOriginals || shot.edit !== undefined;
+      // Only the pictures the document still uses are kept with the project.
+      const used = assetsToSave(exporting, pictures);
       return {
         bytes,
         ...(thumbnail && { thumbnail }),
-        ...(keep && { project: { doc: serializeDoc(exporting) } }),
+        ...(keep && {
+          project: { doc: serializeDoc(exporting), ...(used.length > 0 && { assets: used }) },
+        }),
       };
     },
     [bitmap, shot.edit],
@@ -626,7 +767,7 @@ function EditorWorkspace({
   // --- keyboard (this view only) ------------------------------------------------------------
 
   const keys = useRef({
-    blocked: blocked || confirmOver,
+    blocked: blocked || confirmOver || historyPicker,
     tool,
     selected,
     cropDraft,
@@ -635,6 +776,8 @@ function EditorWorkspace({
     copy,
     saveKey,
     quickSave,
+    insertFromFile,
+    insertBlob,
     selectTool,
     applyCrop,
     cancelCrop,
@@ -646,7 +789,7 @@ function EditorWorkspace({
   });
   useEffect(() => {
     keys.current = {
-      blocked: blocked || confirmOver,
+      blocked: blocked || confirmOver || historyPicker,
       tool,
       selected,
       cropDraft,
@@ -655,6 +798,8 @@ function EditorWorkspace({
       copy,
       saveKey,
       quickSave,
+      insertFromFile,
+      insertBlob,
       selectTool,
       applyCrop,
       cancelCrop,
@@ -697,6 +842,7 @@ function EditorWorkspace({
         else if (action === 'redo') k.doRedo();
         else if (action === 'save') k.saveKey();
         else if (action === 'quickSave') k.quickSave();
+        else if (action === 'insertImage') void k.insertFromFile();
         else if (action === 'copy') void k.copy();
         else if (action === 'zoomIn') stage?.zoomIn();
         else if (action === 'zoomOut') stage?.zoomOut();
@@ -760,11 +906,28 @@ function EditorWorkspace({
     const onKeyUp = (event: KeyboardEvent): void => {
       if (event.key.startsWith('Arrow')) keys.current.onEndGesture();
     };
+    // Ctrl+V with a picture on the clipboard (not while typing): it becomes an image layer. The
+    // DOM paste event carries the clipboard's files, so no clipboard permission is needed.
+    const onPaste = (event: ClipboardEvent): void => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (
+        keys.current.blocked ||
+        target?.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
+        return;
+      }
+      const picture = pictureIn(event.clipboardData?.files);
+      if (!picture) return;
+      event.preventDefault();
+      void keys.current.insertBlob(picture);
+    };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('paste', onPaste);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('paste', onPaste);
     };
   }, []);
 
@@ -813,6 +976,8 @@ function EditorWorkspace({
         onSaveCopy={(format) => void save(format)}
         onQuickSave={quickSave}
         onSaveOver={requestSaveOver}
+        onInsertFile={() => void insertFromFile()}
+        onInsertHistory={() => setHistoryPicker(true)}
       />
       {shot.edit?.notice && (
         <Banner testId="editor-reedit-notice" tone="warning">
@@ -868,6 +1033,8 @@ function EditorWorkspace({
             onSelect={onSelect}
             onZoom={setZoom}
             onStepPlaced={onStepPlaced}
+            assets={assets}
+            onDropImage={(file, at) => void insertBlob(file, at)}
           />
           <div
             data-testid="editor-status"
@@ -911,12 +1078,18 @@ function EditorWorkspace({
             previewExport={previewExport}
             onPreview={setPreviewExport}
             onResetSteps={resetSteps}
+            onResetImageSize={resetImageSize}
           />
         )}
       </div>
       <div role="status" aria-live="polite" className="sr-only" data-testid="editor-live">
         {announcement.text}
       </div>
+      <HistoryImagePicker
+        open={historyPicker}
+        onClose={() => setHistoryPicker(false)}
+        onPick={(id) => void insertFromHistory(id)}
+      />
       <AlertConfirm
         open={confirmOver}
         title="Replace the saved screenshot?"

@@ -10,7 +10,7 @@ import {
   type VideoExportFormat,
   type VideoProject,
 } from '../../shared/video-edit';
-import { buildEditArgs, buildFilterScript } from './edit-graph';
+import { buildEditArgs, buildFilterScript, plannedInputs } from './edit-graph';
 import { FfmpegError, type MediaTools, type ProbeResult } from './ffmpeg';
 import { runFileJob, type FileJobResult } from './job-runner';
 
@@ -65,6 +65,10 @@ export function withProbedSource(project: VideoProject, probe: ProbeResult): Vid
       width: probe.video.width,
       height: probe.video.height,
       hasAudio: probe.hasAudio,
+      // What the project already knows (the recorder's setting) wins over a guess from the file.
+      ...(project.source.fps === undefined && probe.frameRate !== undefined
+        ? { fps: probe.frameRate }
+        : {}),
     },
   });
 }
@@ -80,6 +84,33 @@ export interface EditExportRequest {
   onProgress?: (percent: number | null) => void;
   /** Where the job's temporary files go; the OS temp folder by default. */
   tempRoot?: string;
+  /** The PNG of every text item, by item id (made by the renderer, validated by main). */
+  textPngs?: Readonly<Record<string, Uint8Array>>;
+  /** The file of a project asset (a picture or an audio file), or null when it is gone. */
+  assetPath?: (assetId: string, ext: string) => string | null;
+}
+
+/** The files behind the extra inputs of a project; null when one is missing. */
+async function inputFilesFor(
+  project: VideoProject,
+  request: EditExportRequest,
+  tempDir: string,
+): Promise<Record<string, string> | null> {
+  const files: Record<string, string> = {};
+  for (const { item, index } of plannedInputs(project)) {
+    let file: string | null;
+    if (item.kind === 'text') {
+      const png = request.textPngs?.[item.id];
+      if (!png) return null;
+      file = path.join(tempDir, `text-${index}.png`);
+      await fs.promises.writeFile(file, png);
+    } else {
+      file = request.assetPath?.(item.assetId, item.kind === 'image' ? 'png' : item.ext) ?? null;
+      if (file === null || !fs.existsSync(file)) return null;
+    }
+    files[item.id] = file;
+  }
+  return files;
 }
 
 /**
@@ -120,13 +151,23 @@ export async function exportEdit(request: EditExportRequest): Promise<FileJobRes
   try {
     const filterScriptPath = path.join(tempDir, 'graph.txt');
     await fs.promises.writeFile(filterScriptPath, buildFilterScript(project), 'utf8');
+    const inputFiles = await inputFilesFor(project, request, tempDir);
+    if (!inputFiles) {
+      return {
+        ok: false,
+        code: 'FAILED',
+        message: 'A picture or sound file of the project is missing.',
+        stderrTail: '',
+      };
+    }
     return await runFileJob({
       tools,
       sourcePath,
       destPath,
       ...(signal && { signal }),
       ...(request.onProgress && { onProgress: request.onProgress }),
-      args: (partial) => buildEditArgs(project, sourcePath, partial, { filterScriptPath }).args,
+      args: (partial) =>
+        buildEditArgs(project, sourcePath, partial, { filterScriptPath, inputFiles }).args,
       verify: (output) => verifyEdit(project, format, output),
       outputDurationSec: outputDurationMs(projectSegments(project)) / 1000,
       noun: 'export',
