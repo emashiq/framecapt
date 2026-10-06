@@ -1,8 +1,12 @@
 import type { EngineCommand, EngineEvent, EnginePrepareCommand } from '../../shared/recorder-ipc';
 import { CHUNK_TIMESLICE_MS } from '../../shared/recorder-ipc';
 import type { AudioSource } from '../../shared/recorder-machine';
-import { AUDIO_BITRATE, qualityLimit, videoBitrate } from '../../shared/recording';
+import { followCrop, followCropSize, type FollowZoom } from '../../shared/compositor-layout';
+import type { Size } from '../../shared/geometry';
+import type { Rect } from '../../shared/rect';
+import { AUDIO_BITRATE, fitWithin, qualityLimit, videoBitrate } from '../../shared/recording';
 import { createAudioMix, type AudioMix } from '../capture/audio-graph';
+import { createCompositor } from '../capture/compositor';
 import { CaptureError, mapMediaError } from '../capture/errors';
 import { detectRecorderFormats } from '../capture/recorder-probe';
 import { createCanvasTransform, type CroppedStream } from '../capture/region-crop';
@@ -46,6 +50,11 @@ interface Active {
   ending: boolean;
 }
 
+/** The zoom of a follow-mouse recording; only a whole-screen recording follows. */
+function followZoom(command: EnginePrepareCommand): FollowZoom | undefined {
+  return command.kind === 'screen' && !command.region ? command.options.follow?.zoom : undefined;
+}
+
 /** An ordinary microphone list: `audioinput` devices, excluding the virtual "communications" alias. */
 async function listMicrophones(): Promise<MediaDeviceInfo[]> {
   const all = await navigator.mediaDevices.enumerateDevices();
@@ -78,6 +87,8 @@ export class RecorderEngine {
   /** Sources already reported as lost (reported once). */
   private lost = new Set<AudioSource>();
   private queue: Promise<void> = Promise.resolve();
+  /** The mouse on the recorded display (0..1), from main; the follow window aims at it. */
+  private cursor = { nx: 0.5, ny: 0.5 };
 
   constructor(private readonly deps: EngineDeps) {}
 
@@ -112,6 +123,9 @@ export class RecorderEngine {
       case 'levels':
         this.levelsEnabled = command.enabled;
         this.updateSampler();
+        return;
+      case 'cursor':
+        this.cursor = { nx: command.nx, ny: command.ny };
         return;
     }
   }
@@ -180,15 +194,19 @@ export class RecorderEngine {
         }
       }
 
-      const crop = await createCanvasTransform(
-        displayStream,
-        {
-          rect: command.region ?? undefined,
-          limit: qualityLimit(options.quality),
-        },
-        options.fps,
-        'timer',
-      );
+      const follow = followZoom(command);
+      this.cursor = { nx: 0.5, ny: 0.5 };
+      const crop = follow
+        ? await this.createFollowCompositor(displayStream, follow, command)
+        : await createCanvasTransform(
+            displayStream,
+            {
+              rect: command.region ?? undefined,
+              limit: qualityLimit(options.quality),
+            },
+            options.fps,
+            'timer',
+          );
       const { outWidth: width, outHeight: height } = crop.stats();
 
       const mic = micStream !== undefined;
@@ -241,7 +259,48 @@ export class RecorderEngine {
       sourceId: command.sourceId,
       systemAudio: command.options.systemAudio,
       maxFrameRate: command.options.fps,
-      maxSize: command.region ? undefined : (qualityLimit(command.options.quality) ?? undefined),
+      // A region and a follow-mouse window are cut from the unscaled frame.
+      maxSize:
+        command.region || followZoom(command)
+          ? undefined
+          : (qualityLimit(command.options.quality) ?? undefined),
+    });
+  }
+
+  /**
+   * Follow-mouse picture: a window of frame/zoom pixels that eases toward the mouse, fitted to the
+   * quality preset (so 3440x1440 at 2x is 1720x720 and fits 1080p unchanged).
+   */
+  private createFollowCompositor(
+    displayStream: MediaStream,
+    zoom: FollowZoom,
+    command: EnginePrepareCommand,
+  ): Promise<CroppedStream> {
+    const limit = qualityLimit(command.options.quality);
+    let crop: Rect | null = null;
+    let last = performance.now();
+    return createCompositor({
+      tiles: [
+        {
+          stream: displayStream,
+          src: (frame) => {
+            const now = performance.now();
+            crop = followCrop({
+              target: { x: this.cursor.nx * frame.width, y: this.cursor.ny * frame.height },
+              prev: crop,
+              dtMs: now - last,
+              zoom,
+              frame,
+            });
+            last = now;
+            return crop;
+          },
+          dst: (out) => ({ x: 0, y: 0, width: out.width, height: out.height }),
+        },
+      ],
+      outSize: ([frame]) => fitWithin(followCropSize(frame as Size, zoom), limit),
+      fps: command.options.fps,
+      driver: 'timer',
     });
   }
 

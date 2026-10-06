@@ -165,7 +165,7 @@ The editor replaces the phase-03 result view and runs in the main window's rende
         v
  MAIN: RecorderController (src/main/recorder/controller.ts)  <- the ONE authoritative state
    pure machine (src/shared/recorder-machine.ts) -> recorder:state snapshot broadcast
-        |  recorder:engineCommand (prepare | start | pause | resume | stop | abort | mute | levels)
+        |  recorder:engineCommand (prepare | start | pause | resume | stop | abort | mute | levels | cursor)
         v                                           ^ recorder:engineEvent (prepared | needsChoice | started | stopped | sourceLost | trackEnded | levels | error)
  hidden 'recorder' window: RecorderEngine (src/renderer/recorder/engine.ts) - the only MediaRecorder
         | session:appendChunk {sessionId, seq, bytes}  (ack before the next)   | session:finish {sessionId, lastSeq}
@@ -192,6 +192,8 @@ States: `idle -> selecting -> preflight -> countdown -> starting -> recording <-
 ### Video and audio pipeline
 
 display stream -> canvas (`createCanvasTransform`: crop to the region and/or fit the 1080p preset, drawn from a self-correcting timer, so the frame rate is constant even on a static screen) -> `canvas.captureStream` video track. Quality presets: "1080p" fits inside 1920 x 1080 keeping the aspect ratio with even sides, never upscaling (3440 x 1440 -> 1920 x 804); "Source" keeps the native size. Frame rate 30 (default) or 60. Video bitrate 8 Mbps at 1080p30, scaled with pixels and frame rate (2.5-30 Mbps), Opus 128 kbps. Microphone and system audio each go through their own GainNode (mute = gain 0, not `track.enabled`), an AnalyserNode (levels) and into one MediaStreamAudioDestinationNode: one mixed track, nothing is ever connected to the speakers. Levels are sampled at 10 Hz only while recording and only while main says a toolbar is visible. A microphone or system track that ends, or a `devicechange` that removes the microphone, is reported once (`trackEnded`): the recording continues with the other sources, the toolbar shows a badge ("Microphone disconnected"), the main window shows a toast.
+
+**Compositor and follow mouse (phase P4).** `createCanvasTransform` is a one-tile wrapper over `createCompositor` (`src/renderer/capture/compositor.ts`): tiles of `{ stream, src?, dst }` are drawn into one canvas per tick (timer or `requestVideoFrameCallback` driver, same keep-alive and cleanup as before); `src` is asked again every tick, while `dst` and the output size are fixed when the first frames arrive. The layout math is pure (`src/shared/compositor-layout.ts`: `followCrop`, `mosaicLayout`, `cameraRect`, unit tested) so the webcam overlay and multi-source mosaics can reuse it. Follow mouse (`options.follow.zoom` 1.5, 2 or 3, whole-screen recordings only) captures the unscaled frame and records a window of frame/zoom pixels (even sides) fitted to the quality preset; the window center eases toward the mouse (exponential smoothing, time constant 180 ms, frame-rate independent, 10 % dead zone) and is clamped inside the frame. The mouse comes from main: a 30 Hz timer in the controller (started after `STARTED`, stopped on every end path) reads `screen.getCursorScreenPoint()`, converts it to 0..1 of the recorded display and sends `{ cmd: "cursor", nx, ny }` to the engine only when it changed; on another display the last position is held.
 
 ### Chunk protocol and session files
 

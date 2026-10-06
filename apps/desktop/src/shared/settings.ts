@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { FollowZoom } from './compositor-layout';
 import type { RecordOptions } from './recorder-ipc';
 import {
   DEFAULT_EDITOR_SHORTCUTS,
@@ -16,6 +17,10 @@ import {
 
 /** Current version of settings.json. Bump it and add a step to `migrateSettings` to change the shape. */
 export const SETTINGS_VERSION = 1;
+
+/** The follow-mouse setting: off, or the zoom as text (1.5x, 2x, 3x). */
+export const FOLLOW_MOUSE_VALUES = ['off', '1.5', '2', '3'] as const;
+export type FollowMouseSetting = (typeof FOLLOW_MOUSE_VALUES)[number];
 
 const AcceleratorOrNull = z.string().min(1).max(64).nullable();
 const OutputDirSchema = z.string().min(1).max(1024).nullable();
@@ -53,6 +58,8 @@ export const RecordingSettingsSchema = z.object({
   /** Null = Videos/FrameCapt. Set only through `settings:chooseOutputDir`. */
   outputDir: OutputDirSchema,
   autoExportMp4: z.boolean(),
+  /** Follow-mouse recording of a screen: the zoom of the window that follows the mouse, or off. */
+  followMouseZoom: z.enum(FOLLOW_MOUSE_VALUES),
 });
 
 export const ShortcutSettingsSchema = z.object({
@@ -116,6 +123,7 @@ export const DEFAULT_SETTINGS: Settings = {
     systemAudio: false,
     outputDir: null,
     autoExportMp4: false,
+    followMouseZoom: 'off',
   },
   shortcuts: { ...DEFAULT_SHORTCUTS },
   editorShortcuts: { ...DEFAULT_EDITOR_SHORTCUTS },
@@ -344,7 +352,17 @@ export function recordOptionsFromSettings(recording: Settings['recording']): Rec
     quality: recording.quality,
     fps: recording.fps,
     countdown: recording.countdown,
+    ...followOption(recording.followMouseZoom),
   };
+}
+
+function followOption(setting: FollowMouseSetting): Pick<RecordOptions, 'follow'> {
+  return setting === 'off' ? {} : { follow: { zoom: Number(setting) as FollowZoom } };
+}
+
+/** The `follow` record option of a setting value; undefined when off. */
+export function followFromSetting(setting: FollowMouseSetting): RecordOptions['follow'] {
+  return followOption(setting).follow;
 }
 
 /** The settings patch that carries the phase-05 localStorage record options over (done once). */
@@ -357,6 +375,7 @@ export function patchFromRecordOptions(options: RecordOptions): SettingsPatch {
       quality: options.quality,
       fps: options.fps,
       countdown: options.countdown,
+      followMouseZoom: options.follow ? (String(options.follow.zoom) as FollowMouseSetting) : 'off',
     },
   };
 }
