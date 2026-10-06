@@ -289,6 +289,8 @@ test('a finished recording appears with a duration chip and a thumbnail, and the
   await recordFor(1800);
   // MP4 export is offered right on the result view (this build has H.264).
   await expect(page.getByTestId('mp4-export')).toBeVisible();
+  // A toast from the previous test stays open while the pointer rests on it (it covers this button).
+  await page.mouse.move(5, 5);
   await page.getByTestId('result-new').click();
   await expect(page.getByTestId('record-screen')).toBeVisible();
 

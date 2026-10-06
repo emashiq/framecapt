@@ -23,6 +23,8 @@ export interface TrayState {
   screenshotBusy: boolean;
   /** More than one display is connected ("All screens" is offered). */
   multiDisplay: boolean;
+  /** A step guide is being captured (the Steps item finishes it). */
+  stepsActive?: boolean;
 }
 
 export interface TrayHandlers {
@@ -142,6 +144,13 @@ export function buildTrayTemplate(
           click: () => handlers.run(action),
         };
       }),
+    },
+    {
+      id: 'steps',
+      label: state.stepsActive ? 'Finish step capture' : 'Capture steps',
+      enabled: state.stepsActive === true || (!recording && !preRecording && !state.screenshotBusy),
+      ...acceleratorOf(state.shortcuts, 'stepsToggle'),
+      click: () => handlers.run('stepsToggle'),
     },
     { type: 'separator' },
     { id: 'open', label: 'Open FrameCapt', click: handlers.open },

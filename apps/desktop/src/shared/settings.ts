@@ -74,6 +74,8 @@ export const ShortcutSettingsSchema = z.object({
   recordRegion: AcceleratorOrNull,
   stopRecording: AcceleratorOrNull,
   pauseRecording: AcceleratorOrNull,
+  stepsToggle: AcceleratorOrNull,
+  stepsCapture: AcceleratorOrNull,
 });
 
 /**
@@ -263,21 +265,24 @@ function keepUserEditorKeys(merged: Record<string, unknown>, given: unknown): vo
   }
 }
 
+/** Global shortcuts that did not exist when version 1 first shipped (add new ones here). */
+const GLOBAL_ACTIONS_ADDED_LATER: readonly ShortcutAction[] = [
+  'screenshotAllScreens',
+  'stepsToggle',
+];
+
 /**
- * "Screenshot: all screens" was added after version 1 shipped: a file without it gets its default
- * key, unless the user already uses that key for another action (then it starts with no key).
+ * A global action added after the file was written gets its default key, unless the user already
+ * uses that key for another action (then it starts with no key). An action without a default
+ * (Capture a step) simply stays unset.
  */
 function keepUserGlobalKeys(merged: Record<string, unknown>, given: unknown): void {
-  if (isRecord(given) && 'screenshotAllScreens' in given) return;
-  const key = DEFAULT_SHORTCUTS.screenshotAllScreens;
-  if (
-    actionUsing(
-      merged as Partial<Record<ShortcutAction, string | null>>,
-      key,
-      'screenshotAllScreens',
-    )
-  ) {
-    merged.screenshotAllScreens = null;
+  const had = isRecord(given) ? given : {};
+  const bindings = merged as Partial<Record<ShortcutAction, string | null>>;
+  for (const action of GLOBAL_ACTIONS_ADDED_LATER) {
+    if (action in had) continue;
+    const key = DEFAULT_SHORTCUTS[action];
+    if (key !== null && actionUsing(bindings, key, action)) merged[action] = null;
   }
 }
 

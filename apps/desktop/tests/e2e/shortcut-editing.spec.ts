@@ -83,7 +83,7 @@ const value = (action: string) => page.getByTestId(`shortcut-value-${action}`);
 test('a taken combination offers "Swap", and the swap saves both in one change', async () => {
   await openShortcuts();
   const before = await held();
-  expect(before).toHaveLength(9);
+  expect(before).toHaveLength(10);
 
   await page.getByTestId('shortcut-change-recordRegion').click();
   // Ctrl+Shift+3 is "Screenshot: region".

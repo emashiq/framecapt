@@ -17,8 +17,12 @@ export const SHORTCUT_ACTIONS = [
   'recordRegion',
   'stopRecording',
   'pauseRecording',
+  'stepsToggle',
+  'stepsCapture',
 ] as const;
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number];
+
+export type ShortcutsMap = Record<ShortcutAction, string | null>;
 
 export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   screenshotScreen: 'Screenshot: screen',
@@ -30,6 +34,8 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   recordRegion: 'Record: region',
   stopRecording: 'Stop recording',
   pauseRecording: 'Pause or resume recording',
+  stepsToggle: 'Start or finish step capture',
+  stepsCapture: 'Capture a step',
 };
 
 /**
@@ -38,7 +44,7 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
  * can be set to Ctrl+Shift+0..9. Registration conflicts are reported in Settings.
  * PrintScreen is deliberately not a default: the Windows Snipping Tool owns it by default.
  */
-export const DEFAULT_SHORTCUTS: Record<ShortcutAction, string> = {
+export const DEFAULT_SHORTCUTS: ShortcutsMap = {
   screenshotScreen: 'Ctrl+Shift+1',
   screenshotWindow: 'Ctrl+Shift+2',
   screenshotRegion: 'Ctrl+Shift+3',
@@ -48,9 +54,10 @@ export const DEFAULT_SHORTCUTS: Record<ShortcutAction, string> = {
   recordRegion: 'Ctrl+Shift+7',
   stopRecording: 'Ctrl+Shift+0',
   pauseRecording: 'Ctrl+Shift+9',
+  stepsToggle: 'Ctrl+Shift+8',
+  // No default: every comfortable combination is taken by another app. Set one in Settings.
+  stepsCapture: null,
 };
-
-export type ShortcutsMap = Record<ShortcutAction, string | null>;
 
 /**
  * Per action: 'ok' registered, 'conflict' another app (or action) holds it, 'invalid', 'disabled'.

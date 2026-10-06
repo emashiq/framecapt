@@ -35,6 +35,8 @@ export const HistoryItemSchema = z.object({
   derivedFrom: HistoryIdSchema.nullable(),
   /** The editable project (`<userData>/projects/<id>`) of a screenshot; absent for older items. */
   projectId: HistoryIdSchema.optional(),
+  /** Steps of a step guide (`flow`); absent for everything else. */
+  stepCount: z.number().int().min(0).optional(),
 });
 export type HistoryItem = z.infer<typeof HistoryItemSchema>;
 

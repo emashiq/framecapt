@@ -3,7 +3,8 @@ import { Camera, History, Keyboard, Settings, type LucideIcon } from 'lucide-rea
 import { cn } from '../lib/cn';
 import { TitleBar, type TitleBarProps } from './titlebar/TitleBar';
 
-export type ViewId = 'capture' | 'history' | 'settings';
+/** `flow` is a saved step guide: it has no tab of its own and keeps History highlighted. */
+export type ViewId = 'capture' | 'history' | 'settings' | 'flow';
 
 const NAV_ITEMS: { id: ViewId; label: string; icon: LucideIcon }[] = [
   { id: 'capture', label: 'Capture', icon: Camera },
@@ -69,7 +70,7 @@ export function AppShell({
         >
           <nav aria-label="Primary" className={cn('flex flex-col gap-1', editor && 'items-center')}>
             {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
-              const active = id === view;
+              const active = id === view || (view === 'flow' && id === 'history');
               return (
                 <button
                   key={id}

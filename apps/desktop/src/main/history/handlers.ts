@@ -99,6 +99,7 @@ export function registerHistoryHandlers(
 
   handle('history:open', { roles: ['main'] }, async (request) => {
     const item = requireItem(history, request.id);
+    // A step guide opens in FrameCapt's own Flow view (the window does that); the shell never gets it.
     if (!isOpenableMedia(item.path)) {
       throw new IpcError('INVALID_PAYLOAD', 'Only images and videos can be opened from here.');
     }
@@ -113,11 +114,13 @@ export function registerHistoryHandlers(
   handle('history:reveal', { roles: ['main'] }, async (request) => {
     const item = requireItem(history, request.id);
     await requireFile(item.path);
-    shell.showItemInFolder(item.path);
+    // A guide is a folder: it is shown as that folder.
+    shell.showItemInFolder(item.type === 'flow' ? path.dirname(item.path) : item.path);
   });
 
   handle('history:copyPath', { roles: ['main'] }, (request) => {
-    clipboard.writeText(requireItem(history, request.id).path);
+    const item = requireItem(history, request.id);
+    clipboard.writeText(item.type === 'flow' ? path.dirname(item.path) : item.path);
   });
 
   handle('history:copyImage', { roles: ['main'] }, async (request) => {
@@ -173,9 +176,11 @@ export function registerHistoryHandlers(
       defaultPath: path.dirname(item.path),
       properties: ['openFile'],
       filters: [
-        isImage
-          ? { name: 'Images', extensions: item.format === 'png' ? ['png'] : ['jpg', 'jpeg'] }
-          : { name: 'Video', extensions: [item.format] },
+        item.format === 'flow'
+          ? { name: 'Step guide', extensions: ['json'] }
+          : isImage
+            ? { name: 'Images', extensions: item.format === 'png' ? ['png'] : ['jpg', 'jpeg'] }
+            : { name: 'Video', extensions: [item.format] },
       ],
     };
     const main = getMainWindow();

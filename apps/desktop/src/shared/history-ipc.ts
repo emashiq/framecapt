@@ -4,13 +4,13 @@ import { z } from 'zod';
 export const HISTORY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const HistoryIdSchema = z.string().regex(HISTORY_ID_PATTERN);
 
-export const HistoryTypeSchema = z.enum(['screenshot', 'recording']);
+export const HistoryTypeSchema = z.enum(['screenshot', 'recording', 'flow']);
 export type HistoryType = z.infer<typeof HistoryTypeSchema>;
 
 export const HistorySourceSchema = z.enum(['screen', 'window', 'region', 'unknown']);
 export type HistorySource = z.infer<typeof HistorySourceSchema>;
 
-export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4'] as const;
+export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4', 'flow'] as const;
 export const HistoryFormatSchema = z.enum(HISTORY_FORMATS);
 export type HistoryFormat = z.infer<typeof HistoryFormatSchema>;
 
@@ -42,6 +42,8 @@ export const HistoryItemViewSchema = z.object({
   exists: z.boolean(),
   /** An editable project (the unredacted original and the annotations) is stored for this item. */
   editable: z.boolean(),
+  /** Steps of a step guide (type `flow`); absent for everything else. */
+  stepCount: z.number().int().min(0).optional(),
 });
 export type HistoryItemView = z.infer<typeof HistoryItemViewSchema>;
 
@@ -79,7 +81,7 @@ export const ExportMp4ResponseSchema = z.union([
 export const ExportCancelRequestSchema = z.strictObject({ jobId: z.string().min(1).max(64) });
 
 /** What the job is: the user's MP4 export (default) or the compressed-storage re-encode. */
-const ExportKindSchema = z.enum(['export', 'compress']).optional();
+const ExportKindSchema = z.enum(['export', 'compress', 'guide']).optional();
 
 export const ExportProgressEventSchema = z.object({
   kind: ExportKindSchema,

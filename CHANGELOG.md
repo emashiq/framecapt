@@ -4,6 +4,8 @@ All notable changes to FrameCapt are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+- **Step guides.** A new capture option, **Steps** (Capture view card, File menu, command center, tray, `Ctrl+Shift+8`; "Capture a step" has no default key): move the mouse to an item and pause, and FrameCapt takes a screenshot with the pointer highlighted. A small pill (Auto, Capture step, Pause, Done, Cancel) replaces the window while you work. Done saves a `FrameCapt Steps ...` folder (`step-NN.png`, `flow.json`) and a **Guide** in History, which opens in the **Flow view**: editable title and captions, reorder, delete with Undo, open a step in the editor, and export as numbered PNGs, a self-contained HTML page, an MP4 slideshow or a GIF. No global input hooks are used (ADR-041).
+
 - **Open pictures and image layers.** File > Open image (`Ctrl+O`, the Capture view, the command center), dropping a picture on the window or pasting one on the Capture view opens it in the editor (PNG, JPEG, WebP, GIF, BMP; nothing is saved until you save). Inside the editor, **Insert image** places a picture as a layer (from a file, from History, by paste or by dropping it on the canvas): move, resize (proportions kept, Shift frees them), corner radius, opacity, drop shadow, Reset size. Layers are flattened into the export and kept with the editable project (document schema 3; older projects open unchanged); redactions still cover everything.
 
 - CI now only builds Windows installer/ZIP and Linux .deb/AppImage artifacts. Automated test and smoke jobs are removed from CI; local validation commands remain available.

@@ -199,7 +199,7 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                   reason={missing ? MISSING : null}
                   onSelect={() => actions.saveCopy(item)}
                 />
-              ) : (
+              ) : item.type === 'screenshot' ? (
                 <Entry
                   testId="ctx-save-copy"
                   icon={<Save className={ICON} />}
@@ -207,7 +207,7 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                   reason={missing ? MISSING : null}
                   onSelect={() => props.onSaveCopies([item.id])}
                 />
-              )}
+              ) : null}
               {item.type === 'recording' && item.format === 'webm' ? (
                 <Entry
                   testId="ctx-mp4"

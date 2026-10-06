@@ -19,6 +19,13 @@ export interface ActionDeps {
     cancel: () => void;
   };
   screenshotBusy: () => boolean;
+  /** Step-guide capture (the Steps pill). */
+  steps: {
+    active: boolean;
+    start: () => Promise<void>;
+    done: () => Promise<unknown>;
+    captureStep: () => Promise<void>;
+  };
   startScreenshot: (request: StartScreenshotRequest) => Promise<void>;
   /** The editor holds a screenshot (and whether leaving it would lose work). */
   editor: () => { open: boolean; dirty: boolean };
@@ -58,13 +65,16 @@ function errorToast(error: unknown): ToastEvent {
  * recording is live: then screen and region screenshots are saved directly and a window one is
  * refused (its picker needs the main window, which must stay out of the video); a record
  * shortcut while recording stops it; pause toggles; window targets and an open editor go through
- * the main window, which needs a picker or the "discard this screenshot?" question.
+ * the main window, which needs a picker or the "discard this screenshot?" question. While a step
+ * guide is captured nothing else starts (the pointer and the screen belong to the guide); its own
+ * shortcut finishes it.
  */
 export function createActions(deps: ActionDeps): { run: (action: ShortcutAction) => void } {
   const busyToast = (): void =>
     deps.toast({ level: 'info', message: 'A capture is already in progress.' });
 
   function screenshot(request: StartScreenshotRequest): void {
+    if (deps.steps.active) return busyToast();
     const { status } = deps.recorder;
     const live = status === 'recording' || status === 'paused';
     if ((deps.recorder.busy && !live) || deps.screenshotBusy()) return busyToast();
@@ -83,6 +93,7 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
   }
 
   function record(target: RecorderStartRequest['target']): void {
+    if (deps.steps.active) return busyToast();
     const { status } = deps.recorder;
     if (status === 'recording' || status === 'paused') {
       deps.log.info('Record shortcut pressed while recording: stopping');
@@ -101,8 +112,25 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
       .catch((error: unknown) => deps.toast(errorToast(error)));
   }
 
+  function stepsToggle(): void {
+    if (deps.steps.active) {
+      void deps.steps.done().catch((error: unknown) => deps.toast(errorToast(error)));
+      return;
+    }
+    if (deps.recorder.busy || deps.screenshotBusy()) return busyToast();
+    void deps.steps.start().catch((error: unknown) => deps.toast(errorToast(error)));
+  }
+
   return {
     run(action) {
+      if (action === 'stepsToggle') return stepsToggle();
+      if (action === 'stepsCapture') {
+        if (!deps.steps.active) {
+          return deps.toast({ level: 'info', message: 'Start capturing steps first.' });
+        }
+        void deps.steps.captureStep().catch((error: unknown) => deps.toast(errorToast(error)));
+        return;
+      }
       if (action in SCREENSHOT_TARGETS) {
         return screenshot(SCREENSHOT_TARGETS[action as keyof typeof SCREENSHOT_TARGETS]);
       }

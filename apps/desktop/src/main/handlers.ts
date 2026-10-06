@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, nativeImage, session, shell } from 'electron';
+import { app, nativeImage, screen, session, shell } from 'electron';
 import { BulkExportService } from './history/bulk-export';
 import { CompressService, postSaveAction } from './history/compress-service';
 import { ExportService } from './history/export-service';
@@ -23,6 +23,14 @@ import { SessionService } from './recording/session-service';
 import { RecorderController } from './recorder/controller';
 import { registerRecorderHandlers } from './recorder/handlers';
 import { CaptureFlow } from './capture-flow';
+import { StepsController } from './flows/controller';
+import { pickExportFolder, pickGuideSave } from './flows/dialogs';
+import { FlowSessions } from './flows/flow-store';
+import { createDisplayGrabber } from './flows/grab';
+import { registerFlowHandlers } from './flows/handlers';
+import { createStepsPill } from './flows/pill';
+import { FlowService } from './flows/service';
+import { guideThumbnail } from './flows/thumbnail';
 import { isMockCaptureEnabled } from './capture';
 import { registerShotHandlers } from './shot-handlers';
 import { ProjectStore } from './projects/store';
@@ -34,7 +42,12 @@ import type { CaptureProvider } from './capture/types';
 import type { IpcEventPayload } from '../shared/ipc-contract';
 import { sendEvent } from './events';
 import type { UpdateService } from './updates';
-import { getOriginConfig, setMainCloseInterceptor, webContentsWithRoles } from './windows';
+import {
+  getOriginConfig,
+  setMainCloseInterceptor,
+  showMainWindow,
+  webContentsWithRoles,
+} from './windows';
 import { IpcError } from './ipc-core';
 import { handle } from './ipc';
 import { log } from './logger';
@@ -103,6 +116,7 @@ async function freeMp4Path(source: { path: string }): Promise<string> {
 export interface AppServices {
   flow: CaptureFlow;
   recorder: RecorderController;
+  steps: StepsController;
   exports: ExportService;
   history: HistoryService;
   sessions: SessionService;
@@ -220,6 +234,25 @@ export function registerHandlers(
       failed: (event) => emitToMain('export:failed', event),
     },
   });
+  const flowsDir = path.join(app.getPath('userData'), 'flows');
+  const flows = new FlowService({
+    history,
+    tools,
+    runner,
+    capability: () => mp4Capability,
+    screenshotsDir: () => settings.dirs().screenshotsDir,
+    scratchDir: flowsDir,
+    thumbnail: guideThumbnail,
+    trashItem: (file) => shell.trashItem(file),
+    pickFolder: () => pickExportFolder(settings.dirs().screenshotsDir),
+    pickSave: (options) => pickGuideSave(settings.dirs().screenshotsDir, options),
+    remember: rememberExported,
+    emit: {
+      progress: (event) => emitToMain('export:progress', event),
+      done: (event) => emitToMain('export:done', event),
+      failed: (event) => emitToMain('export:failed', event),
+    },
+  });
   const recovery = new RecoveryService({
     rootDir: recordingsDir,
     fs: nodeSessionFs,
@@ -230,7 +263,11 @@ export function registerHandlers(
     history,
   });
   const media = new MediaRegistry();
-  installMediaProtocol(media, history);
+  installMediaProtocol(media, {
+    thumbPathOf: (id) => history.thumbPathOf(id),
+    filePathOf: (id) => history.filePathOf(id),
+    flowStepPathOf: (id, index) => flows.stepPathOf(id, index),
+  });
   const captureSaving = {
     settings: () => settings.store.get(),
     screenshotsDir: () => settings.dirs().screenshotsDir,
@@ -243,7 +280,7 @@ export function registerHandlers(
     sessions,
     media,
     synthetic,
-    isScreenshotBusy: () => flow.state.active,
+    isScreenshotBusy: () => flow.state.active || steps.active,
     outputDir,
     tools,
     history,
@@ -278,7 +315,8 @@ export function registerHandlers(
     store,
     synthetic,
     // A screenshot may start while a recording runs (saved directly), not while one is set up or saved.
-    isBlocked: () => recorder.busy && !recorder.isLive,
+    // Nor while a step guide is captured: the pointer and the screen belong to it.
+    isBlocked: () => (recorder.busy && !recorder.isLive) || steps.active,
     isRecording: () => recorder.isLive,
     saveDirect,
     toast: (event) => recorder.toastToolbar(event),
@@ -288,6 +326,36 @@ export function registerHandlers(
   recorder.onChange(() => {
     if (flow.duringRecording && !recorder.isLive) flow.cancel();
   });
+  const steps: StepsController = new StepsController({
+    now: () => Date.now(),
+    monotonic: () => performance.now(),
+    cursor: () => screen.getCursorScreenPoint(),
+    displays: () => provider.listDisplays(),
+    grab: createDisplayGrabber(provider, synthetic),
+    sessions: new FlowSessions(flowsDir),
+    save: async (input) => {
+      const saved = await flows.saveSession(input);
+      // The guide opens in the main window (a window that was hidden in the tray comes back).
+      showMainWindow();
+      for (const contents of webContentsWithRoles(['main'])) {
+        sendEvent(contents, 'steps:finished', { historyId: saved.historyId });
+      }
+      return saved;
+    },
+    isBlocked: () => recorder.busy || flow.state.active,
+    isOverPill: (point) => pill.isOver(point),
+    ui: { open: () => pill.open(), close: () => pill.close() },
+    log,
+  });
+  const pill = createStepsPill(() => {
+    void steps.done().catch((error: unknown) => log.warn(`Steps pill closed: ${String(error)}`));
+  });
+  steps.onChange((snapshot) => {
+    for (const contents of webContentsWithRoles(['main', 'toolbar'])) {
+      sendEvent(contents, 'steps:state', snapshot);
+    }
+  });
+  registerFlowHandlers(steps, flows);
   registerWorkerHandlers();
   registerShotHandlers(
     flow,
@@ -299,6 +367,7 @@ export function registerHandlers(
       screenshotsDir: () => settings.dirs().screenshotsDir,
     },
     { store: projects, appVersion: app.getVersion() },
+    flows,
   );
   const bulk = new BulkExportService({
     history,
@@ -312,18 +381,29 @@ export function registerHandlers(
       dirs: [settings.dirs().screenshotsDir, settings.dirs().recordingsDir],
       history,
       tools,
+      flowThumbnail: (dir, parsed) => flows.thumbnailOf(dir, parsed),
       thumbnail: async (file, width) => {
         const image = nativeImage.createFromPath(file);
         return image.isEmpty() ? undefined : image.resize({ width }).toPNG();
       },
     });
   registerHistoryHandlers(history, exports, bulk, () => mp4Capability, outputDir, rescan);
-  registerRecorderHandlers(recorder, sessions, media);
+  registerRecorderHandlers(recorder, sessions, media, (width) => pill.resize(width));
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.
-  setMainCloseInterceptor(() => recorder.isRecording && !recorder.isQuitting);
+  setMainCloseInterceptor(() => (recorder.isRecording && !recorder.isQuitting) || steps.active);
   app.on('before-quit', (event) => recorder.handleBeforeQuit(event, () => app.quit()));
-  app.on('will-quit', () => void sessions.closeAll());
+  app.on('will-quit', () => {
+    void sessions.closeAll();
+    void steps.dispose();
+  });
+  // Quitting while a guide is being captured saves what was captured (an empty one is dropped).
+  app.on('before-quit', (event) => {
+    if (!steps.active) return;
+    event.preventDefault();
+    const quit = (): void => app.quit();
+    void steps.done().then(quit, quit);
+  });
   // An export in progress is cancelled (its partial file removed) before the app exits.
   app.on('before-quit', (event) => {
     if (!exports.active) return;
@@ -362,6 +442,9 @@ export function registerHandlers(
       }
     });
   // Originals of abandoned sessions are removed after a week (a `keep` marker exempts one).
+  void new FlowSessions(flowsDir).sweep(SWEEP_MAX_AGE_MS).then((removed) => {
+    if (removed > 0) log.info(`Step sweep: removed ${removed} abandoned capture folders`);
+  });
   void store.sweep(SWEEP_MAX_AGE_MS).then((result) => {
     log.info(
       `Shot sweep: scanned ${result.scanned}, removed ${result.removed}, kept ${result.kept}`,
@@ -370,10 +453,11 @@ export function registerHandlers(
   return {
     flow,
     recorder,
+    steps,
     exports,
     history,
     sessions,
     store,
-    isBusy: () => recorder.busy || flow.state.active || exports.active,
+    isBusy: () => recorder.busy || flow.state.active || exports.active || steps.active,
   };
 }

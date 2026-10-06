@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createdAtFromFlowFolder, FLOW_FILE_NAME, type FlowFile } from '../../shared/flow';
 import { MAX_THUMBNAIL_WIDTH } from '../../shared/history-ipc';
 import { createdAtFromName } from '../../shared/capture-names';
 import { detectImageFormat, MAX_EXPORT_BYTES, readImageSize } from '../../shared/shots';
+import { flowBytes, readFlowFile } from '../flows/flow-store';
 import { log } from '../logger';
 import type { MediaTools } from '../media/ffmpeg';
 import { samePath } from './files';
@@ -22,10 +24,15 @@ const HEADER_BYTES = 64 * 1024;
 export interface RescanDeps {
   /** Folders to look in (non-recursive); the screenshot and recording output folders. */
   dirs: readonly string[];
-  history: Pick<HistoryService, 'ready' | 'size' | 'findByPath' | 'addScreenshot' | 'addVideo'>;
+  history: Pick<
+    HistoryService,
+    'ready' | 'size' | 'findByPath' | 'addScreenshot' | 'addVideo' | 'addFlow'
+  >;
   tools: MediaTools;
   /** PNG of the image, `width` px wide; undefined when it cannot be decoded. */
   thumbnail: (file: string, width: number) => Promise<Uint8Array | undefined>;
+  /** PNG thumbnail of a guide (its first step with the pointer ring); undefined when it cannot be made. */
+  flowThumbnail?: (dir: string, flow: FlowFile) => Promise<Uint8Array | undefined>;
   maxItems?: number;
 }
 
@@ -45,6 +52,18 @@ async function findCandidates(deps: RescanDeps): Promise<Candidate[]> {
   for (const dir of folders) {
     const entries = await fs.promises.readdir(dir, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
+      // One level deep, and only for the folders the app names itself: a guide is its flow.json.
+      if (entry.isDirectory() && !entry.isSymbolicLink()) {
+        const folderTime = createdAtFromFlowFolder(entry.name);
+        const flowFile = path.join(dir, entry.name, FLOW_FILE_NAME);
+        if (folderTime !== null && !deps.history.findByPath(flowFile)) {
+          const stat = await fs.promises.stat(flowFile).catch(() => null);
+          if (stat?.isFile()) {
+            found.push({ file: flowFile, extension: '.json', createdAt: folderTime, sizeBytes: 0 });
+          }
+        }
+        continue;
+      }
       const extension = path.extname(entry.name).toLowerCase();
       const known = IMAGE_EXTENSIONS.has(extension) || VIDEO_EXTENSIONS.has(extension);
       if (!entry.isFile() || !known) continue;
@@ -85,6 +104,24 @@ async function addImage(deps: RescanDeps, candidate: Candidate): Promise<boolean
     sizeBytes: candidate.sizeBytes,
     format,
     source: 'unknown',
+    thumbnail,
+    createdAt: candidate.createdAt,
+  });
+  return true;
+}
+
+async function addFlowFolder(deps: RescanDeps, candidate: Candidate): Promise<boolean> {
+  const flow = await readFlowFile(candidate.file);
+  const first = flow?.steps[0];
+  if (!flow || !first) return false;
+  const dir = path.dirname(candidate.file);
+  const thumbnail = await deps.flowThumbnail?.(dir, flow).catch(() => undefined);
+  await deps.history.addFlow({
+    path: candidate.file,
+    width: first.width,
+    height: first.height,
+    sizeBytes: await flowBytes(dir, flow),
+    stepCount: flow.steps.length,
     thumbnail,
     createdAt: candidate.createdAt,
   });
@@ -136,9 +173,12 @@ export async function rescanLibrary(deps: RescanDeps): Promise<number> {
   // One at a time: each probe is an ffprobe process and each add rewrites history.json.
   for (const candidate of ordered) {
     try {
-      const done = IMAGE_EXTENSIONS.has(candidate.extension)
-        ? await addImage(deps, candidate)
-        : await addVideoFile(deps, candidate);
+      const done =
+        candidate.extension === '.json'
+          ? await addFlowFolder(deps, candidate)
+          : IMAGE_EXTENSIONS.has(candidate.extension)
+            ? await addImage(deps, candidate)
+            : await addVideoFile(deps, candidate);
       if (done) added += 1;
     } catch (error) {
       log.warn(`Rescan skipped a file (${(error as Error).message})`);

@@ -85,7 +85,7 @@ function fakeGlobalShortcut(): GlobalShortcutApi & { held: Set<string> } {
  */
 export function setupDesktop(settings: AppSettings, services: AppServices): Desktop {
   const { store } = settings;
-  const { recorder, flow } = services;
+  const { recorder, flow, steps } = services;
   const toMain = <E extends Parameters<typeof sendEvent>[1]>(
     event: E,
     payload: Parameters<typeof sendEvent<E>>[2],
@@ -109,6 +109,14 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
       cancel: () => recorder.cancel(),
     },
     screenshotBusy: () => flow.state.active,
+    steps: {
+      get active() {
+        return steps.active;
+      },
+      start: () => steps.start(),
+      done: () => steps.done(),
+      captureStep: () => steps.captureStep(),
+    },
     startScreenshot: (request) => flow.start(request),
     editor: getEditorState,
     askMain: (request) => {
@@ -194,7 +202,8 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
       status: snapshot.status,
       activeMs: active,
       shortcuts: shortcuts.status(),
-      screenshotBusy: flow.state.active,
+      screenshotBusy: flow.state.active || steps.active,
+      stepsActive: steps.active,
       multiDisplay: screen.getAllDisplays().length > 1,
     };
   };
@@ -213,6 +222,7 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
   tray.ensure();
   refreshTray();
   recorder.onChange(refreshTray);
+  steps.onChange(refreshTray);
   // "All screens" in the menu follows the connected displays.
   screen.on('display-added', refreshTray);
   screen.on('display-removed', refreshTray);
@@ -275,6 +285,7 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
         return flat(buildTrayTemplate(trayState(), tray.handlersForTest));
       },
       trayTooltip: () => trayTooltip(trayState()),
+      stepsState: () => steps.snapshot(),
       ipcTotal: () => ipcCallCount(),
       ipcCount: (channel: string) => ipcCallCount(channel),
     };

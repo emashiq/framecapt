@@ -76,6 +76,9 @@ export class BulkExportService {
   private async copyOne(id: string, folder: string): Promise<BulkItemResult> {
     const item = this.deps.history.get(id);
     if (!item) return { id, status: 'failed', message: 'Not in history.' };
+    if (item.type === 'flow') {
+      return { id, status: 'skipped', message: 'Export a guide from its own page.' };
+    }
     const present = await fs.promises.stat(item.path).then(
       (stat) => stat.isFile(),
       () => false,

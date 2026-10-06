@@ -47,6 +47,7 @@ const FILTERS = [
   { value: 'all', label: 'All' },
   { value: 'screenshot', label: 'Screenshots' },
   { value: 'recording', label: 'Recordings' },
+  { value: 'flow', label: 'Guides' },
 ] as const;
 
 export interface HistoryViewProps {
@@ -55,6 +56,8 @@ export interface HistoryViewProps {
   onFocusConsumed?: () => void;
   /** Opens a screenshot of history in the editor again. */
   onEditItem?: (id: string) => void;
+  /** Opens a step guide in the Flow view. */
+  onOpenFlow?: (id: string) => void;
 }
 
 /**
@@ -63,7 +66,12 @@ export interface HistoryViewProps {
  * files stay listed in a calm "File moved or deleted" state until the user re-links or removes
  * them. Removing an entry never touches its file; deleting a file is a separate confirmed action.
  */
-export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: HistoryViewProps) {
+export function HistoryView({
+  focusId = null,
+  onFocusConsumed,
+  onEditItem,
+  onOpenFlow,
+}: HistoryViewProps) {
   const [filter, setFilter] = useState<Filter>('all');
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
@@ -92,7 +100,7 @@ export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: His
         },
   );
   const { items, total, loaded, failed, reload } = list;
-  const actions = useMemo(() => createItemActions(reload), [reload]);
+  const actions = useMemo(() => createItemActions(reload, onOpenFlow), [reload, onOpenFlow]);
   const order = useMemo(() => items.map((item) => item.id), [items]);
   // Cards that are no longer listed (removed, filtered out) leave the selection, so a bulk action
   // can only ever touch what the grid shows.

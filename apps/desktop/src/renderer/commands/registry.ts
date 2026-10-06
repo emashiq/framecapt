@@ -48,6 +48,8 @@ export type Target = 'screen' | 'window' | 'region';
 export interface CommandActions {
   /** Same as the Screenshot and Record buttons of the Capture view (and the tray). */
   startCapture: (kind: 'screenshot' | 'record', target: Target, allScreens?: boolean) => void;
+  /** Same as the Steps card of the Capture view: starts capturing a step guide. */
+  startSteps: () => void;
   stopRecording: () => void;
   togglePause: () => void;
   navigate: (view: 'capture' | 'history' | 'settings', section?: SettingsSectionId) => void;
@@ -132,6 +134,16 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.startCapture('record', target),
     });
   }
+  add({
+    id: 'steps.start',
+    title: 'Capture a step guide',
+    menuLabel: 'New step guide',
+    group: 'Capture',
+    keywords: ['steps', 'flow', 'guide', 'tutorial', 'how to', 'walkthrough', 'instructions'],
+    hint: { kind: 'global', action: 'stepsToggle' },
+    disabledReason: captureBlockedReason(env),
+    run: actions.startSteps,
+  });
   add({
     id: 'file.openImage',
     title: 'Open image…',
@@ -333,6 +345,8 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
       'rec.region',
       'rec.window',
       'rec.screen',
+      null,
+      'steps.start',
       null,
       'nav.history',
       'nav.settings',

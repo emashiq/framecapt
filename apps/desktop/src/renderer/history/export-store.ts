@@ -53,26 +53,40 @@ export function listenToExports(): () => void {
     }),
     window.framecapt.on('export:done', (event) => {
       const compressed = event.kind === 'compress';
+      const guide = event.kind === 'guide';
       // A compressed recording replaces its WebM in the list: no "MP4 saved" card for it.
       set(
         event.historyId,
         compressed ? null : { status: 'done', path: event.path, itemId: event.itemId },
       );
-      notify.success(compressed ? 'Recording compressed' : 'MP4 saved', {
-        action: event.itemId
-          ? {
-              label: 'Show in folder',
-              onClick: () => void window.framecapt.invoke('history:reveal', { id: event.itemId! }),
-            }
-          : undefined,
-      });
+      notify.success(
+        compressed ? 'Recording compressed' : guide ? 'Guide video saved' : 'MP4 saved',
+        {
+          action: event.itemId
+            ? {
+                label: 'Show in folder',
+                onClick: () =>
+                  void window.framecapt.invoke('history:reveal', { id: event.itemId! }),
+              }
+            : guide
+              ? {
+                  label: 'Show in folder',
+                  onClick: () =>
+                    void window.framecapt.invoke('shell:showItemInFolder', { path: event.path }),
+                }
+              : undefined,
+        },
+      );
     }),
     window.framecapt.on('export:failed', (event) => {
       const compressing = event.kind === 'compress';
+      const guide = event.kind === 'guide';
       if (event.cancelled) {
         set(event.historyId, null);
         notify.info(
-          `${compressing ? 'Compression' : 'Export'} cancelled. Your recording was not changed.`,
+          guide
+            ? 'Export cancelled. Your guide was not changed.'
+            : `${compressing ? 'Compression' : 'Export'} cancelled. Your recording was not changed.`,
         );
         return;
       }
@@ -80,7 +94,9 @@ export function listenToExports(): () => void {
       notify.error(
         compressing
           ? `Compression failed. ${event.message} Your recording was kept as WebM.`
-          : `MP4 export failed. ${event.message}`,
+          : guide
+            ? `The guide could not be exported. ${event.message}`
+            : `MP4 export failed. ${event.message}`,
       );
     }),
   ];

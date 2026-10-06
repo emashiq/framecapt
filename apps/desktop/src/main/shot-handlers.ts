@@ -16,6 +16,7 @@ import {
   type ImageFormat,
 } from '../shared/shots';
 import type { CaptureFlow } from './capture-flow';
+import type { FlowService } from './flows/service';
 import type { HistoryService } from './history/service';
 import { validThumbnail } from './history/service';
 import type { RecorderController } from './recorder/controller';
@@ -123,6 +124,7 @@ export function registerShotHandlers(
   history: Pick<HistoryService, 'addScreenshot' | 'get' | 'overwriteScreenshot'>,
   settings: { get(): Settings; screenshotsDir(): string },
   projects?: { store: ProjectStore; appVersion: string },
+  flows?: Pick<FlowService, 'readStep' | 'replaceStep'>,
 ): void {
   /** A screenshot session of this run. */
   const sessionOf = (id: string) => store.get(id);
@@ -131,6 +133,8 @@ export function registerShotHandlers(
    * never sent by the renderer.
    */
   const links = new Map<string, string>();
+  /** Editor sessions opened on one step of a step guide: session id -> the guide and the step. Main-owned. */
+  const stepLinks = new Map<string, { historyId: string; index: number }>();
   /** The overlays belong to the recorder (record-region, pick a screen) or to the screenshot flow. */
   const host = (): SelectionHost => (recorder.selecting ? recorder : flow);
   /** The session the editor has open. Its original is deleted when the app window closes. */
@@ -139,6 +143,7 @@ export function registerShotHandlers(
     if (editorSessionId) store.discardSync(editorSessionId);
     editorSessionId = undefined;
     links.clear();
+    stepLinks.clear();
   });
 
   handle('capture:startScreenshot', { roles: ['main'] }, async (request) => {
@@ -316,6 +321,32 @@ export function registerShotHandlers(
     };
   });
 
+  // One step of a step guide in the editor: Save writes the edited picture over that step's image.
+  handle('flow:openStepInEditor', { roles: ['main'] }, async (request) => {
+    if (!flows) throw new IpcError('INTERNAL', 'Step guides are not available.');
+    const step = await flows.readStep(request.historyId, request.index);
+    const session = await store.create({
+      kind: 'screen',
+      width: step.width,
+      height: step.height,
+      png: step.png,
+    });
+    stepLinks.set(session.id, { historyId: request.historyId, index: request.index });
+    editorSessionId = session.id;
+    return {
+      session: store.meta(session),
+      png: toArrayBuffer(step.png),
+      edit: {
+        historyId: request.historyId,
+        format: 'png' as const,
+        mode: 'flattened' as const,
+        doc: null,
+        notice: null,
+        assets: [],
+      },
+    };
+  });
+
   handle('shot:openImage', { roles: ['main'] }, () => pickImage('Open image'));
   handle('editor:pickImage', { roles: ['main'] }, () => pickImage('Insert image'));
 
@@ -348,6 +379,19 @@ export function registerShotHandlers(
 
   handle('shot:saveOver', { roles: ['main'] }, async (request) => {
     const session = sessionOf(request.sessionId);
+    const stepLink = stepLinks.get(request.sessionId);
+    if (session && stepLink && flows) {
+      if (request.format !== 'png') {
+        throw new IpcError('INVALID_PAYLOAD', 'A step of a guide is saved as PNG.');
+      }
+      const saved = await flows.replaceStep(
+        stepLink.historyId,
+        stepLink.index,
+        new Uint8Array(request.bytes),
+      );
+      rememberExported(saved.path);
+      return { historyId: stepLink.historyId, path: saved.path, editable: false };
+    }
     const sourceId = links.get(request.sessionId);
     if (!session || !sourceId) {
       throw new IpcError('NOT_FOUND', 'That screenshot is no longer available.');
@@ -419,6 +463,7 @@ export function registerShotHandlers(
   handle('shot:discard', { roles: ['main'] }, async (request) => {
     if (editorSessionId === request.sessionId) editorSessionId = undefined;
     links.delete(request.sessionId);
+    stepLinks.delete(request.sessionId);
     await store.discard(request.sessionId);
   });
 
