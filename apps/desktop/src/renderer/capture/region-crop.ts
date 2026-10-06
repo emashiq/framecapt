@@ -1,6 +1,7 @@
 import type { Size } from '../../shared/geometry';
-import { checkPixelRect, type Rect } from '../../shared/rect';
+import type { Rect } from '../../shared/rect';
 import { fitWithin } from '../../shared/recording';
+import { createCompositor, sourceTrack } from './compositor';
 import { CaptureError } from './errors';
 import { registerLoop, registerTrack } from './resource-registry';
 
@@ -21,19 +22,6 @@ export interface CroppedStream {
   stats(): CropStats;
   /** Stops loops, readers, the helper video element and the output tracks. Idempotent. */
   dispose(): void;
-}
-
-function sourceTrack(displayStream: MediaStream): MediaStreamTrack {
-  const track = displayStream.getVideoTracks()[0];
-  if (!track || track.readyState !== 'live') {
-    throw new CaptureError('source-gone', 'The display stream has no live video track.');
-  }
-  return track;
-}
-
-function assertInside(rect: Rect, width: number, height: number): void {
-  const check = checkPixelRect(rect, { width, height });
-  if (!check.ok) throw new CaptureError('unknown', `Invalid region: ${check.reason}`);
 }
 
 /**
@@ -70,133 +58,30 @@ export interface CanvasTransformOptions {
  * region of it) into a canvas, scaled to fit `limit`, and exposes the canvas as a video stream. The
  * output size is fixed when the first frame arrives.
  */
-export async function createCanvasTransform(
+export function createCanvasTransform(
   displayStream: MediaStream,
   options: CanvasTransformOptions,
   fps: number,
   driver: CanvasDriver = 'rvfc',
 ): Promise<CroppedStream> {
   const { rect } = options;
-  const track = sourceTrack(displayStream);
-  const video = document.createElement('video');
-  video.muted = true;
-  video.playsInline = true;
-  // A separate MediaStream object sharing the same track: removing it never stops the track.
-  video.srcObject = new MediaStream([track]);
-
-  const unregisterLoops: (() => void)[] = [];
-  let disposed = false;
-  let output: MediaStream | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let keepAlive: ReturnType<typeof setTimeout> | undefined;
-  let frameCallback: number | undefined;
-
-  const dispose = (): void => {
-    if (disposed) return;
-    disposed = true;
-    if (timer !== undefined) clearTimeout(timer);
-    if (keepAlive !== undefined) clearTimeout(keepAlive);
-    if (frameCallback !== undefined) video.cancelVideoFrameCallback(frameCallback);
-    video.pause();
-    video.srcObject = null;
-    output?.getTracks().forEach((outTrack) => outTrack.stop());
-    unregisterLoops.forEach((unregister) => unregister());
-    unregisterLoops.length = 0;
-  };
-
-  try {
-    await video.play();
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(
-        () => reject(new Error('Timed out waiting for a video frame')),
-        5000,
-      );
-      video.requestVideoFrameCallback(() => {
-        clearTimeout(timeout);
-        resolve();
-      });
-    });
-    if (rect) assertInside(rect, video.videoWidth, video.videoHeight);
-    const sourceSize: Size = rect ?? { width: video.videoWidth, height: video.videoHeight };
-    const outSize: Size =
-      options.limit === undefined
+  return createCompositor({
+    tiles: [
+      {
+        stream: displayStream,
+        src: rect ? () => rect : undefined,
+        dst: (out) => ({ x: 0, y: 0, width: out.width, height: out.height }),
+      },
+    ],
+    outSize: ([frame]) => {
+      const sourceSize: Size = rect ?? (frame as Size);
+      return options.limit === undefined
         ? { width: sourceSize.width, height: sourceSize.height }
         : fitWithin(sourceSize, options.limit);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = outSize.width;
-    canvas.height = outSize.height;
-    const context = canvas.getContext('2d', { alpha: false });
-    if (!context) throw new CaptureError('unknown', 'Could not create a 2D canvas context.');
-
-    const interval = 1000 / fps;
-    let framesOut = 0;
-    let lastDraw = -Infinity;
-    context.imageSmoothingQuality = 'medium';
-    const draw = (): void => {
-      // No object is made per frame: the whole frame is read from the element when there is no crop.
-      context.drawImage(
-        video,
-        rect ? rect.x : 0,
-        rect ? rect.y : 0,
-        rect ? rect.width : video.videoWidth,
-        rect ? rect.height : video.videoHeight,
-        0,
-        0,
-        outSize.width,
-        outSize.height,
-      );
-      framesOut += 1;
-      lastDraw = performance.now();
-      if (driver === 'rvfc') scheduleKeepAlive();
-    };
-    // Keep-alive: if no source frame arrives within one interval of the last draw, redraw the
-    // latest frame. Every draw re-arms it, so the output never has a gap longer than one interval.
-    const scheduleKeepAlive = (): void => {
-      if (keepAlive !== undefined) clearTimeout(keepAlive);
-      keepAlive = setTimeout(
-        () => {
-          if (!disposed) draw();
-        },
-        Math.max(0, lastDraw + interval - performance.now()),
-      );
-    };
-
-    output = canvas.captureStream(fps);
-    output.getTracks().forEach(registerTrack);
-
-    if (driver === 'rvfc') {
-      unregisterLoops.push(registerLoop('crop-rvfc'), registerLoop('crop-keepalive'));
-      const onFrame = (): void => {
-        if (disposed) return;
-        if (performance.now() - lastDraw >= interval * 0.9) draw();
-        frameCallback = video.requestVideoFrameCallback(onFrame);
-      };
-      frameCallback = video.requestVideoFrameCallback(onFrame);
-      scheduleKeepAlive();
-    } else {
-      unregisterLoops.push(registerLoop('crop-timer'));
-      const start = performance.now();
-      let tick = 0;
-      const step = (): void => {
-        if (disposed) return;
-        draw();
-        tick += 1;
-        timer = setTimeout(step, Math.max(0, start + tick * interval - performance.now()));
-      };
-      step();
-    }
-
-    return {
-      stream: output,
-      method: 'canvas',
-      stats: () => ({ framesOut, outWidth: outSize.width, outHeight: outSize.height }),
-      dispose,
-    };
-  } catch (error) {
-    dispose();
-    throw error;
-  }
+    },
+    fps,
+    driver,
+  });
 }
 
 /**

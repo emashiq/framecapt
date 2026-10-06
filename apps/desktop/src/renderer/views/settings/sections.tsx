@@ -282,6 +282,12 @@ const QUALITY = [
   { value: '1080p', label: '1080p' },
   { value: 'source', label: 'Source' },
 ] as const;
+const FOLLOW = [
+  { value: 'off', label: 'Off' },
+  { value: '1.5', label: '1.5×' },
+  { value: '2', label: '2×' },
+  { value: '3', label: '3×' },
+] as const;
 const FPS = [
   { value: 30, label: '30' },
   { value: 60, label: '60' },
@@ -326,6 +332,20 @@ export function RecordingSection({ onReset }: SectionProps) {
             value={recording.fps}
             options={FPS}
             onChange={(fps) => void updateSettings({ recording: { fps } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Follow mouse"
+        description="Zoom in and pan smoothly to the mouse, so what you point at stays in view. Screen recordings only."
+      >
+        {() => (
+          <Segmented
+            label="Follow mouse"
+            data-testid="setting-follow"
+            value={recording.followMouseZoom}
+            options={FOLLOW}
+            onChange={(followMouseZoom) => void updateSettings({ recording: { followMouseZoom } })}
           />
         )}
       </SettingRow>

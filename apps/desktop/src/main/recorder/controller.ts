@@ -4,6 +4,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { globalShortcut, screen, type BrowserWindow } from 'electron';
 import {
   framePixelsToDip,
+  globalDipToDisplayLocal,
   overlayRectToFramePixels,
   type DisplayGeom,
 } from '../../shared/geometry';
@@ -63,6 +64,8 @@ const COUNTDOWN_FROM = 3;
 const PREPARE_TIMEOUT_MS = 20_000;
 const START_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_MS = 20_000;
+/** How often the mouse is sampled for a follow-mouse recording. */
+const CURSOR_INTERVAL_MS = 1000 / 30;
 /** On app quit the recording gets this long to finish before its session is left for recovery. */
 export const QUIT_FINALIZE_CAP_MS = 15_000;
 
@@ -165,6 +168,9 @@ export class RecorderController implements SelectionHost {
   private removeDisplayListeners: (() => void) | undefined;
   private watchedWorker: BrowserWindow | undefined;
   private levelsOn = false;
+  /** Follow-mouse recordings: samples the mouse for the engine. */
+  private cursorTimer: ReturnType<typeof setInterval> | undefined;
+  private lastCursor: { nx: number; ny: number } | undefined;
   /** The main window was on screen when this recording was requested (a shortcut may start it from the tray). */
   private mainWasShown = true;
   private readonly changeListeners = new Set<() => void>();
@@ -326,6 +332,8 @@ export class RecorderController implements SelectionHost {
       result: null,
       sessionCreated: false,
     };
+    // Only a whole screen follows the mouse.
+    if (request.target !== 'screen') delete this.ctx.options.follow;
     this.dispatch({ type: 'START_REQUESTED', sessionId });
     const token = this.token;
     void this.runStart(token, request).catch((error: unknown) => this.failStart(token, error));
@@ -494,6 +502,7 @@ export class RecorderController implements SelectionHost {
     }
 
     this.dispatch({ type: 'PREFLIGHT_OK' });
+    this.pumpCursor(ctx); // the follow window starts where the mouse is, not mid-screen
     this.ensureToolbar(ctx);
     await this.hideMain();
     this.guard(token);
@@ -544,6 +553,7 @@ export class RecorderController implements SelectionHost {
       audio: ctx.audio,
     });
     this.token += 1; // start-up is over: late start-up work can no longer act
+    this.startCursorFollow(ctx);
     this.showToolbar();
     log.info(
       `Recording started: ${ctx.target}, ${ctx.width}x${ctx.height}, ` +
@@ -817,6 +827,34 @@ export class RecorderController implements SelectionHost {
     this.send({ cmd: 'levels', enabled });
   }
 
+  // --- follow mouse ------------------------------------------------------------------------
+
+  /** Follow-mouse recordings: the mouse goes to the engine ~30 times a second, only when it moved. */
+  private startCursorFollow(ctx: SessionContext): void {
+    if (!ctx.options.follow || !ctx.display || this.cursorTimer !== undefined) return;
+    this.cursorTimer = setInterval(() => this.pumpCursor(ctx), CURSOR_INTERVAL_MS);
+  }
+
+  private stopCursorFollow(): void {
+    if (this.cursorTimer !== undefined) clearInterval(this.cursorTimer);
+    this.cursorTimer = undefined;
+    this.lastCursor = undefined;
+  }
+
+  /** Sends the mouse position on the recorded display; on another display the last one stays. */
+  private pumpCursor(ctx: SessionContext): void {
+    const { display } = ctx;
+    if (!ctx.options.follow || !display) return;
+    const local = globalDipToDisplayLocal(screen.getCursorScreenPoint(), toGeom(display));
+    const { width, height } = display.bounds;
+    if (local.x < 0 || local.y < 0 || local.x >= width || local.y >= height) return;
+    const nx = local.x / width;
+    const ny = local.y / height;
+    if (this.lastCursor?.nx === nx && this.lastCursor.ny === ny) return;
+    this.lastCursor = { nx, ny };
+    this.send({ cmd: 'cursor', nx, ny });
+  }
+
   // --- stopping ----------------------------------------------------------------------------
 
   /** Engine flush -> session finish -> remux and publish. Runs once per recording. */
@@ -922,6 +960,7 @@ export class RecorderController implements SelectionHost {
       this.dispatch({ type: 'FAILED', code, message });
     } finally {
       this.finalizeAbort = undefined;
+      this.stopCursorFollow();
       this.send({ cmd: 'abort' });
       this.closeToolbar();
       this.restoreMain();
@@ -1081,6 +1120,7 @@ export class RecorderController implements SelectionHost {
   /** Stops whatever start-up is waiting for. */
   private endStartup(reason: Error): void {
     this.token += 1;
+    this.stopCursorFollow();
     this.selectionWaiter?.reject(reason);
     this.selectionWaiter = undefined;
     const choice = this.choiceWaiter;
@@ -1099,6 +1139,7 @@ export class RecorderController implements SelectionHost {
   /** Releases the engine and the session of a recording that never started. */
   private afterStartupEnded(): void {
     const ctx = this.ctx;
+    this.stopCursorFollow();
     this.send({ cmd: 'abort' });
     this.closeToolbar();
     if (ctx?.sessionCreated) void this.deps.sessions.abort(ctx.sessionId);
