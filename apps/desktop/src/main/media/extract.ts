@@ -141,6 +141,6 @@ export function extractFromFcap(request: ExtractRequest): Promise<FileJobResult>
       verifyExtract(output, source, { format: spec.format, ...size, durationSec }),
     noun: 'extract',
     sourceFormat: spec.input.format,
-    progressDurationSec: durationSec,
+    outputDurationSec: durationSec,
   });
 }

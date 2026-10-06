@@ -56,6 +56,8 @@ export interface CommandActions {
   togglePause: () => void;
   navigate: (view: 'capture' | 'history' | 'settings', section?: SettingsSectionId) => void;
   showKeyboardHelp: () => void;
+  /** Opens the latest recording in the video editor (or says there is none). */
+  editVideo: () => void;
   /** Same as the Open image button of the Capture view (a picture file opens in the editor). */
   openImage: () => void;
   toggleTheme: () => void;
@@ -184,6 +186,15 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: actions.togglePause,
     });
   }
+
+  add({
+    id: 'video.edit',
+    title: 'Edit the latest recording',
+    menuLabel: 'Edit latest recording',
+    group: 'Capture',
+    keywords: ['video', 'editor', 'trim', 'cut', 'crop', 'blur', 'redact', 'mask', 'gif', 'export'],
+    run: actions.editVideo,
+  });
 
   add({
     id: 'nav.capture',
@@ -359,6 +370,7 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
       'rec.window',
       'rec.screen',
       null,
+      'video.edit',
       'nav.history',
       'nav.settings',
       null,

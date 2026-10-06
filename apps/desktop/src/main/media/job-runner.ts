@@ -151,12 +151,12 @@ export interface FileJobRequest {
   args: (partialPath: string) => string[];
   /** What is wrong with the finished partial file, or null. Runs before the rename. */
   verify: (output: ProbeResult, source: ProbeResult) => string | null;
+  /** Length of the output when it differs from the source's (an edit, an extract): progress is measured against it. */
+  outputDurationSec?: number;
   /** "export", "compression": used in the user-facing messages. */
   noun: string;
   /** The history format of the source when it is not a plain WebM/MP4 (a `.fcap` is read from its payload). */
   sourceFormat?: string;
-  /** The length progress is measured against, when the output is shorter than the source (an extract). */
-  progressDurationSec?: number;
 }
 
 function failure(code: FileJobFailureCode, message: string, stderrTail = ''): FileJobResult {
@@ -217,10 +217,7 @@ export async function runFileJob(request: FileJobRequest): Promise<FileJobResult
         timeoutMs,
         ...(signal && { signal }),
         onProgress: (progress) => {
-          const percent = percentOf(
-            progress,
-            request.progressDurationSec ?? sourceProbe.durationSec,
-          );
+          const percent = percentOf(progress, request.outputDurationSec ?? sourceProbe.durationSec);
           if (percent === last) return;
           last = percent;
           request.onProgress?.(percent);

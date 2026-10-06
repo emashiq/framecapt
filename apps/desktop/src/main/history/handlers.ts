@@ -219,7 +219,9 @@ export function registerHistoryHandlers(
               ? 'MP4 video'
               : extension === '.fcap'
                 ? 'FrameCapt multi-source recording'
-                : 'WebM video',
+                : extension === '.gif'
+                  ? 'GIF'
+                  : 'WebM video',
           extensions: [extension.slice(1)],
         },
       ],

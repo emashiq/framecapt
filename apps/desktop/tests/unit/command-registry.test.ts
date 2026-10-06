@@ -29,6 +29,7 @@ function actions(): CommandActions {
     togglePause: vi.fn(),
     navigate: vi.fn(),
     showKeyboardHelp: vi.fn(),
+    editVideo: vi.fn(),
     openImage: vi.fn(),
     toggleTheme: vi.fn(),
     quit: vi.fn(),

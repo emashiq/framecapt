@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { cn } from '../../lib/cn';
-import type { ItemActions } from './actions';
+import { canEditItem, editLabel, type ItemActions } from './actions';
 import { menuItemClass } from './HistoryCard';
 import { selectionLabel } from './selection';
 
@@ -161,11 +161,11 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
             </>
           ) : item ? (
             <>
-              {item.type === 'screenshot' && props.onEdit ? (
+              {canEditItem(item) && props.onEdit ? (
                 <Entry
                   testId="ctx-edit"
                   icon={<Pencil className={ICON} />}
-                  label="Edit"
+                  label={editLabel(item)}
                   reason={missing ? MISSING : null}
                   onSelect={() => props.onEdit?.(item)}
                 />

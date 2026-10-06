@@ -97,6 +97,11 @@ describe('ipc contract', () => {
       'shot:quickSave',
       'shot:saveOver',
       'toolbar:resize',
+      'video:addImage',
+      'video:export',
+      'video:open',
+      'video:pickAudio',
+      'video:save',
       'worker:frameError',
       'worker:frameResult',
       'worker:ready',
@@ -123,6 +128,9 @@ describe('ipc contract', () => {
       'settings:changed',
       'shortcuts:changed',
       'shot:ready',
+      'video:exportDone',
+      'video:exportFailed',
+      'video:exportProgress',
       'worker:grabFrames',
     ]);
   });
@@ -139,7 +147,11 @@ describe('ipc contract', () => {
         expect(roles).toEqual(['recorder']);
       }
       // History and export take history ids from the main window only (never paths).
-      if (channel.startsWith('history:') || channel.startsWith('export:')) {
+      if (
+        channel.startsWith('history:') ||
+        channel.startsWith('export:') ||
+        channel.startsWith('video:')
+      ) {
         expect(roles).toEqual(['main']);
       }
       if (

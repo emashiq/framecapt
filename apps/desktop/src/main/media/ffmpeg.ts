@@ -377,6 +377,7 @@ const StreamSchema = z.object({
   height: z.number().optional(),
   pix_fmt: z.string().optional(),
   duration: z.string().optional(),
+  r_frame_rate: z.string().optional(),
 });
 const ProbeSchema = z.object({
   streams: z.array(StreamSchema).default([]),
@@ -399,6 +400,21 @@ export interface ProbeResult {
   durationSec: number | null;
   formatName: string;
   sizeBytes: number | null;
+  /**
+   * The video's frame rate (`r_frame_rate`) when it is believable: 10 to 120 fps. A variable-rate
+   * MediaRecorder file often reports the 1000 fps timebase or nothing; then this is absent.
+   */
+  frameRate?: number;
+}
+
+/** "30/1" or "30000/1001" -> 30 or 29.97; undefined outside 10..120 fps or when it is not a ratio. */
+export function parseFrameRate(text: string | undefined): number | undefined {
+  const match = /^(\d+)\/(\d+)$/.exec(text ?? '');
+  if (!match) return undefined;
+  const rate = Number(match[1]) / Number(match[2]);
+  return Number.isFinite(rate) && rate >= 10 && rate <= 120
+    ? Math.round(rate * 100) / 100
+    : undefined;
 }
 
 function positiveNumber(text: string | undefined): number | null {
@@ -428,6 +444,9 @@ export function parseProbe(json: unknown): ProbeResult {
     durationSec: positiveNumber(format.duration),
     formatName: format.format_name ?? '',
     sizeBytes: positiveNumber(format.size),
+    ...(video && parseFrameRate(video.r_frame_rate) !== undefined
+      ? { frameRate: parseFrameRate(video.r_frame_rate) as number }
+      : {}),
   };
 }
 

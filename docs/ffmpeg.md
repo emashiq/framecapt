@@ -48,6 +48,19 @@ ffmpeg <MP4 export command, below>
 
 stderr is kept as a 64 KB tail in memory (and written to `finalize.log` in a failed session). The JSON of ffprobe is validated with zod before use.
 
+## Video editor render
+
+Code: `src/main/media/edit-graph.ts` (`buildEditArgs`, `buildFilterScript`), `edit-export.ts` (`exportEdit`, `verifyEdit`). Details and the reasons: docs/decisions.md ADR-043 and docs/architecture.md "Video editor".
+
+```
+ffmpeg -hide_banner -nostats -progress pipe:1 -y -protocol_whitelist file [-f matroska] -i <source>
+       -/filter_complex <tmp>/graph.txt -map [vout] [-map [aout]] <encoder options> <dir>/.framecapt-export-<random>.partial.<ext>
+```
+
+`-/filter_complex <file>` (FFmpeg 7+) reads the graph from a file in a per-job temp folder (removed afterwards). Encoders: `-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -c:a aac -b:a 160k -movflags +faststart -f mp4`; `-c:v libvpx-vp9 -crf 32 -b:v 0 -row-mt 1 -cpu-used 2 -pix_fmt yuv420p -c:a libopus -b:a 128k -f webm`; GIF `-an -loop 0 -f gif` (palettegen/paletteuse inside the graph). The filters used (`drawbox`, `gblur`, `pixelize`, `overlay`, `trim`/`atrim`, `concat`, `fade`/`afade`, `anullsrc`, `palettegen`, `paletteuse`) are all in the pinned 9.0.2 essentials build.
+
+Since P9 the command also has **extra inputs** after the recording, one per text item (a PNG from the temp folder), image item (an asset PNG) and unmuted audio clip (an asset audio file), numbered 1, 2, ... in item order: pictures `-loop 1 -framerate <fps> -t <end seconds> -protocol_whitelist file -i <file>`, audio `-protocol_whitelist file -i <file>`. Pictures are overlaid with `overlay=x:y:enable='between(t,a,b)'` (fades: `fade=t=in|out:st=..:d=..:alpha=1` on the picture stream); audio clips are `atrim`/`asetpts`/`aformat`/`volume`/`afade`/`adelay`ed and mixed with the original (or `anullsrc`) by `amix=inputs=N:normalize=0:duration=first` before the segment split. The frame rate in `fps=` is the recording's (up to 60): the recorder's setting, else `r_frame_rate` of the file when it is within 10..120, else 30. `-framerate`, `-loop`, `amix`, `adelay`, `colorchannelmixer`, `fade ... alpha` are all in the pinned 9.0.2 build.
+
 ## MP4 export (phase 07)
 
 Code: `src/main/media/export.ts` (`detectMp4Capability`, `mp4Args`, `exportMp4`, `verifyMp4`), jobs in `src/main/history/export-service.ts`.

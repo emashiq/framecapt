@@ -109,7 +109,7 @@ describe('HistoryStore', () => {
   it('keeps items it does not understand, unlisted, and writes them back unchanged', async () => {
     const good = item({ createdAt: 5 });
     const flow = { id: id(), type: 'flow', createdAt: 9, extra: { steps: [1, 2] } };
-    const future = { ...item(), format: 'gif' };
+    const future = { ...item(), format: 'avif-from-a-future-version' };
     const escape = { ...item(), thumbnail: '../../escape.png' };
     fs.writeFileSync(
       path.join(dir, HISTORY_FILE),

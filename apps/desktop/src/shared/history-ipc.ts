@@ -11,7 +11,7 @@ export type HistoryType = z.infer<typeof HistoryTypeSchema>;
 export const HistorySourceSchema = z.enum(['screen', 'window', 'region', 'multi', 'unknown']);
 export type HistorySource = z.infer<typeof HistorySourceSchema>;
 
-export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4', 'fcap'] as const;
+export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4', 'fcap', 'gif'] as const;
 export const HistoryFormatSchema = z.enum(HISTORY_FORMATS);
 export type HistoryFormat = z.infer<typeof HistoryFormatSchema>;
 

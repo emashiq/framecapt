@@ -19,7 +19,7 @@ import { fileUrl, newNonce } from '../../history/media-url';
 import { cn } from '../../lib/cn';
 import { revealDuration } from '../../lib/reveal-duration';
 import { formatExact, formatRelative } from '../../lib/time';
-import type { ItemActions } from './actions';
+import { canEditItem, editLabel, type ItemActions } from './actions';
 import { dimensionsText, TypeBadge } from './HistoryCard';
 import { FcapExtract } from './FcapExtract';
 import { FcapPlayer } from './FcapPlayer';
@@ -82,7 +82,8 @@ function Preview({ item }: { item: HistoryItemView }) {
       </p>
     );
   }
-  return item.type === 'recording' ? (
+  // A GIF is a recording (it came from one) but an <img> plays it.
+  return item.type === 'recording' && item.format !== 'gif' ? (
     <video
       data-testid="history-video"
       src={src}
@@ -96,7 +97,7 @@ function Preview({ item }: { item: HistoryItemView }) {
       <img
         data-testid="history-image"
         src={src}
-        alt={`Screenshot ${item.fileName}`}
+        alt={`${item.type === 'recording' ? 'Animation' : 'Screenshot'} ${item.fileName}`}
         className="max-h-[min(58vh,520px)] w-full object-contain"
       />
     </div>
@@ -267,14 +268,14 @@ export function HistoryDetails({
                     Open
                   </Button>
                 )}
-                {!isVideo && onEdit ? (
+                {canEditItem(item) && onEdit ? (
                   <Button
                     variant="secondary"
                     data-testid="details-edit"
                     icon={<Pencil className="size-4" aria-hidden="true" />}
                     onClick={() => onEdit(item)}
                   >
-                    Edit
+                    {editLabel(item)}
                   </Button>
                 ) : null}
                 <div className="grid grid-cols-2 gap-2">

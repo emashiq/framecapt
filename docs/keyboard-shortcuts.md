@@ -134,6 +134,24 @@ These work inside History and are not configurable. Arrow keys, `Home` and `End`
 | Open the card's menu                      | Right-click, `Shift+F10` or the Menu key                          |
 | Remove the card (or all selected) entries | `Delete` (several: after a confirmation, with Undo)               |
 
+## Video editor
+
+These work inside the video editor (History > a recording > **Edit video**) and are not configurable. They are ignored while you type in a field, and `Space` does not fire while a button has the keyboard.
+
+| Action                                                                      | Key                                                                  |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Play or pause                                                               | `Space` (playback skips cut pieces and stops at the end of the trim) |
+| Step one frame back or forward                                              | `Left` / `Right` (`Shift`: one second)                               |
+| Jump to the start or end of the trim                                        | `Home` / `End`                                                       |
+| Mark the start / end of a range to cut                                      | `I` / `O`                                                            |
+| Remove the selected item, restore the selected cut, or cut the marked range | `Delete`                                                             |
+| Undo / redo                                                                 | `Ctrl+Z` / `Ctrl+Shift+Z` (also `Ctrl+Y`)                            |
+| Save the project now (it also saves by itself)                              | `Ctrl+S`                                                             |
+| Cancel the armed tool or crop mode, or clear the selection                  | `Esc`                                                                |
+| Zoom the timeline around the pointer                                        | `Ctrl` + mouse wheel (a plain wheel scrolls sideways)                |
+| Move an item or an edge without snapping                                    | hold `Alt` while dragging                                            |
+| Nudge a trim handle                                                         | focus it, then `Left` / `Right` (`Shift`: one second)                |
+
 ## Recording toolbar
 
 The toolbar's **Hide controls** button shrinks it to a small recording indicator (timer and a button to bring the controls back). Recording continues, and the global Pause and Stop shortcuts keep working while the controls are hidden.

@@ -44,6 +44,23 @@ const EDITOR_FIXED_KEYS: Entry[] = [
   { keys: ['Enter'], text: 'Apply the crop' },
 ];
 
+const VIDEO_EDITOR_KEYS: Entry[] = [
+  { keys: ['Space'], text: 'Play or pause' },
+  { keys: ['←', '→'], text: 'Step one frame (Shift: one second)' },
+  { keys: ['Home', 'End'], text: 'Jump to the start or end of the trim' },
+  { keys: ['I', 'O'], text: 'Mark the start and end of a range to cut' },
+  {
+    keys: ['Delete'],
+    text: 'Remove the selected item, restore the selected cut, or cut the marked range',
+  },
+  { keys: ['Ctrl', 'Z'], text: 'Undo (Ctrl+Shift+Z or Ctrl+Y: redo)' },
+  { keys: ['Ctrl', 'S'], text: 'Save now (changes also save by themselves)' },
+  { keys: ['Esc'], text: 'Cancel the tool or crop, or clear the selection' },
+  { keys: ['Ctrl', 'Wheel'], text: 'Zoom the timeline' },
+  { keys: ['Alt', 'Drag'], text: 'Move an item or an edge without snapping' },
+  { keys: ['←', '→'], text: 'On a trim handle: move it a frame (Shift: a second)' },
+];
+
 const OTHER_KEYS: Entry[] = [
   {
     keys: ['←', '↑', '→', '↓'],
@@ -143,6 +160,7 @@ export function KeyboardHelp({ open, onClose }: KeyboardHelpProps) {
           <Group title="In the main window" entries={[...commandCenter, ...MAIN_KEYS]} />
           <Group title="Choosing an area" entries={OVERLAY_KEYS} />
           <Group title="In the editor" entries={editor} />
+          <Group title="In the video editor" entries={VIDEO_EDITOR_KEYS} />
           <Group title="Elsewhere" entries={OTHER_KEYS} />
         </div>
       </div>

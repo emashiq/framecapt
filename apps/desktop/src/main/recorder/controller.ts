@@ -1255,6 +1255,9 @@ export class RecorderController implements SelectionHost {
         sizeBytes: bytes,
         hasAudio: ctx.audio.mic || ctx.audio.system,
         source: ctx.target,
+        // The frame rate that was asked for: the video editor exports at it (the file itself is
+        // variable frame rate and does not say).
+        fps: ctx.options.fps,
       });
       return added?.id ?? null;
     } catch (error) {

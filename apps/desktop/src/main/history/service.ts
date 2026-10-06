@@ -15,6 +15,7 @@ import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import { thumbnailArgs, type MediaTools } from '../media/ffmpeg';
 import type { ProjectAsset, ProjectInput, ProjectStore } from '../projects/store';
+import type { VideoProjectStore } from '../video-projects/store';
 import type { ProjectDoc } from '../../shared/project-ipc';
 import { writeFileAtomic } from '../shots/atomic-write';
 import { readFcapHeader, readFcapHeaderCached } from '../recording/fcap';
@@ -35,10 +36,11 @@ const IMAGE_EXTENSIONS: Record<'png' | 'jpeg', readonly string[]> = {
   png: ['.png'],
   jpeg: ['.jpg', '.jpeg'],
 };
-const VIDEO_EXTENSION: Record<'webm' | 'mp4' | 'fcap', string> = {
+const VIDEO_EXTENSION: Record<'webm' | 'mp4' | 'fcap' | 'gif', string> = {
   webm: '.webm',
   mp4: '.mp4',
   fcap: '.fcap',
+  gif: '.gif',
 };
 
 export interface HistoryDeps {
@@ -47,6 +49,8 @@ export interface HistoryDeps {
   tools: MediaTools;
   /** Editable projects of screenshots (`<userData>/projects`). Absent: none are kept. */
   projects?: Pick<ProjectStore, 'write' | 'updateDoc' | 'remove' | 'sweep'>;
+  /** Video editing projects (`<userData>/video-projects`), removed with their history item. */
+  videoProjects?: Pick<VideoProjectStore, 'remove' | 'sweep'>;
   /** Moves a file to the Recycle Bin (`shell.trashItem`); never a permanent delete. */
   trashItem: (file: string) => Promise<void>;
   /** Called after every change a list may show (add, remove, thumbnail ready). */
@@ -92,7 +96,7 @@ export interface ScreenshotOverwrite {
 
 export interface NewVideo {
   path: string;
-  format: 'webm' | 'mp4' | 'fcap';
+  format: 'webm' | 'mp4' | 'fcap' | 'gif';
   durationMs: number | null;
   width: number;
   height: number;
@@ -101,11 +105,15 @@ export interface NewVideo {
   source: HistorySource;
   derivedFrom?: string;
   createdAt?: number;
+  /** The frame rate the recording was made at (the video editor exports at it). */
+  fps?: number;
 }
 
-function formatOfVideoPath(file: string): 'webm' | 'mp4' | 'fcap' {
+function formatOfVideoPath(file: string): 'webm' | 'mp4' | 'fcap' | 'gif' {
   const extension = path.extname(file).toLowerCase();
-  return extension === '.mp4' ? 'mp4' : extension === '.fcap' ? 'fcap' : 'webm';
+  if (extension === '.gif') return 'gif';
+  if (extension === '.fcap') return 'fcap';
+  return extension === '.mp4' ? 'mp4' : 'webm';
 }
 
 /** What the recorder and recovery need of history: adding a finished video. */
@@ -153,15 +161,16 @@ export class HistoryService {
 
   /** Startup housekeeping: projects no history item refers to (older than the grace period) are removed. */
   private async sweepProjects(): Promise<void> {
-    const projects = this.deps.projects;
-    if (!projects) return;
-    try {
-      const known = new Set(this.store.items().map((item) => item.id));
-      const result = await projects.sweep(known);
-      if (result.removed > 0)
-        log.info(`Project sweep: removed ${result.removed} orphaned projects`);
-    } catch (error) {
-      log.warn(`Project sweep failed (${(error as Error).message})`);
+    const known = new Set(this.store.items().map((item) => item.id));
+    for (const projects of [this.deps.projects, this.deps.videoProjects]) {
+      if (!projects) continue;
+      try {
+        const result = await projects.sweep(known);
+        if (result.removed > 0)
+          log.info(`Project sweep: removed ${result.removed} orphaned projects`);
+      } catch (error) {
+        log.warn(`Project sweep failed (${(error as Error).message})`);
+      }
     }
   }
 
@@ -416,9 +425,10 @@ export class HistoryService {
   }
 
   private async dropProjects(ids: readonly string[]): Promise<void> {
-    const projects = this.deps.projects;
-    if (!projects) return;
-    for (const id of ids) await projects.remove(id).catch(() => undefined);
+    for (const projects of [this.deps.projects, this.deps.videoProjects]) {
+      if (!projects) continue;
+      for (const id of ids) await projects.remove(id).catch(() => undefined);
+    }
   }
 
   /**
@@ -443,6 +453,7 @@ export class HistoryService {
       hasAudio: input.hasAudio,
       source: input.source,
       derivedFrom: input.derivedFrom ?? null,
+      ...(input.fps !== undefined && { fps: input.fps }),
     };
     await this.put(item);
     this.queueThumbnail(item);

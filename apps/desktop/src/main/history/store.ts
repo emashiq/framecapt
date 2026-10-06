@@ -35,6 +35,8 @@ export const HistoryItemSchema = z.object({
   derivedFrom: HistoryIdSchema.nullable(),
   /** The editable project (`<userData>/projects/<id>`) of a screenshot; absent for older items. */
   projectId: HistoryIdSchema.optional(),
+  /** The frame rate a recording was made at (absent for older items and for screenshots). */
+  fps: z.number().min(1).max(240).optional(),
 });
 export type HistoryItem = z.infer<typeof HistoryItemSchema>;
 
