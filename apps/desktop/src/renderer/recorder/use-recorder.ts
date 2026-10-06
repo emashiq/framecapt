@@ -17,6 +17,7 @@ export const IDLE_SNAPSHOT: RecorderSnapshot = {
   lost: { mic: false, system: false },
   choice: null,
   choiceCanUseDefault: false,
+  camera: null,
   quitting: false,
   countdown: null,
   progress: null,

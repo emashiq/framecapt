@@ -2,6 +2,13 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { globalShortcut, nativeImage, screen, type BrowserWindow } from 'electron';
+import type {
+  CameraCorner,
+  CameraSetStyleRequest,
+  CameraShape,
+  CameraSize,
+  CameraStyleState,
+} from '../../shared/camera';
 import {
   framePixelsToDip,
   globalDipToDisplayLocal,
@@ -53,6 +60,7 @@ import type { MediaTools } from '../media/ffmpeg';
 import type { HistorySink } from '../history/service';
 import type { MediaRegistry } from '../recording/media-protocol';
 import type { SessionService } from '../recording/session-service';
+import { CameraBubble } from './camera';
 import { settleWithin } from './quit-cap';
 import {
   createCountdownWindow,
@@ -137,6 +145,12 @@ export interface RecorderDeps {
   history?: HistorySink;
   /** A recording was saved (its history id, or null): the automatic MP4 export hooks in here. */
   onSaved?: (historyId: string | null) => void;
+  /** The camera bubble's size, shape and corner are remembered in the recording settings. */
+  persistCameraStyle?: (patch: {
+    cameraSize?: CameraSize;
+    cameraShape?: CameraShape;
+    cameraCorner?: CameraCorner;
+  }) => void;
   /** Overrides the 15 s quit cap (E2E builds only). */
   quitCapMs?: number;
   /** E2E builds only: the engine's start command is sent this many ms late (a slow PC). */
@@ -172,6 +186,7 @@ export class RecorderController implements SelectionHost {
     ((answer: 'continue-without' | 'use-default' | 'cancel') => void) | undefined;
   private countdownWindow: CountdownWindow | undefined;
   private toolbar: ToolbarWindow | undefined;
+  private camera: CameraBubble | undefined;
   private stopPromise: Promise<void> | undefined;
   /** Cancels the running remux (quit past the cap). */
   private finalizeAbort: AbortController | undefined;
@@ -244,6 +259,7 @@ export class RecorderController implements SelectionHost {
       lost: state.lost,
       choice: state.choice,
       choiceCanUseDefault: ctx?.canUseDefaultMic ?? false,
+      camera: this.camera ? { visible: this.camera.visible } : null,
       quitting: this.quitting,
       countdown: ctx?.countdown ?? null,
       progress: ctx?.progress ?? null,
@@ -505,7 +521,8 @@ export class RecorderController implements SelectionHost {
         }
         await this.hideMain();
         this.guard(token);
-        if (answer === 'use-default') ctx.options.mic = { enabled: true };
+        if (reply.choice === 'camera-missing') delete ctx.options.camera;
+        else if (answer === 'use-default') ctx.options.mic = { enabled: true };
         else if (reply.choice === 'system-audio-unavailable') ctx.options.systemAudio = false;
         else ctx.options.mic = { enabled: false };
         continue;
@@ -521,6 +538,7 @@ export class RecorderController implements SelectionHost {
     this.dispatch({ type: 'PREFLIGHT_OK' });
     this.pumpCursor(ctx); // the follow window starts where the mouse is, not mid-screen
     this.ensureToolbar(ctx);
+    this.ensureCamera(ctx);
     await this.hideMain();
     this.guard(token);
     if (ctx.options.countdown) await this.runCountdown(token, ctx);
@@ -887,6 +905,58 @@ export class RecorderController implements SelectionHost {
     });
   }
 
+  // --- the camera bubble -------------------------------------------------------------------
+
+  /** A recording with a camera: the bubble appears (during the countdown already) and stays until it ends. */
+  private ensureCamera(ctx: SessionContext): void {
+    const options = ctx.options.camera;
+    if (!options || this.camera) return;
+    // E2E mock displays are not on screen (like the toolbar's placement): the real display stands in.
+    const captureRect = this.deps.synthetic
+      ? ctx.target === 'window'
+        ? null
+        : this.realDisplayFor(ctx.display).bounds
+      : (ctx.regionDip ?? (ctx.target === 'screen' && ctx.display ? ctx.display.bounds : null));
+    this.camera = new CameraBubble({
+      deviceId: options.deviceId,
+      shape: options.shape,
+      size: options.size,
+      corner: options.corner,
+      captureRect,
+      homeArea: this.realDisplayFor(ctx.display).workArea,
+      send: (command) => this.send(command),
+      persist: (patch) => this.deps.persistCameraStyle?.(patch),
+      onVisibleChange: () => this.broadcast(),
+    });
+    this.camera.show();
+  }
+
+  private closeCamera(): void {
+    this.camera?.close();
+    this.camera = undefined;
+  }
+
+  private requireCamera(): CameraBubble {
+    if (!this.camera) throw new IpcError('NOT_FOUND', 'This recording has no camera.');
+    return this.camera;
+  }
+
+  /** `camera:getStyle`: what the bubble shows. */
+  cameraStyle(): CameraStyleState {
+    return this.requireCamera().styleState();
+  }
+
+  /** `camera:setStyle`: the bubble's own size, shape and hide buttons. */
+  setCameraStyle(request: CameraSetStyleRequest): CameraStyleState {
+    return this.requireCamera().setStyle(request);
+  }
+
+  /** The toolbar's camera button. */
+  toggleCamera(): void {
+    const camera = this.requireCamera();
+    camera.setVisible(!camera.visible);
+  }
+
   private showToolbar(): void {
     const toolbar = this.toolbar;
     if (!toolbar || toolbar.win.isDestroyed()) return;
@@ -1047,6 +1117,7 @@ export class RecorderController implements SelectionHost {
       this.stopCursorFollow();
       this.send({ cmd: 'abort' });
       this.closeToolbar();
+      this.closeCamera();
       this.restoreMain();
     }
   }
@@ -1226,6 +1297,7 @@ export class RecorderController implements SelectionHost {
     this.stopCursorFollow();
     this.send({ cmd: 'abort' });
     this.closeToolbar();
+    this.closeCamera();
     if (ctx?.sessionCreated) void this.deps.sessions.abort(ctx.sessionId);
     if (this.machine.status === 'idle') this.ctx = null;
     // A cancelled start leaves the window as it was; a failure shows it (the error is there).

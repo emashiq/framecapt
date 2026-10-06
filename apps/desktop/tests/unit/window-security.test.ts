@@ -33,6 +33,7 @@ import {
   installPermissionHandlers,
 } from '../../src/main/security';
 import type { AppOriginConfig } from '../../src/main/app-origin';
+import type { Role } from '../../src/shared/types';
 import { securePreferences } from '../../src/main/windows';
 
 const config: AppOriginConfig = {};
@@ -128,6 +129,9 @@ describe('navigation lockdown (every webContents)', () => {
 });
 
 describe('session policies', () => {
+  /** The role the permission handlers resolve for the requesting webContents. */
+  const roleOfContents: { value: Role | undefined } = { value: undefined };
+
   function session() {
     const events = new Map<string, (...args: never[]) => void>();
     const calls: Record<string, unknown[]> = {};
@@ -152,7 +156,11 @@ describe('session policies', () => {
   it('devices that need a chooser (HID, serial, USB, Bluetooth) are never granted or offered', () => {
     const target = session();
     hoisted.created.length = 0;
-    installPermissionHandlers(target as never, () => config);
+    installPermissionHandlers(
+      target as never,
+      () => config,
+      () => roleOfContents.value,
+    );
     expect((target.calls.device?.[0] as () => boolean)()).toBe(false);
     for (const name of ['select-hid-device', 'select-serial-port', 'select-usb-device']) {
       const event = { preventDefault: vi.fn() };
@@ -177,15 +185,25 @@ describe('session policies', () => {
     expect(target.calls.spell?.[0]).toBe(false); // no spell checker: nothing typed is sent anywhere
   });
 
-  it('permissions: only the microphone and clipboard writes, only for the app, never the camera', () => {
+  it('permissions: the microphone, the camera for the recorder and camera windows, clipboard writes, only for the app', () => {
     const target = session();
-    installPermissionHandlers(target as never, () => config);
+    installPermissionHandlers(
+      target as never,
+      () => config,
+      () => roleOfContents.value,
+    );
     const decide = target.calls.request?.[0] as (
       c: unknown,
       permission: string,
       callback: (allowed: boolean) => void,
       details: { requestingUrl: string; mediaTypes?: string[] },
     ) => void;
+    const check = target.calls.check?.[0] as (
+      c: unknown,
+      permission: string,
+      origin: string,
+      details: { requestingUrl: string; mediaType?: string },
+    ) => boolean;
     const app = 'app://framecapt/index.html';
     const ask = (permission: string, requestingUrl: string, mediaTypes?: string[]) => {
       const callback = vi.fn();
@@ -193,8 +211,24 @@ describe('session policies', () => {
       return callback.mock.calls[0]?.[0] as boolean;
     };
     expect(ask('media', app, ['audio'])).toBe(true);
+    // No registered window, or the main window: the camera is not granted.
+    roleOfContents.value = undefined;
+    expect(ask('media', app, ['video'])).toBe(false);
+    roleOfContents.value = 'main';
     expect(ask('media', app, ['audio', 'video'])).toBe(false);
     expect(ask('media', app, ['video'])).toBe(false);
+    expect(check({}, 'media', app, { requestingUrl: app, mediaType: 'video' })).toBe(true);
+    for (const role of ['recorder', 'camera'] as const) {
+      roleOfContents.value = role;
+      expect(ask('media', app, ['video']), role).toBe(true);
+      expect(ask('media', 'https://evil.example/', ['video']), role).toBe(false);
+    }
+    for (const role of ['overlay', 'toolbar', 'countdown'] as const) {
+      roleOfContents.value = role;
+      expect(ask('media', app, ['video']), role).toBe(false);
+      expect(check({}, 'media', app, { requestingUrl: app, mediaType: 'video' }), role).toBe(false);
+    }
+    roleOfContents.value = undefined;
     expect(ask('clipboard-sanitized-write', app)).toBe(true);
     for (const permission of [
       'geolocation',

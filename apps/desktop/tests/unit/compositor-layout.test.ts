@@ -189,19 +189,22 @@ describe('mosaicLayout', () => {
 describe('cameraRect', () => {
   const OUT = { width: 1920, height: 1080 };
 
-  it('sizes by the shorter side and the shape', () => {
-    expect(cameraRect({ nx: 0.5, ny: 0.5 }, OUT, 'm', 'circle')).toMatchObject({
-      width: 236,
-      height: 236,
-    });
-    const wide = cameraRect({ nx: 0.5, ny: 0.5 }, OUT, 'l', 'rect');
-    expect(wide.width).toBeGreaterThan(wide.height);
+  it('is a square sized by the shorter side (s 14 %, m 20 %, l 28 %)', () => {
+    const side = (size: 's' | 'm' | 'l') => cameraRect({ nx: 0.5, ny: 0.5 }, OUT, size).width;
+    expect([side('s'), side('m'), side('l')]).toEqual([150, 216, 302]);
+    const rect = cameraRect({ nx: 0.5, ny: 0.5 }, OUT, 'm');
+    expect(rect.width).toBe(rect.height);
+    expect(rect.x + rect.width / 2).toBe(960);
+  });
+
+  it('is sized by the shorter side of a portrait output too', () => {
+    expect(cameraRect({ nx: 0.5, ny: 0.5 }, { width: 720, height: 1280 }, 'm').width).toBe(144);
   });
 
   it('stays inside the output with a margin and even alignment', () => {
     for (const nx of [-1, 0, 1, 2]) {
       for (const ny of [-1, 0, 1, 2]) {
-        const rect = cameraRect({ nx, ny }, OUT, 'l', 'square');
+        const rect = cameraRect({ nx, ny }, OUT, 'l');
         expect(rect.x).toBeGreaterThanOrEqual(20);
         expect(rect.y).toBeGreaterThanOrEqual(20);
         expect(rect.x + rect.width).toBeLessThanOrEqual(OUT.width - 20);

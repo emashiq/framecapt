@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from 'electron';
+import type { Rect } from '../../shared/rect';
 import { TOOLBAR_HEIGHT } from '../../shared/toolbar-placement';
 import { log } from '../logger';
 import { loadRenderer, registerWebContents, securePreferences } from '../windows';
@@ -131,4 +132,37 @@ export function createCountdownWindow(bounds: {
       log.info('Countdown window closed');
     },
   };
+}
+
+/**
+ * The camera bubble: a frameless, transparent, always-on-top square the user drags where the
+ * camera should be. Like the toolbar it is excluded from capture (setContentProtection): the
+ * camera is composited into the video by the recorder, so a window or region recording shows it
+ * exactly where the bubble sits, and the bubble itself can never appear twice. Created hidden.
+ */
+export function createCameraWindow(bounds: Rect): BrowserWindow {
+  const win = new BrowserWindow({
+    title: 'FrameCapt camera',
+    ...bounds,
+    useContentSize: true,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    show: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    alwaysOnTop: true,
+    webPreferences: { ...securePreferences(), backgroundThrottling: false },
+  });
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setContentProtection(true);
+  // Same quirk as the overlays: place again after creation (mixed-DPI displays).
+  win.setBounds(bounds);
+  registerWebContents(win.webContents, 'camera');
+  void loadRenderer(win, 'camera');
+  return win;
 }

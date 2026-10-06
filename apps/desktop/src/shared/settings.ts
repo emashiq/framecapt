@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  CameraCornerSchema,
+  CameraShapeSchema,
+  CameraSizeSchema,
+  DEFAULT_CAMERA_STYLE,
+} from './camera';
 import type { FollowZoom } from './compositor-layout';
 import type { RecordOptions } from './recorder-ipc';
 import {
@@ -62,6 +68,14 @@ export const RecordingSettingsSchema = z.object({
   followMouseZoom: z.enum(FOLLOW_MOUSE_VALUES),
   /** "compressed": after saving, the WebM is re-encoded to a smaller MP4 (post-processing only). */
   storage: z.enum(['original', 'compressed']),
+  /** The webcam overlay. Added after version 1 shipped: a file without these keys loads with the defaults. */
+  cameraEnabled: z.boolean(),
+  /** Undefined = the default camera. */
+  cameraDeviceId: z.string().min(1).max(256).optional(),
+  cameraShape: CameraShapeSchema,
+  cameraSize: CameraSizeSchema,
+  /** Window recordings: the corner of the video the camera sits in. */
+  cameraCorner: CameraCornerSchema,
 });
 
 export const ShortcutSettingsSchema = z.object({
@@ -127,6 +141,10 @@ export const DEFAULT_SETTINGS: Settings = {
     autoExportMp4: false,
     followMouseZoom: 'off',
     storage: 'original',
+    cameraEnabled: false,
+    cameraShape: DEFAULT_CAMERA_STYLE.shape,
+    cameraSize: DEFAULT_CAMERA_STYLE.size,
+    cameraCorner: DEFAULT_CAMERA_STYLE.corner,
   },
   shortcuts: { ...DEFAULT_SHORTCUTS },
   editorShortcuts: { ...DEFAULT_EDITOR_SHORTCUTS },
@@ -147,7 +165,10 @@ export const SettingsPatchSchema = z.strictObject({
   general: GeneralSettingsSchema.partial().strict().optional(),
   screenshots: ScreenshotSettingsSchema.omit({ outputDir: true }).partial().strict().optional(),
   recording: RecordingSettingsSchema.omit({ outputDir: true })
-    .extend({ micDeviceId: z.string().min(1).max(256).nullable() })
+    .extend({
+      micDeviceId: z.string().min(1).max(256).nullable(),
+      cameraDeviceId: z.string().min(1).max(256).nullable(),
+    })
     .partial()
     .strict()
     .optional(),
@@ -303,7 +324,7 @@ export function parseSettings(raw: unknown): ParsedSettings {
   return { ok: true, settings: parsed.data };
 }
 
-/** `current` with `patch` applied (one level deep). `micDeviceId: null` clears the device. */
+/** `current` with `patch` applied (one level deep). `micDeviceId` / `cameraDeviceId` null clears the device. */
 export function applyPatch(current: Settings, patch: SettingsPatch): Settings {
   const next: Settings = structuredClone(current);
   for (const section of SETTINGS_SECTIONS_WITH_DEFAULTS) {
@@ -311,9 +332,10 @@ export function applyPatch(current: Settings, patch: SettingsPatch): Settings {
     if (!changes) continue;
     Object.assign(next[section], changes);
   }
-  if ((patch.recording as { micDeviceId?: string | null } | undefined)?.micDeviceId === null) {
-    delete next.recording.micDeviceId;
-  }
+  const devices = patch.recording as
+    { micDeviceId?: string | null; cameraDeviceId?: string | null } | undefined;
+  if (devices?.micDeviceId === null) delete next.recording.micDeviceId;
+  if (devices?.cameraDeviceId === null) delete next.recording.cameraDeviceId;
   return next;
 }
 
@@ -358,6 +380,14 @@ export function recordOptionsFromSettings(recording: Settings['recording']): Rec
     ...followOption(recording.followMouseZoom),
     // Only the recorder's bitrate depends on it; the re-encode itself reads the setting at save time.
     ...(recording.storage === 'compressed' && { compressed: true }),
+    ...(recording.cameraEnabled && {
+      camera: {
+        ...(recording.cameraDeviceId !== undefined && { deviceId: recording.cameraDeviceId }),
+        shape: recording.cameraShape,
+        size: recording.cameraSize,
+        corner: recording.cameraCorner,
+      },
+    }),
   };
 }
 
@@ -381,6 +411,14 @@ export function patchFromRecordOptions(options: RecordOptions): SettingsPatch {
       fps: options.fps,
       countdown: options.countdown,
       followMouseZoom: options.follow ? (String(options.follow.zoom) as FollowMouseSetting) : 'off',
+      // Switching the camera off keeps its style and device in the settings.
+      cameraEnabled: options.camera !== undefined,
+      ...(options.camera && {
+        cameraDeviceId: options.camera.deviceId ?? null,
+        cameraShape: options.camera.shape,
+        cameraSize: options.camera.size,
+        cameraCorner: options.camera.corner,
+      }),
     },
   };
 }

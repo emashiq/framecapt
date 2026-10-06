@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CameraSetStyleRequestSchema, CameraStyleStateSchema } from './camera';
 import {
   CaptureGrantRequestSchema,
   CaptureGrantResponseSchema,
@@ -337,6 +338,20 @@ export const ipcContract = {
     request: z.strictObject({ width: z.number().min(120).max(900) }),
     response: z.void(),
     roles: ['toolbar'],
+  },
+  /** The toolbar's camera button: show or hide the camera bubble (and its picture in the video). */
+  'recorder:toggleCamera': { request: z.undefined(), response: z.void(), roles: ['toolbar'] },
+  /** The camera bubble reports a change of its own size, shape or visibility. */
+  'camera:setStyle': {
+    request: CameraSetStyleRequestSchema,
+    response: CameraStyleStateSchema,
+    roles: ['camera'],
+  },
+  /** The camera bubble asks what to show (device, shape, size). */
+  'camera:getStyle': {
+    request: z.undefined(),
+    response: CameraStyleStateSchema,
+    roles: ['camera'],
   },
   'recorder:getState': {
     request: z.undefined(),

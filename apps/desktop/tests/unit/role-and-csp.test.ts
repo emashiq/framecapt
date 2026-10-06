@@ -8,6 +8,7 @@ describe('roleFromHash', () => {
     expect(roleFromHash('#/toolbar')).toBe('toolbar');
     expect(roleFromHash('#/recorder')).toBe('recorder');
     expect(roleFromHash('#/countdown')).toBe('countdown');
+    expect(roleFromHash('#/camera')).toBe('camera');
     expect(roleFromHash('#/overlay?display=2')).toBe('overlay');
   });
 

@@ -132,7 +132,7 @@ export function registerHandlers(
 
   handle(
     'app:reportError',
-    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown'] },
+    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] },
     (report, ctx) => {
       const parts = [`Renderer error (${ctx.role}, ${report.source}): ${report.message}`];
       if (report.stack) parts.push(report.stack);
@@ -262,6 +262,7 @@ export function registerHandlers(
       if (action === 'compress') void compress.startIfEnabled(historyId);
       else if (action === 'export') void exports.startAuto(historyId);
     },
+    persistCameraStyle: (patch) => void settings.store.update({ recording: patch }),
     // E2E builds only: a slow engine start, to test a stop that arrives while starting.
     ...(__FRAMECAPT_E2E__ &&
       Number(process.env.FRAMECAPT_E2E_ENGINE_START_DELAY_MS) > 0 && {

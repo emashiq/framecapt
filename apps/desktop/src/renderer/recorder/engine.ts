@@ -1,6 +1,7 @@
 import type { EngineCommand, EngineEvent, EnginePrepareCommand } from '../../shared/recorder-ipc';
 import { CHUNK_TIMESLICE_MS } from '../../shared/recorder-ipc';
 import type { AudioSource } from '../../shared/recorder-machine';
+import { cornerCenter } from '../../shared/camera';
 import { followCrop, followCropSize, type FollowZoom } from '../../shared/compositor-layout';
 import type { Size } from '../../shared/geometry';
 import type { Rect } from '../../shared/rect';
@@ -12,7 +13,8 @@ import {
   videoBitrate,
 } from '../../shared/recording';
 import { createAudioMix, type AudioMix } from '../capture/audio-graph';
-import { createCompositor } from '../capture/compositor';
+import type { CameraLayerState } from '../capture/camera-layer';
+import { createCompositor, type CompositorCamera } from '../capture/compositor';
 import { CaptureError, mapMediaError } from '../capture/errors';
 import { detectRecorderFormats } from '../capture/recorder-probe';
 import { createCanvasTransform, type CroppedStream } from '../capture/region-crop';
@@ -23,7 +25,11 @@ import {
   registerStream,
   stopStream,
 } from '../capture/resource-registry';
-import { acquireDisplayStream, acquireMicrophoneStream } from '../capture/stream';
+import {
+  acquireCameraStream,
+  acquireDisplayStream,
+  acquireMicrophoneStream,
+} from '../capture/stream';
 import { ChunkUploader, type AppendFn, type UploadFailure } from './chunk-uploader';
 
 export interface EngineDeps {
@@ -36,6 +42,7 @@ export interface EngineDeps {
 interface Prepared {
   displayStream: MediaStream;
   micStream: MediaStream | undefined;
+  cameraStream: MediaStream | undefined;
   crop: CroppedStream;
   mix: AudioMix | undefined;
   mime: string;
@@ -96,6 +103,10 @@ export class RecorderEngine {
   private queue: Promise<void> = Promise.resolve();
   /** The mouse on the recorded display (0..1), from main; the follow window aims at it. */
   private cursor = { nx: 0.5, ny: 0.5 };
+  /** The webcam overlay as main last placed it (`camera` command). */
+  private camera: CameraLayerState = { nx: 1, ny: 1, size: 'm', shape: 'circle', visible: true };
+  /** The camera's track ended mid-recording: the overlay stays hidden. */
+  private cameraLost = false;
 
   constructor(private readonly deps: EngineDeps) {}
 
@@ -134,6 +145,15 @@ export class RecorderEngine {
       case 'cursor':
         this.cursor = { nx: command.nx, ny: command.ny };
         return;
+      case 'camera':
+        this.camera = {
+          nx: command.nx,
+          ny: command.ny,
+          size: command.size,
+          shape: command.shape,
+          visible: command.visible && !this.cameraLost,
+        };
+        return;
     }
   }
 
@@ -142,16 +162,22 @@ export class RecorderEngine {
   private async prepare(command: EnginePrepareCommand): Promise<void> {
     this.releaseAll();
     const { requestId, options } = command;
+    let displayStream: MediaStream | undefined;
+    let micStream: MediaStream | undefined;
+    let cameraStream: MediaStream | undefined;
     const choice = (
-      kind: 'system-audio-unavailable' | 'mic-missing' | 'mic-denied' | 'mic-unavailable',
+      kind:
+        | 'system-audio-unavailable'
+        | 'mic-missing'
+        | 'mic-denied'
+        | 'mic-unavailable'
+        | 'camera-missing',
       canUseDefaultMic = false,
     ): void => {
+      stopStream(cameraStream);
       this.releaseAll();
       this.deps.send({ type: 'needsChoice', requestId, choice: kind, canUseDefaultMic });
     };
-
-    let displayStream: MediaStream | undefined;
-    let micStream: MediaStream | undefined;
     try {
       const formats = detectRecorderFormats();
       if (!formats.defaultMime) {
@@ -176,6 +202,22 @@ export class RecorderEngine {
         }
       } else {
         micDeviceId = undefined;
+      }
+
+      // The camera: a chosen device that is gone falls back to the default one; no camera at all is a choice.
+      this.cameraLost = false;
+      if (options.camera) {
+        try {
+          cameraStream = await acquireCameraStream(options.camera.deviceId);
+        } catch {
+          return choice('camera-missing');
+        }
+        this.camera = {
+          ...cornerCenter(options.camera.corner),
+          size: options.camera.size,
+          shape: options.camera.shape,
+          visible: true,
+        };
       }
 
       // The picture (and system audio). A missing loopback track is a choice, never silence.
@@ -203,13 +245,18 @@ export class RecorderEngine {
 
       const follow = followZoom(command);
       this.cursor = { nx: 0.5, ny: 0.5 };
+      const camera: CompositorCamera | undefined = cameraStream && {
+        stream: cameraStream,
+        state: () => this.camera,
+      };
       const crop = follow
-        ? await this.createFollowCompositor(displayStream, follow, command)
+        ? await this.createFollowCompositor(displayStream, follow, command, camera)
         : await createCanvasTransform(
             displayStream,
             {
               rect: command.region ?? undefined,
               limit: qualityLimit(options.quality),
+              camera,
             },
             options.fps,
             'timer',
@@ -225,6 +272,7 @@ export class RecorderEngine {
       const prepared: Prepared = {
         displayStream,
         micStream,
+        cameraStream,
         crop,
         mix,
         mime: formats.defaultMime,
@@ -248,6 +296,7 @@ export class RecorderEngine {
     } catch (error) {
       stopStream(micStream);
       stopStream(displayStream);
+      stopStream(cameraStream);
       this.releaseAll();
       const { code, message } = failure(error);
       this.deps.send({ type: 'prepareFailed', requestId, code, message });
@@ -283,6 +332,7 @@ export class RecorderEngine {
     displayStream: MediaStream,
     zoom: FollowZoom,
     command: EnginePrepareCommand,
+    camera: CompositorCamera | undefined,
   ): Promise<CroppedStream> {
     const limit = qualityLimit(command.options.quality);
     let crop: Rect | null = null;
@@ -309,6 +359,7 @@ export class RecorderEngine {
       outSize: ([frame]) => fitWithin(followCropSize(frame as Size, zoom), limit),
       fps: command.options.fps,
       driver: 'timer',
+      camera,
     });
   }
 
@@ -317,6 +368,13 @@ export class RecorderEngine {
     const video = prepared.displayStream.getVideoTracks()[0];
     const onVideoEnded = (): void => this.deps.send({ type: 'sourceLost' });
     video?.addEventListener('ended', onVideoEnded);
+    // An unplugged camera only takes the overlay away; the recording itself goes on.
+    const cameraTrack = prepared.cameraStream?.getVideoTracks()[0];
+    const onCameraEnded = (): void => {
+      this.cameraLost = true;
+      this.camera = { ...this.camera, visible: false };
+    };
+    cameraTrack?.addEventListener('ended', onCameraEnded);
 
     const markLost = (source: AudioSource): void => {
       if (this.lost.has(source)) return;
@@ -341,6 +399,7 @@ export class RecorderEngine {
 
     return () => {
       video?.removeEventListener('ended', onVideoEnded);
+      cameraTrack?.removeEventListener('ended', onCameraEnded);
       offEnded?.();
       navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
     };
@@ -545,6 +604,7 @@ export class RecorderEngine {
       prepared.mix?.dispose();
       prepared.crop.dispose();
       stopStream(prepared.micStream);
+      stopStream(prepared.cameraStream);
       stopStream(prepared.displayStream);
     }
   }

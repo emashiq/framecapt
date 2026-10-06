@@ -91,6 +91,17 @@ If the disk gets low, FrameCapt refuses to start below 1 GB free and stops safel
 
 Quitting while recording asks first; if you quit, FrameCapt stops and finishes the recording (up to 15 seconds; otherwise it finishes at the next start).
 
+### Camera
+
+Turn on **Camera** in the recording options (or Settings > Recording), pick a camera if you have several, and choose a **circle** or **rounded** shape and a **size** (S, M, L). When the recording starts, a small bubble with your camera appears on the screen. **Drag it anywhere** you want the camera to be in the video; hover it for buttons to change its size and shape or to hide it. The camera is recorded into the video itself, so it shows exactly where the bubble sits.
+
+- Screen and region recordings: the camera sits where you leave the bubble inside the recorded area (it stays inside it). It starts at the bottom right.
+- Window recordings: the camera takes the corner of the video that the bubble is closest to; drop the bubble near a corner and it snaps there.
+- The toolbar has a **camera button (Hide camera / Show camera)**. Hiding the camera takes it out of the video until you show it again.
+- The bubble is not captured by the recording (the camera is added by FrameCapt, not seen through the screen). Like the toolbar, this relies on a Windows setting.
+- If the camera cannot be opened (not connected, used by another app, or blocked in Windows Settings > Privacy & security > Camera) FrameCapt asks: record without the camera, or cancel.
+- If a camera you saved is no longer connected, the default camera is used. If your camera is unplugged while recording, the overlay disappears and the recording goes on.
+
 ## Unfinished recordings
 
 If FrameCapt or Windows ends abruptly during a recording (crash, forced kill, power loss), the next start shows a card: "We found an unfinished recording" with **Recover** and **Discard**. Recovery is **best effort, not lossless**:

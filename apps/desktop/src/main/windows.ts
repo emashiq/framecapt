@@ -18,6 +18,7 @@ const ROLE_HASH: Record<Role, string> = {
   toolbar: '/toolbar',
   recorder: '/recorder',
   countdown: '/countdown',
+  camera: '/camera',
 };
 
 const roles = new Map<number, Role>();

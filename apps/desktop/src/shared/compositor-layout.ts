@@ -1,3 +1,4 @@
+import type { CameraSize } from './camera';
 import type { Size } from './geometry';
 import type { Rect } from './rect';
 import { floorEven } from './recording';
@@ -159,31 +160,22 @@ function placeGrid(tiles: readonly MosaicTile[]): { size: Size; rects: Rect[] } 
 
 // --- camera overlay -------------------------------------------------------------------------
 
-export type CameraSize = 's' | 'm' | 'l';
-export type CameraShape = 'circle' | 'square' | 'rect';
-
-/** Height of the camera as a fraction of the output's shorter side. */
-const CAMERA_SIZE: Record<CameraSize, number> = { s: 0.16, m: 0.22, l: 0.3 };
+/** Side of the camera as a fraction of the output's shorter side. */
+const CAMERA_SIZE: Record<CameraSize, number> = { s: 0.14, m: 0.2, l: 0.28 };
 const CAMERA_MARGIN = 0.02;
 
 /**
- * Where the webcam picture goes: centered on the normalized point (nx, ny of the output), the
- * size chosen by `size` (a circle or square is 1:1, 'rect' 16:9), and kept inside the output with
- * a small margin. Even aligned.
+ * Where the webcam picture goes: a square (clipped to a circle or rounded square when drawn)
+ * centered on the normalized point (nx, ny of the output), the size chosen by `size`, and kept
+ * inside the output with a small margin. Even aligned.
  */
-export function cameraRect(
-  center: { nx: number; ny: number },
-  out: Size,
-  size: CameraSize,
-  shape: CameraShape,
-): Rect {
+export function cameraRect(center: { nx: number; ny: number }, out: Size, size: CameraSize): Rect {
   const shorter = Math.min(out.width, out.height);
-  const height = floorEven(shorter * CAMERA_SIZE[size]);
-  const width = shape === 'rect' ? floorEven((height * 16) / 9) : height;
+  const side = floorEven(shorter * CAMERA_SIZE[size]);
   const margin = evenDown(shorter * CAMERA_MARGIN);
-  const maxX = Math.max(margin, out.width - width - margin);
-  const maxY = Math.max(margin, out.height - height - margin);
-  const x = Math.min(Math.max(margin, center.nx * out.width - width / 2), maxX);
-  const y = Math.min(Math.max(margin, center.ny * out.height - height / 2), maxY);
-  return { x: evenDown(Math.round(x)), y: evenDown(Math.round(y)), width, height };
+  const maxX = Math.max(margin, out.width - side - margin);
+  const maxY = Math.max(margin, out.height - side - margin);
+  const x = Math.min(Math.max(margin, center.nx * out.width - side / 2), maxX);
+  const y = Math.min(Math.max(margin, center.ny * out.height - side / 2), maxY);
+  return { x: evenDown(Math.round(x)), y: evenDown(Math.round(y)), width: side, height: side };
 }

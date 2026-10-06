@@ -21,6 +21,7 @@ import { isSquirrelInstall, UpdateService } from './updates';
 import {
   createMainWindow,
   getMainWindow,
+  getRole,
   getOriginConfig,
   getRendererDir,
   setQuitting,
@@ -110,7 +111,9 @@ function start(): void {
     // The production renderer is served from app://framecapt (dev uses the Vite server).
     registerAppProtocol(getRendererDir());
     installCsp(session.defaultSession, getOriginConfig());
-    installPermissionHandlers(session.defaultSession, getOriginConfig);
+    installPermissionHandlers(session.defaultSession, getOriginConfig, (contents) =>
+      contents ? getRole(contents.id) : undefined,
+    );
     installNetworkBlocker(session.defaultSession, getOriginConfig);
     disableSpellChecker(session.defaultSession);
     // Unconfigured (empty feed URL) builds never touch autoUpdater: no update code, no network.

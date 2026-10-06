@@ -1,7 +1,7 @@
 import type { Size } from '../../shared/geometry';
 import type { Rect } from '../../shared/rect';
 import { fitWithin } from '../../shared/recording';
-import { createCompositor, sourceTrack } from './compositor';
+import { createCompositor, sourceTrack, type CompositorCamera } from './compositor';
 import { CaptureError } from './errors';
 import { registerLoop, registerTrack } from './resource-registry';
 
@@ -51,6 +51,8 @@ export interface CanvasTransformOptions {
    * source size with even sides. Undefined: the output is exactly the crop rectangle (diagnostics).
    */
   limit?: Size | null | undefined;
+  /** The webcam overlay, drawn on top of the picture. */
+  camera?: CompositorCamera | undefined;
 }
 
 /**
@@ -81,6 +83,7 @@ export function createCanvasTransform(
     },
     fps,
     driver,
+    camera: options.camera,
   });
 }
 

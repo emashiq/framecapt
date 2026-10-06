@@ -27,6 +27,12 @@ const COPY = {
     description: 'The microphone could not be opened. Another app may be using it.',
     without: 'Record without microphone',
   },
+  'camera-missing': {
+    title: 'Camera not available',
+    description:
+      'FrameCapt could not open the camera. It may be disconnected, used by another app, or blocked in Windows Settings (Privacy & security, Camera).',
+    without: 'Record without camera',
+  },
 } as const;
 
 export interface RecorderChoiceDialogProps {

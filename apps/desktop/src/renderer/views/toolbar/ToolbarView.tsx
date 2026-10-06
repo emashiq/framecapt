@@ -12,6 +12,8 @@ import {
   Play,
   Square,
   TriangleAlert,
+  Video,
+  VideoOff,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -323,6 +325,24 @@ export function ToolbarView() {
               >
                 <Camera className="size-4" aria-hidden="true" />
               </button>
+
+              {snapshot.camera ? (
+                <button
+                  type="button"
+                  className={cn(iconButton, !snapshot.camera.visible && 'text-danger')}
+                  aria-pressed={!snapshot.camera.visible}
+                  aria-label={snapshot.camera.visible ? 'Hide camera' : 'Show camera'}
+                  title={snapshot.camera.visible ? 'Hide camera' : 'Show camera'}
+                  data-testid="toolbar-camera"
+                  onClick={() => void window.framecapt.invoke('recorder:toggleCamera')}
+                >
+                  {snapshot.camera.visible ? (
+                    <Video className="size-4" aria-hidden="true" />
+                  ) : (
+                    <VideoOff className="size-4" aria-hidden="true" />
+                  )}
+                </button>
+              ) : null}
 
               <button
                 type="button"

@@ -463,6 +463,11 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
           disabled={anythingBusy}
           outputDir={dirs.recordingsDir}
           onOpenSettings={() => onOpenSettings('recording')}
+          cameraStyle={{
+            shape: settings.recording.cameraShape,
+            size: settings.recording.cameraSize,
+            corner: settings.recording.cameraCorner,
+          }}
         />
       </div>
 

@@ -1,6 +1,8 @@
 import type { Size } from '../../shared/geometry';
 import { checkPixelRect, type Rect } from '../../shared/rect';
+import { cameraRect } from '../../shared/compositor-layout';
 import { CaptureError } from './errors';
+import { drawCameraLayer, type CameraLayerState } from './camera-layer';
 import type { CanvasDriver, CroppedStream } from './region-crop';
 import { registerLoop, registerTrack } from './resource-registry';
 
@@ -24,6 +26,12 @@ export interface CompositorTile {
   dst: Rect | ((out: Size, source: Size) => Rect);
 }
 
+export interface CompositorCamera {
+  stream: MediaStream;
+  /** Asked on every tick (the bubble moves while recording). */
+  state: () => CameraLayerState;
+}
+
 export interface CompositorOptions {
   /** Tiles are drawn in order, later ones on top. */
   tiles: readonly CompositorTile[];
@@ -34,6 +42,8 @@ export interface CompositorOptions {
   outSize: Size | ((sources: readonly Size[]) => Size);
   fps: number;
   driver: CanvasDriver;
+  /** The webcam overlay: drawn last, on top of every tile. */
+  camera?: CompositorCamera | undefined;
 }
 
 interface DrawTile {
@@ -69,16 +79,18 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
   const { tiles, fps, driver } = options;
   const first = tiles[0];
   if (!first) throw new CaptureError('unknown', 'A compositor needs at least one tile.');
-  const tracks = tiles.map((tile) => sourceTrack(tile.stream));
-  const videos = tracks.map((track) => {
+  const makeVideo = (stream: MediaStream): HTMLVideoElement => {
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
     // A separate MediaStream object sharing the same track: removing it never stops the track.
-    video.srcObject = new MediaStream([track]);
+    video.srcObject = new MediaStream([sourceTrack(stream)]);
     return video;
-  });
+  };
+  const videos = tiles.map((tile) => makeVideo(tile.stream));
   const primary = videos[0] as HTMLVideoElement;
+  const cameraVideo = options.camera ? makeVideo(options.camera.stream) : undefined;
+  const cameraState = options.camera?.state;
 
   const unregisterLoops: (() => void)[] = [];
   let disposed = false;
@@ -93,7 +105,7 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
     if (timer !== undefined) clearTimeout(timer);
     if (keepAlive !== undefined) clearTimeout(keepAlive);
     if (frameCallback !== undefined) primary.cancelVideoFrameCallback(frameCallback);
-    for (const video of videos) {
+    for (const video of cameraVideo ? [...videos, cameraVideo] : videos) {
       video.pause();
       video.srcObject = null;
     }
@@ -103,8 +115,9 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
   };
 
   try {
-    await Promise.all(videos.map((video) => video.play()));
-    await Promise.all(videos.map(waitForFrame));
+    const all = cameraVideo ? [...videos, cameraVideo] : videos;
+    await Promise.all(all.map((video) => video.play()));
+    await Promise.all(all.map(waitForFrame));
     const sources = videos.map((video) => ({ width: video.videoWidth, height: video.videoHeight }));
     const outSize =
       typeof options.outSize === 'function' ? options.outSize(sources) : options.outSize;
@@ -153,6 +166,17 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
           dst.width,
           dst.height,
         );
+      }
+      if (cameraVideo && cameraState) {
+        const state = cameraState();
+        if (state.visible) {
+          drawCameraLayer(
+            context,
+            cameraVideo,
+            cameraRect(state, outSize, state.size),
+            state.shape,
+          );
+        }
       }
       framesOut += 1;
       lastDraw = performance.now();
