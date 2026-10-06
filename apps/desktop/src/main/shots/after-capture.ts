@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { clipboard, ClipboardItem, nativeImage } from 'electron';
 import { MAX_THUMBNAIL_WIDTH } from '../../shared/history-ipc';
-import { defaultShotFileName, type ShotKind } from '../../shared/shots';
+import { defaultShotFileName, type CaptureTarget } from '../../shared/shots';
 import type { Settings } from '../../shared/settings';
 import type { HistoryService } from '../history/service';
 import { log } from '../logger';
@@ -29,7 +29,7 @@ export interface AfterCaptureDeps {
  */
 export function createAfterCapture(deps: AfterCaptureDeps) {
   return async (shot: {
-    kind: ShotKind;
+    kind: CaptureTarget;
     width: number;
     height: number;
     png: Buffer;

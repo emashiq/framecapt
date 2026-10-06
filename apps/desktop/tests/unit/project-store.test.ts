@@ -162,3 +162,60 @@ describe('ProjectStore', () => {
     });
   });
 });
+
+describe('ProjectStore image-layer pictures', () => {
+  const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+  const asset = (filler: string, width = 10, height = 8) => {
+    const png = pngBytes(width, height, filler);
+    return { id: sha(png), png };
+  };
+  const assetFile = (id: string, hash: string): string => fileOf(id, `assets/${hash}.png`);
+
+  it('writes assets/<sha256>.png before the project and reads them back', async () => {
+    const [a, b] = [asset('a'), asset('b')];
+    await store.write(ID, { ...input(), assets: [a, b] });
+    expect(fs.existsSync(assetFile(ID, a.id))).toBe(true);
+    const read = await store.read(ID);
+    expect(read.ok && read.assets.map((item) => item.id).sort()).toEqual([a.id, b.id].sort());
+    expect(read.ok && read.assets.find((item) => item.id === a.id)?.png.equals(a.png)).toBe(true);
+  });
+
+  it('a project without assets has none (old projects keep working)', async () => {
+    await store.write(ID, input());
+    expect(fs.existsSync(fileOf(ID, 'assets'))).toBe(false);
+    const read = await store.read(ID);
+    expect(read.ok && read.assets).toEqual([]);
+  });
+
+  it('updateDoc replaces the set: pictures no longer used are deleted', async () => {
+    const [a, b] = [asset('a'), asset('b')];
+    await store.write(ID, { ...input(), assets: [a, b] });
+    expect(await store.updateDoc(ID, SAMPLE_DOC, '1.0.0', [b])).toBe(true);
+    expect(fs.existsSync(assetFile(ID, a.id))).toBe(false);
+    expect(fs.existsSync(assetFile(ID, b.id))).toBe(true);
+    expect(await store.updateDoc(ID, SAMPLE_DOC, '1.0.0')).toBe(true);
+    expect(fs.existsSync(fileOf(ID, 'assets'))).toBe(false);
+  });
+
+  it('refuses a picture whose bytes do not hash to its id, a non-PNG, an oversized and too many', async () => {
+    const good = asset('a');
+    const wrongId = { id: 'e'.repeat(64), png: good.png };
+    const notPng = Buffer.from('definitely not a png, but long enough to hash');
+    const tooBig = asset('x', 20000, 10);
+    const many = Array.from({ length: 33 }, (_, index) => asset(String(index)));
+    for (const assets of [[wrongId], [{ id: sha(notPng), png: notPng }], [tooBig], many]) {
+      await expect(store.write(ID, { ...input(), assets })).rejects.toThrow();
+    }
+    // Nothing was published: no project.json exists for the failed writes.
+    expect(store.has(ID)).toBe(false);
+  });
+
+  it('a tampered or renamed picture is skipped on read (its layer shows a placeholder)', async () => {
+    const [a, b] = [asset('a'), asset('b')];
+    await store.write(ID, { ...input(), assets: [a, b] });
+    fs.writeFileSync(assetFile(ID, a.id), pngBytes(10, 8, 'tampered'));
+    fs.writeFileSync(fileOf(ID, 'assets/readme.txt'), 'x');
+    const read = await store.read(ID);
+    expect(read.ok && read.assets.map((item) => item.id)).toEqual([b.id]);
+  });
+});

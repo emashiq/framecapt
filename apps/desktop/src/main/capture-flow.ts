@@ -3,7 +3,7 @@ import { nativeImage, screen } from 'electron';
 import { overlayRectToFramePixels, type DisplayGeom } from '../shared/geometry';
 import type { Rect } from '../shared/rect';
 import type { FlowEndedEvent, OverlayMode, StartScreenshotRequest } from '../shared/shot-ipc';
-import { isBlankBitmap, type ShotKind } from '../shared/shots';
+import { isBlankBitmap, type CaptureTarget } from '../shared/shots';
 import { grabScreensExact, grabWindowExact } from './capture/exact-capture';
 import type { CaptureProvider, DisplayInfo } from './capture/types';
 import { sendEvent } from './events';
@@ -30,7 +30,7 @@ export interface CaptureFlowDeps {
   isBlocked?: () => boolean;
   /** The "after a capture" setting: copy or save before the editor opens (a failure is ignored). */
   afterCapture?: (shot: {
-    kind: ShotKind;
+    kind: CaptureTarget;
     width: number;
     height: number;
     png: Buffer;
@@ -414,7 +414,7 @@ export class CaptureFlow {
 
   private async completeWith(
     flowId: number,
-    shot: { kind: ShotKind; width: number; height: number; png: Buffer },
+    shot: { kind: CaptureTarget; width: number; height: number; png: Buffer },
   ): Promise<void> {
     if (!this.state.isCurrent(flowId)) return;
     const session = await this.deps.store.create(shot);

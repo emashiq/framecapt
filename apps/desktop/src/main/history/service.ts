@@ -14,7 +14,7 @@ import { detectImageFormat, validateImageBytes } from '../../shared/shots';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import { thumbnailArgs, type MediaTools } from '../media/ffmpeg';
-import type { ProjectInput, ProjectStore } from '../projects/store';
+import type { ProjectAsset, ProjectInput, ProjectStore } from '../projects/store';
 import type { ProjectDoc } from '../../shared/project-ipc';
 import { writeFileAtomic } from '../shots/atomic-write';
 import { CompletionRecordSchema, COMPLETED_DIR } from '../recording/manifest';
@@ -79,7 +79,9 @@ export interface ScreenshotOverwrite {
   project?: {
     doc: ProjectDoc;
     appVersion: string;
-    base?: Omit<ProjectInput, 'doc' | 'appVersion'>;
+    /** The pictures of the document's image layers. */
+    assets?: ProjectAsset[];
+    base?: Omit<ProjectInput, 'doc' | 'appVersion' | 'assets'>;
   };
 }
 
@@ -348,12 +350,18 @@ export class HistoryService {
       try {
         const updated =
           projectId !== undefined &&
-          (await projects.updateDoc(id, input.project.doc, input.project.appVersion));
+          (await projects.updateDoc(
+            id,
+            input.project.doc,
+            input.project.appVersion,
+            input.project.assets,
+          ));
         if (!updated && input.project.base) {
           await projects.write(id, {
             ...input.project.base,
             doc: input.project.doc,
             appVersion: input.project.appVersion,
+            ...(input.project.assets && { assets: input.project.assets }),
           });
           projectId = id;
         }

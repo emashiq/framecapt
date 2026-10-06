@@ -11,8 +11,8 @@ import {
 
 /**
  * The editor document as stored in a project (see src/main/projects) and read back. `migrateDoc`
- * accepts a version 1 document (no `schema`: arrow, rect, text, redact only) or a version 2 one,
- * drops what it does not understand and clamps every number, so a damaged or newer file can never
+ * accepts a version 1 document (no `schema`: arrow, rect, text, redact only), a version 2 one or a
+ * version 3 one (image layers), drops what it does not understand and clamps every number, so a damaged or newer file can never
  * put an invalid element on the canvas.
  */
 
@@ -121,6 +121,13 @@ const annotationSchemas = {
     ...styled,
   }),
   ruler: z.object({ id, from: point, to: point, color, width: num, ...styled }),
+  image: z.object({
+    id,
+    rect,
+    assetId: z.string().regex(/^[0-9a-f]{64}$/),
+    radius: num.optional(),
+    ...styled,
+  }),
   redact: z.object({ id, rect }),
 } as const;
 

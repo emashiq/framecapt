@@ -234,6 +234,8 @@ const EDITOR_ACTIONS_ADDED_LATER: readonly EditorAction[] = [
   'quickSave',
   'commandCenter',
   'commandPalette',
+  'openImage',
+  'insertImage',
 ];
 
 function keepUserEditorKeys(merged: Record<string, unknown>, given: unknown): void {

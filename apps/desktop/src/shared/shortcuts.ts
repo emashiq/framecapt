@@ -383,10 +383,10 @@ export function reservedCheck(accelerator: string, platform: string): ReservedCh
 // --- editor (in-app) shortcuts ----------------------------------------------------------------
 
 /**
- * The command center's keys (they work in the whole main window, editor included). They live in
- * the same editable in-app set as the editor keys.
+ * The keys that work in the whole main window, editor included: the command center's and Open
+ * image. They live in the same editable in-app set as the editor keys.
  */
-export const COMMAND_ACTIONS = ['commandCenter', 'commandPalette'] as const;
+export const COMMAND_ACTIONS = ['commandCenter', 'commandPalette', 'openImage'] as const;
 export type CommandAction = (typeof COMMAND_ACTIONS)[number];
 
 /**
@@ -413,6 +413,7 @@ export const EDITOR_ACTIONS = [
   'toolMagnifier',
   'toolStamp',
   'toolRuler',
+  'insertImage',
   'duplicate',
   'bringForward',
   'sendBackward',
@@ -434,6 +435,7 @@ export type EditorAction = (typeof EDITOR_ACTIONS)[number];
 export const EDITOR_LABELS: Record<EditorAction, string> = {
   commandCenter: 'Command center: search commands and captures',
   commandPalette: 'Command center: commands only',
+  openImage: 'Open an image to edit',
   toolSelect: 'Select tool',
   toolCrop: 'Crop tool',
   toolArrow: 'Arrow tool',
@@ -451,6 +453,7 @@ export const EDITOR_LABELS: Record<EditorAction, string> = {
   toolMagnifier: 'Magnifier tool',
   toolStamp: 'Stamp tool',
   toolRuler: 'Ruler tool',
+  insertImage: 'Insert an image from a file',
   duplicate: 'Duplicate the selection',
   bringForward: 'Bring forward',
   sendBackward: 'Send backward',
@@ -471,6 +474,7 @@ export const EDITOR_LABELS: Record<EditorAction, string> = {
 export const DEFAULT_EDITOR_SHORTCUTS: Record<EditorAction, string> = {
   commandCenter: 'Ctrl+K',
   commandPalette: 'Ctrl+Shift+P',
+  openImage: 'Ctrl+O',
   toolSelect: 'V',
   toolCrop: 'C',
   toolArrow: 'A',
@@ -488,6 +492,7 @@ export const DEFAULT_EDITOR_SHORTCUTS: Record<EditorAction, string> = {
   toolMagnifier: 'M',
   toolStamp: 'E',
   toolRuler: 'I',
+  insertImage: 'Ctrl+Shift+O',
   duplicate: 'Ctrl+D',
   bringForward: 'Ctrl+]',
   sendBackward: 'Ctrl+[',

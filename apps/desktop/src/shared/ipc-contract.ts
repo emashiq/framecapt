@@ -13,15 +13,20 @@ import {
   EditorSetDirtyRequestSchema,
   FlowEndedEventSchema,
   GrabFramesEventSchema,
+  HistoryImageRequestSchema,
+  HistoryImageResponseSchema,
   OverlayConfirmRequestSchema,
   OverlayInitSchema,
   OverlayPickDisplayRequestSchema,
+  PickImageResponseSchema,
   ShotCopyRequestSchema,
   ShotExportRequestSchema,
   ShotExportResponseSchema,
   ShotQuickSaveResponseSchema,
   ShotGetRequestSchema,
   ShotGetResponseSchema,
+  ShotImportRequestSchema,
+  ShotImportResponseSchema,
   ShotReadyEventSchema,
   ShowItemInFolderRequestSchema,
   StartScreenshotRequestSchema,
@@ -209,6 +214,30 @@ export const ipcContract = {
   'shot:openFromHistory': {
     request: OpenFromHistoryRequestSchema,
     response: OpenFromHistoryResponseSchema,
+    roles: ['main'],
+  },
+  /** File > Open image: a main-process dialog; returns the picked picture's validated bytes. */
+  'shot:openImage': {
+    request: z.undefined(),
+    response: PickImageResponseSchema,
+    roles: ['main'],
+  },
+  /** Starts an editor session from a PNG the renderer made from a picture (opened, dropped, pasted). */
+  'shot:importImage': {
+    request: ShotImportRequestSchema,
+    response: ShotImportResponseSchema,
+    roles: ['main'],
+  },
+  /** Insert image > From file: the same dialog, for an image layer inside the open editor. */
+  'editor:pickImage': {
+    request: z.undefined(),
+    response: PickImageResponseSchema,
+    roles: ['main'],
+  },
+  /** Insert image > From History: the picture of an owned screenshot, as PNG. */
+  'editor:historyImage': {
+    request: HistoryImageRequestSchema,
+    response: HistoryImageResponseSchema,
     roles: ['main'],
   },
   'shot:copy': {

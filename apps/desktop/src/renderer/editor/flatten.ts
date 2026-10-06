@@ -16,6 +16,7 @@ import {
   type EditorDoc,
   type EllipseAnnotation,
   type HighlightAnnotation,
+  type ImageAnnotation,
   type LineAnnotation,
   type MagnifierAnnotation,
   type PenAnnotation,
@@ -119,7 +120,14 @@ export type EffectCache = Map<string, CanvasLike>;
 /** More regions than this are dropped oldest first (each is a canvas of its region's size). */
 const EFFECT_CACHE_LIMIT = 24;
 
-/** What the elements that read the base image (blur, magnifier) and the shadows need. */
+/** A decoded picture an image layer draws: a canvas image source and its size in pixels. */
+export interface DrawAsset {
+  image: unknown;
+  width: number;
+  height: number;
+}
+
+/** What the elements that read the base image (blur, magnifier), image layers and the shadows need. */
 export interface DrawEnv {
   /** The base image the document was made from, and its size. */
   base: unknown;
@@ -132,6 +140,8 @@ export interface DrawEnv {
    * multiplied by this to stay the same size relative to the picture at any zoom.
    */
   shadowScale: number;
+  /** The pictures of image layers by asset id. A layer whose picture is missing draws a placeholder. */
+  assets?: ReadonlyMap<string, DrawAsset> | undefined;
 }
 
 /** Inter's vertical metrics (em), used when the context cannot report font metrics. */
@@ -640,6 +650,65 @@ export function drawRuler(ctx: DrawContext, ruler: RulerAnnotation, env?: DrawEn
   ctx.restore();
 }
 
+/**
+ * An image layer: the picture stretched to its rectangle, with rounded corners, opacity and a drop
+ * shadow. The shadow comes from an opaque caster drawn far off to the side whose shadow is offset
+ * back, so the caster itself never shows (the same trick as the frame's shadow). A layer whose
+ * picture is missing draws a neutral crossed box instead.
+ */
+export function drawImageLayer(ctx: DrawContext, layer: ImageAnnotation, env?: DrawEnv): void {
+  const { rect } = layer;
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const radius = layer.radius ?? 0;
+  const asset = env?.assets?.get(layer.assetId);
+  ctx.save();
+  ctx.globalAlpha = layer.opacity ?? 1;
+  const shadow = layer.shadow;
+  if (shadow && (shadow.blur > 0 || shadow.offset !== 0)) {
+    const scale = env?.shadowScale ?? 1;
+    const away = rect.x + rect.width + 4 * shadow.blur + 1000;
+    ctx.save();
+    ctx.shadowColor = SHADOW_COLOR;
+    ctx.shadowBlur = shadow.blur * scale;
+    ctx.shadowOffsetX = away * scale;
+    ctx.shadowOffsetY = shadow.offset * scale;
+    ctx.fillStyle = '#000000';
+    roundedRectPath(ctx, { ...rect, x: rect.x - away }, radius);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  roundedRectPath(ctx, rect, radius);
+  ctx.clip();
+  if (asset) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(
+      asset.image,
+      0,
+      0,
+      asset.width,
+      asset.height,
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+    );
+  } else {
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = Math.max(1, Math.min(rect.width, rect.height) / 40);
+    ctx.beginPath();
+    ctx.moveTo(rect.x, rect.y);
+    ctx.lineTo(rect.x + rect.width, rect.y + rect.height);
+    ctx.moveTo(rect.x + rect.width, rect.y);
+    ctx.lineTo(rect.x, rect.y + rect.height);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
 // --- effects that read the base image ------------------------------------------------------------
 
 /** drawImage of a source rectangle that may reach outside the image: the outside part is skipped. */
@@ -923,6 +992,9 @@ export function drawAnnotations(
       case 'ruler':
         drawRuler(ctx, annotation, env);
         break;
+      case 'image':
+        drawImageLayer(ctx, annotation, env);
+        break;
       case 'redact':
         break; // drawn last, above everything (drawRedactions)
     }
@@ -1000,6 +1072,8 @@ export interface RenderOptions {
   cache?: EffectCache;
   /** Editor only: device pixels per image pixel (shadows follow the zoom). Default 1. */
   shadowScale?: number;
+  /** The pictures of the document's image layers, by asset id. */
+  assets?: ReadonlyMap<string, DrawAsset>;
 }
 
 function drawFrameBackground(ctx: DrawContext, beautify: Beautify, width: number, height: number) {
@@ -1049,6 +1123,7 @@ export function renderDoc(
     createCanvas: options.createCanvas ?? defaultCanvasFactory(),
     cache: options.cache,
     shadowScale: options.shadowScale ?? 1,
+    assets: options.assets,
   };
   ctx.save();
   const framed = options.forExport && beautifyActive(doc);

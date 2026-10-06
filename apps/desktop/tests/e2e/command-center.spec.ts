@@ -310,6 +310,9 @@ test.describe('title bar and command center', () => {
     const popup = page.getByTestId('menu-popup');
     await expect(popup).toBeVisible();
     await expect(popup).toHaveAttribute('role', 'menu');
+    await expect(page.getByTestId('menu-item-file.openImage')).toBeFocused();
+    await expect(page.getByTestId('menu-item-file.openImage')).toContainText('Ctrl+O');
+    await page.keyboard.press('ArrowDown');
     await expect(page.getByTestId('menu-item-shot.region')).toBeFocused();
     await expect(page.getByTestId('menu-item-shot.region')).toContainText('Ctrl+Shift+3');
     await page.keyboard.press('ArrowDown');

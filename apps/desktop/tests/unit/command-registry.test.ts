@@ -29,6 +29,7 @@ function actions(): CommandActions {
     togglePause: vi.fn(),
     navigate: vi.fn(),
     showKeyboardHelp: vi.fn(),
+    openImage: vi.fn(),
     toggleTheme: vi.fn(),
     quit: vi.fn(),
     openCommandCenter: vi.fn(),
@@ -151,6 +152,16 @@ describe('commands call the app actions', () => {
     expect(calls.startCapture).toHaveBeenNthCalledWith(2, 'record', 'region');
     expect(calls.navigate).toHaveBeenCalledWith('settings', 'shortcuts');
     expect(calls.showKeyboardHelp).toHaveBeenCalled();
+  });
+
+  it('Open image is in the palette and at the top of the File menu, and runs the app action', () => {
+    const calls = actions();
+    const commands = buildCommands(env(), calls);
+    expect(idsOf(rankCommands(commands, 'open image'))).toContain('file.openImage');
+    expect(MENUS.find((menu) => menu.id === 'file')?.items[0]).toBe('file.openImage');
+    expect(hintFor(find(commands, 'file.openImage'), DEFAULT_SETTINGS)).toEqual(['Ctrl', 'O']);
+    find(commands, 'file.openImage').run();
+    expect(calls.openImage).toHaveBeenCalledTimes(1);
   });
 
   it('every menu entry is a known command', () => {

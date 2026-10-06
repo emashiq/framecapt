@@ -424,7 +424,7 @@ interface ShortcutGroup {
 const SHORTCUT_GROUPS: ShortcutGroup[] = [
   { title: 'Screenshots', actions: SHORTCUT_ACTIONS.slice(0, 3) },
   { title: 'Recording', actions: SHORTCUT_ACTIONS.slice(3) },
-  { title: 'Command center', actions: COMMAND_ACTIONS },
+  { title: 'Main window', actions: COMMAND_ACTIONS },
   { title: 'Editor', actions: EDITOR_ACTIONS.filter((action) => !isCommandAction(action)) },
 ];
 
@@ -555,6 +555,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Open the search box in the title bar: commands and saved captures.';
     case 'commandPalette':
       return 'Open the search box with commands only.';
+    case 'openImage':
+      return 'Pick a picture file and edit it like a screenshot.';
     case 'toolSelect':
       return 'Select and move marks.';
     case 'toolCrop':
@@ -589,6 +591,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Place a check, cross, star or other stamp.';
     case 'toolRuler':
       return 'Measure a distance in pixels.';
+    case 'insertImage':
+      return 'Pick a picture file and place it on the screenshot as a layer.';
     case 'duplicate':
       return 'Copy the selected marks next to the originals.';
     case 'bringForward':

@@ -50,6 +50,8 @@ export interface CommandActions {
   togglePause: () => void;
   navigate: (view: 'capture' | 'history' | 'settings', section?: SettingsSectionId) => void;
   showKeyboardHelp: () => void;
+  /** Same as the Open image button of the Capture view (a picture file opens in the editor). */
+  openImage: () => void;
   toggleTheme: () => void;
   quit: () => void;
   openCommandCenter: () => void;
@@ -116,6 +118,14 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.startCapture('record', target),
     });
   }
+  add({
+    id: 'file.openImage',
+    title: 'Open image…',
+    group: 'Capture',
+    keywords: ['picture', 'photo', 'file', 'import', 'edit', 'png', 'jpg'],
+    hint: { kind: 'editor', action: 'openImage' },
+    run: actions.openImage,
+  });
   // Stop and pause belong to the recording that runs: they stay available while it runs.
   if (env.recorderStatus === 'recording' || env.recorderStatus === 'paused') {
     add({
@@ -299,6 +309,8 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
     id: 'file',
     label: 'File',
     items: [
+      'file.openImage',
+      null,
       'shot.region',
       'shot.window',
       'shot.screen',

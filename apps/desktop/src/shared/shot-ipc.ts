@@ -6,7 +6,8 @@ import {
   MAX_EXPORT_BYTES,
   MAX_FRAME_DIMENSION,
   MAX_FRAME_PNG_BYTES,
-  ShotKindSchema,
+  MAX_IMPORT_BYTES,
+  CaptureTargetSchema,
   ShotSessionMetaSchema,
 } from './shots';
 
@@ -27,7 +28,7 @@ const bytes = (max: number) =>
 
 export const StartScreenshotRequestSchema = z
   .strictObject({
-    target: ShotKindSchema,
+    target: CaptureTargetSchema,
     sourceId: SourceIdSchema.optional(),
   })
   .refine((request) => request.target !== 'window' || request.sourceId !== undefined, {
@@ -41,6 +42,26 @@ export const ShotGetResponseSchema = z.strictObject({
   session: ShotSessionMetaSchema,
   png: z.instanceof(ArrayBuffer),
 });
+
+/**
+ * "Open image" (File menu, Ctrl+O): the user picks a picture in a main-process dialog; main checks
+ * its size and magic bytes and hands the bytes to the renderer, which decodes any format and sends
+ * a PNG back with `shot:importImage`. `editor:pickImage` (Insert image > From file) answers alike.
+ */
+export const PickImageResponseSchema = z.union([
+  z.strictObject({ name: z.string().max(260), bytes: bytes(MAX_IMPORT_BYTES) }),
+  z.strictObject({ cancelled: z.literal(true) }),
+]);
+
+/** A PNG the renderer made from a picture the user opened, dropped or pasted: it starts an editor session. */
+export const ShotImportRequestSchema = z.strictObject({ png: bytes(MAX_FRAME_PNG_BYTES) });
+export const ShotImportResponseSchema = z.strictObject({ session: ShotSessionMetaSchema });
+
+/** The picture of a screenshot in History, as PNG, to insert as an image layer (main-owned id). */
+export const HistoryImageRequestSchema = z.strictObject({
+  historyId: z.string().regex(/^[0-9a-f-]{36}$/),
+});
+export const HistoryImageResponseSchema = z.strictObject({ png: z.instanceof(ArrayBuffer) });
 
 export const ImageFormatSchema = z.enum(['png', 'jpeg']);
 

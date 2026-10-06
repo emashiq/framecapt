@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { notify } from '../lib/notify';
-import type { ShotKind } from '../../shared/shots';
+import type { CaptureTarget } from '../../shared/shots';
 
 export interface CaptureFlow {
   /** The target of the running flow, or null when idle. */
-  running: ShotKind | null;
+  running: CaptureTarget | null;
   /**
    * Starts a screenshot flow. `trigger` is the element to focus again when the flow is cancelled
    * or fails (after a completed flow the result view takes over).
    */
-  start: (target: ShotKind, trigger: HTMLElement | null, sourceId?: string) => Promise<void>;
+  start: (target: CaptureTarget, trigger: HTMLElement | null, sourceId?: string) => Promise<void>;
 }
 
 /** Drives `capture:startScreenshot` and follows its outcome events from main. */
 export function useCaptureFlow(): CaptureFlow {
-  const [running, setRunning] = useState<ShotKind | null>(null);
+  const [running, setRunning] = useState<CaptureTarget | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const refocus = useRef(false);
 

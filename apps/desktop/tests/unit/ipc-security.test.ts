@@ -14,7 +14,8 @@ import {
   type ChannelDef,
   type IpcChannel,
 } from '../../src/shared/ipc-contract';
-import { MAX_EXPORT_BYTES } from '../../src/shared/shots';
+import { MAX_ASSET_BYTES, MAX_PROJECT_ASSETS } from '../../src/shared/project-ipc';
+import { MAX_EXPORT_BYTES, MAX_FRAME_PNG_BYTES } from '../../src/shared/shots';
 import { ROLES } from '../../src/shared/types';
 
 const origin: AppOriginConfig = {};
@@ -128,6 +129,8 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   'shot:get': { sessionId: 'abc' },
   'shot:export': { sessionId: 'abc', format: 'png', bytes: bytes(8) },
   'shot:copy': { sessionId: 'abc', bytes: bytes(8) },
+  'shot:importImage': { png: bytes(8) },
+  'editor:historyImage': { historyId: UUID },
   'editor:setDirty': { dirty: true },
   'shell:showItemInFolder': { path: 'C:\\x.png' },
   'overlay:confirm': { displayId: '1', rect: { x: 0, y: 0, width: 10, height: 10 } },
@@ -236,9 +239,41 @@ describe('IPC: payloads are validated strictly', () => {
     expect(parses('shot:copy', { ...valid('shot:copy'), bytes: bytes(MAX_EXPORT_BYTES + 1) })).toBe(
       false,
     );
+    expect(
+      parses('shot:importImage', { png: bytes(MAX_FRAME_PNG_BYTES + 1) }),
+      'importImage over the frame cap',
+    ).toBe(false);
+    expect(parses('shot:importImage', { png: bytes(0) })).toBe(false);
     // Typed arrays and strings are not ArrayBuffers: the structured-clone shape is fixed.
     expect(parses('session:appendChunk', chunk(new Uint8Array(4)))).toBe(false);
     expect(parses('session:appendChunk', chunk('AAAA'))).toBe(false);
+  });
+
+  it('image-layer pictures sent with a project are bounded and named by a SHA-256', () => {
+    const id = 'a'.repeat(64);
+    const withAssets = (assets: unknown) => ({
+      ...valid('shot:export'),
+      project: { doc: { schema: 3 }, assets },
+    });
+    const sample = { id, png: bytes(8) };
+    expect(parses('shot:export', withAssets([sample]))).toBe(true);
+    expect(parses('shot:export', withAssets([{ ...sample, id: 'not-a-hash' }]))).toBe(false);
+    expect(parses('shot:export', withAssets([{ ...sample, id: id.toUpperCase() }]))).toBe(false);
+    expect(parses('shot:export', withAssets([{ ...sample, path: 'C:\\x' }]))).toBe(false);
+    expect(parses('shot:export', withAssets([{ id, png: bytes(MAX_ASSET_BYTES + 1) }]))).toBe(
+      false,
+    );
+    expect(parses('shot:export', withAssets([{ id, png: bytes(0) }]))).toBe(false);
+    expect(parses('shot:export', withAssets(Array(MAX_PROJECT_ASSETS + 1).fill(sample)))).toBe(
+      false,
+    );
+    // 3 x 30 MB passes the per-picture cap but not the 64 MB total.
+    expect(
+      parses(
+        'shot:export',
+        withAssets(Array.from({ length: 3 }, () => ({ id, png: bytes(30 * 1024 * 1024) }))),
+      ),
+    ).toBe(false);
   });
 
   it('unbounded strings, numbers and lists are refused', () => {
