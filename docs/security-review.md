@@ -17,7 +17,7 @@ Companion documents: `docs/performance.md` (benchmark), `docs/architecture.md` (
 | Preload                                   | `invoke`/`on` only; allow-listed names; the callback never sees the IPC event (tests).                                                          |
 | Navigation, windows, webviews             | Locked for every webContents; no `openExternal` anywhere in the app.                                                                            |
 | CSP / protocol                            | Strict CSP (header + meta); `framecapt-media:` resolves ids only, no path, no listing.                                                          |
-| Permissions                               | Microphone and clipboard-write only; camera, devices, notifications, everything else denied.                                                    |
+| Permissions                               | Microphone and clipboard-write; the camera only for the recorder and camera windows (the main window may list devices); everything else denied.  |
 | Network                                   | None. CSP `connect-src 'self'` plus a session-level blocker (S-08).                                                                             |
 | Filesystem                                | All writes/deletes are main-owned, contained and atomic; symlinks never followed when deleting (S-07).                                          |
 | FFmpeg                                    | `shell:false`, argument arrays, absolute main-owned paths only, `file` protocol only (S-02).                                                    |
@@ -61,7 +61,7 @@ contract's, and a test requires equality. `tests/unit/ipc-security.test.ts` runs
 channels** (every role x top/sub frame x good/foreign URL).
 
 Roles: `main` = the app window, `overlay` = selection overlays, `toolbar` = recording controls, `recorder` = the hidden
-capture window, `countdown` = the 3-2-1 window. Payload column: field names of the strict schema; `bytes` fields are
+capture window, `countdown` = the 3-2-1 window, `camera` = the camera bubble. Payload column: field names of the strict schema; `bytes` fields are
 `ArrayBuffer` with a size cap. "Path?" says whether the request can carry a path, URL or command: **no** unless stated.
 
 | Channel                | Roles          | Request                                                                         | Path? / notes                                                                       |
@@ -89,7 +89,7 @@ Companion documents: `docs/performance.md` (benchmark), `docs/architecture.md` (
 | Preload                                   | `invoke`/`on` only; allow-listed names; the callback never sees the IPC event (tests).                                                          |
 | Navigation, windows, webviews             | Locked for every webContents; no `openExternal` anywhere in the app.                                                                            |
 | CSP / protocol                            | Strict CSP (header + meta); `framecapt-media:` resolves ids only, no path, no listing.                                                          |
-| Permissions                               | Microphone and clipboard-write only; camera, devices, notifications, everything else denied.                                                    |
+| Permissions                               | Microphone and clipboard-write; the camera only for the recorder and camera windows (the main window may list devices); everything else denied.  |
 | Network                                   | None. CSP `connect-src 'self'` plus a session-level blocker (S-08).                                                                             |
 | Filesystem                                | All writes/deletes are main-owned, contained and atomic; symlinks never followed when deleting (S-07).                                          |
 | FFmpeg                                    | `shell:false`, argument arrays, absolute main-owned paths only, `file` protocol only (S-02).                                                    |
@@ -133,7 +133,7 @@ contract's, and a test requires equality. `tests/unit/ipc-security.test.ts` runs
 channels** (every role x top/sub frame x good/foreign URL).
 
 Roles: `main` = the app window, `overlay` = selection overlays, `toolbar` = recording controls, `recorder` = the hidden
-capture window, `countdown` = the 3-2-1 window. Payload column: field names of the strict schema; `bytes` fields are
+capture window, `countdown` = the 3-2-1 window, `camera` = the camera bubble. Payload column: field names of the strict schema; `bytes` fields are
 `ArrayBuffer` with a size cap. "Path?" says whether the request can carry a path, URL or command: **no** unless stated.
 
 , systemAudio | no. Source is re-validated against a fresh listing; one-shot, 5 s, bound to the requesting webContents (`capture/grants.ts`) |
@@ -164,6 +164,9 @@ capture window, `countdown` = the 3-2-1 window. Payload column: field names of t
 | `recorder:screenshot` | toolbar | none | saves a still of the running recording to the screenshots folder (main picks the path); refused unless recording or paused; one at a time |
 | `recorder:toggleMute` | main, toolbar | source enum | - |
 | `toolbar:resize` | toolbar | width 120..900 | - |
+| `recorder:toggleCamera` | toolbar | none | shows or hides the camera bubble of the running recording; refused (NOT_FOUND) when it has none |
+| `camera:getStyle` | camera | none | answers the bubble's device id (<= 256), shape and size; no path |
+| `camera:setStyle` | camera | size s/m/l, shape circle/rounded, visible (a non-empty subset, strict) | resizes and hides the bubble; size, shape and corner are saved to the recording settings by main |
 | `recorder:getState` | main, toolbar, recorder, countdown | none | per-role answer (S-04) |
 | `recorder:resolveChoice`, `recorder:reset` | main | answer enum / none | - |
 | `recorder:showInFolder`, `recorder:copyPath` | main | resultId <= 64 | id into `MediaRegistry` (uuid made by main) |
@@ -218,9 +221,11 @@ blob: framecapt-media:; media-src 'self' blob: mediastream: framecapt-media:; fo
   (`vite.renderer.config.ts`); since phase 10 the `app://` protocol handler also sends the policy as a response header. Development adds only the dev-server origin and an
   inline script for React refresh (`devCsp`); the packaged app was checked to carry the meta tag (smoke test). The one
   loosening is `style-src 'unsafe-inline'` (R-03).
-- **Permissions** (`security.ts:59-99`, `app-origin.ts:67-86`): request and check handlers allow only `media` (microphone:
-  a request that includes `video` is denied, the app has no camera feature) and `clipboard-sanitized-write`, and only for app
-  URLs. Everything else is denied: geolocation, web notifications (the app's own OS notifications are made by main, `desktop.ts:155`, with fixed text), MIDI, HID, serial,
+- **Permissions** (`security.ts:59-99`, `app-origin.ts:67-86`): request and check handlers allow only `media` and `clipboard-sanitized-write`, and only for app
+  URLs. The microphone is allowed for every app page; video (the camera) depends on the window's registered role: a
+  request (`getUserMedia`) only from `recorder` and `camera`, a check (device labels for `enumerateDevices`, Settings) also from
+  `main`; an unregistered window, overlay, toolbar and countdown get neither (`isPermissionAllowed` in `app-origin.ts`, `roleOf` from `windows.ts`; tests in `app-origin.test.ts`, `window-security.test.ts`).
+  The camera bubble window is content protected, so it is never captured; the camera is composited into the video by the recorder (ADR-042). Everything else is denied: geolocation, web notifications (the app's own OS notifications are made by main, `desktop.ts:155`, with fixed text), MIDI, HID, serial,
   USB, Bluetooth, clipboard-read, fullscreen, pointer lock, idle detection, `display-capture`, `openExternal`... (table test).
   Display capture is not a permission prompt: `setDisplayMediaRequestHandler` (`capture/display-media.ts`) answers only
   from a main-made one-shot grant bound to the requesting webContents/top frame/app URL, otherwise `{}`. Device choosers

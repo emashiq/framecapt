@@ -1,3 +1,4 @@
+import type { Role } from '../shared/types';
 import { APP_HOST, APP_SCHEME } from './app-asset';
 
 export interface AppOriginConfig {
@@ -62,19 +63,30 @@ export function isNetworkRequestAllowed(url: string, config: AppOriginConfig): b
 
 const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write']);
 
+/** Windows that may ask for the camera (getUserMedia video): the recorder and the camera bubble. */
+const CAMERA_REQUEST_ROLES: readonly Role[] = ['recorder', 'camera'];
+/** Windows that may see camera device labels (a permission check): those above, and the main window's Settings. */
+const CAMERA_CHECK_ROLES: readonly Role[] = ['main', 'recorder', 'camera'];
+
 /**
  * Permission policy: only `media` and `clipboard-sanitized-write`, only for the app's own pages.
- * `media` is for the microphone: a request that includes `video` (camera) is denied, because the
- * MVP has no camera feature. Display capture is not a permission request; it is granted by
- * session.setDisplayMediaRequestHandler (capture/display-media.ts).
+ * `media` is the microphone for every app page. Video (the camera) depends on the window: a
+ * request (getUserMedia) only from the recorder and camera windows, a check (device labels in
+ * enumerateDevices) also from the main window. Display capture is not a permission request; it is
+ * granted by session.setDisplayMediaRequestHandler (capture/display-media.ts).
  */
 export function isPermissionAllowed(
   permission: string,
   requestingUrl: string | undefined | null,
   config: AppOriginConfig,
   mediaTypes?: readonly string[],
+  role?: Role,
+  mode: 'request' | 'check' = 'request',
 ): boolean {
   if (!ALLOWED_PERMISSIONS.has(permission) || !isAppUrl(requestingUrl, config)) return false;
-  if (permission === 'media' && mediaTypes?.includes('video')) return false;
+  if (permission === 'media' && mediaTypes?.includes('video')) {
+    const roles = mode === 'request' ? CAMERA_REQUEST_ROLES : CAMERA_CHECK_ROLES;
+    return role !== undefined && roles.includes(role);
+  }
   return true;
 }

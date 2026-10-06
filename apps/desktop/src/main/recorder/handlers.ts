@@ -33,6 +33,9 @@ export function registerRecorderHandlers(
   handle('toolbar:resize', { roles: ['toolbar'] }, (request) =>
     controller.resizeToolbar(request.width),
   );
+  handle('recorder:toggleCamera', { roles: ['toolbar'] }, () => controller.toggleCamera());
+  handle('camera:getStyle', { roles: ['camera'] }, () => controller.cameraStyle());
+  handle('camera:setStyle', { roles: ['camera'] }, (request) => controller.setCameraStyle(request));
   handle(
     'recorder:getState',
     { roles: ['main', 'toolbar', 'recorder', 'countdown'] },

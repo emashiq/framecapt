@@ -18,6 +18,7 @@ export const IDLE_SNAPSHOT: RecorderSnapshot = {
   lostTiles: [],
   choice: null,
   choiceCanUseDefault: false,
+  camera: null,
   quitting: false,
   countdown: null,
   progress: null,

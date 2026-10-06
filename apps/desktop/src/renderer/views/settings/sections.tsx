@@ -21,7 +21,9 @@ import {
   type ShortcutAction,
 } from '../../../shared/shortcuts';
 import { Logo } from '../../components/Logo';
+import { CameraSelect } from '../../components/CameraSelect';
 import { MicrophoneSelect } from '../../components/MicrophoneSelect';
+import { CAMERA_SHAPE_OPTIONS, CAMERA_SIZE_OPTIONS } from '../../components/RecordOptions';
 import { ShortcutField } from '../../components/ShortcutField';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -391,6 +393,66 @@ export function RecordingSection({ onReset }: SectionProps) {
                 recording: { micEnabled: true, micDeviceId: deviceId ?? null },
               })
             }
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Camera"
+        description="Show your webcam in a bubble you can drag. It is recorded into the video."
+      >
+        {({ labelledBy, describedBy }) => (
+          <Switch
+            aria-labelledby={labelledBy}
+            aria-describedby={describedBy}
+            data-testid="setting-camera"
+            checked={recording.cameraEnabled}
+            onCheckedChange={(cameraEnabled) =>
+              void updateSettings({ recording: { cameraEnabled } })
+            }
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Camera device"
+        description="Which camera to use. The default follows Windows."
+      >
+        {({ labelledBy }) => (
+          <CameraSelect
+            className="w-72 max-w-full"
+            deviceId={recording.cameraDeviceId}
+            disabled={!recording.cameraEnabled}
+            labelledBy={labelledBy}
+            testId="setting-camera-device"
+            onChange={(deviceId) =>
+              void updateSettings({
+                recording: { cameraEnabled: true, cameraDeviceId: deviceId ?? null },
+              })
+            }
+          />
+        )}
+      </SettingRow>
+      <SettingRow label="Camera shape" description="Circle or rounded square.">
+        {() => (
+          <Segmented
+            label="Camera shape"
+            data-testid="setting-camera-shape"
+            value={recording.cameraShape}
+            options={CAMERA_SHAPE_OPTIONS}
+            onChange={(cameraShape) => void updateSettings({ recording: { cameraShape } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Camera size"
+        description="Small, medium or large. For window recordings the camera sits in the corner you drop the bubble in."
+      >
+        {() => (
+          <Segmented
+            label="Camera size"
+            data-testid="setting-camera-size"
+            value={recording.cameraSize}
+            options={CAMERA_SIZE_OPTIONS}
+            onChange={(cameraSize) => void updateSettings({ recording: { cameraSize } })}
           />
         )}
       </SettingRow>

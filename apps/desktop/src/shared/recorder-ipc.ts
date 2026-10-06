@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CameraCornerSchema, CameraShapeSchema, CameraSizeSchema } from './camera';
 import { RectSchema } from './capture-schemas';
 import { FOLLOW_ZOOMS } from './compositor-layout';
 import { HistoryIdSchema } from './history-ipc';
@@ -36,6 +37,19 @@ export const RecordOptionsSchema = z.strictObject({
   follow: z.strictObject({ zoom: z.union(FOLLOW_ZOOM_LITERALS) }).optional(),
   /** Compressed storage: record at a lower bitrate. Optional, so older manifests still parse. */
   compressed: z.boolean().optional(),
+  /**
+   * The webcam overlay: composited into the picture. `corner` places it for window recordings.
+   * Optional, so manifests written before it existed still parse.
+   */
+  camera: z
+    .strictObject({
+      /** Undefined = the default camera. */
+      deviceId: z.string().max(256).optional(),
+      shape: CameraShapeSchema,
+      size: CameraSizeSchema,
+      corner: CameraCornerSchema,
+    })
+    .optional(),
 });
 export type RecordOptions = z.infer<typeof RecordOptionsSchema>;
 
@@ -86,6 +100,7 @@ export const PreflightChoiceKindSchema = z.enum([
   'mic-missing',
   'mic-denied',
   'mic-unavailable',
+  'camera-missing',
 ]);
 export const ChoiceAnswerSchema = z.enum(['continue-without', 'use-default', 'cancel']);
 export const ResolveChoiceRequestSchema = z.strictObject({ answer: ChoiceAnswerSchema });
@@ -142,6 +157,8 @@ export const RecorderSnapshotSchema = z.object({
   choice: PreflightChoiceKindSchema.nullable(),
   /** The "Use default microphone" answer is only offered when a default microphone exists. */
   choiceCanUseDefault: z.boolean(),
+  /** The recording has a camera overlay (null: none) and whether it is shown right now. */
+  camera: z.strictObject({ visible: z.boolean() }).nullable(),
   /** The app is quitting and finishing the recording first. */
   quitting: z.boolean(),
   /** The number on the countdown right now (3, 2, 1), else null. */
@@ -203,6 +220,15 @@ export const EngineCommandSchema = z.discriminatedUnion('cmd', [
     cmd: z.literal('cursor'),
     nx: z.number().min(0).max(1),
     ny: z.number().min(0).max(1),
+  }),
+  /** The webcam overlay: where its center is (0..1 across the output), how big, its shape, shown or not. */
+  z.object({
+    cmd: z.literal('camera'),
+    nx: z.number().min(0).max(1),
+    ny: z.number().min(0).max(1),
+    size: CameraSizeSchema,
+    shape: CameraShapeSchema,
+    visible: z.boolean(),
   }),
 ]);
 export type EngineCommand = z.infer<typeof EngineCommandSchema>;

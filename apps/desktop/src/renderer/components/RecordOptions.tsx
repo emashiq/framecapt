@@ -1,10 +1,18 @@
 import { useId, type ReactNode } from 'react';
 import { Settings2 } from 'lucide-react';
+import {
+  DEFAULT_CAMERA_STYLE,
+  type CameraCorner,
+  type CameraShape,
+  type CameraSize,
+} from '../../shared/camera';
 import type { RecordOptions as Options } from '../../shared/recorder-ipc';
 import type { RecordFps, RecordQuality } from '../../shared/recording';
 import { followFromSetting, type FollowMouseSetting } from '../../shared/settings';
 import { usePlatformCapabilities } from '../lib/use-platform-capabilities';
+import { useCameras } from '../recorder/use-cameras';
 import { useMicrophones } from '../recorder/use-microphones';
+import { CameraSelect } from './CameraSelect';
 import { MicrophoneSelect } from './MicrophoneSelect';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
@@ -19,6 +27,8 @@ export interface RecordOptionsProps {
   /** Where finished recordings go (shown as a line; the folder itself is chosen in Settings). */
   outputDir?: string;
   onOpenSettings?: () => void;
+  /** The remembered camera style: used when the camera is switched on (undefined: the defaults). */
+  cameraStyle?: { shape: CameraShape; size: CameraSize; corner: CameraCorner };
 }
 
 const QUALITY = [
@@ -28,6 +38,16 @@ const QUALITY = [
 const FPS = [
   { value: 30, label: '30' },
   { value: 60, label: '60' },
+] as const;
+
+export const CAMERA_SHAPE_OPTIONS = [
+  { value: 'circle', label: 'Circle' },
+  { value: 'rounded', label: 'Rounded' },
+] as const;
+export const CAMERA_SIZE_OPTIONS = [
+  { value: 's', label: 'S' },
+  { value: 'm', label: 'M' },
+  { value: 'l', label: 'L' },
 ] as const;
 
 const FOLLOW = [
@@ -76,8 +96,10 @@ export function RecordOptions({
   disabled = false,
   outputDir,
   onOpenSettings,
+  cameraStyle = DEFAULT_CAMERA_STYLE,
 }: RecordOptionsProps) {
   const micId = useId();
+  const cameraId = useId();
   const systemId = useId();
   const qualityId = useId();
   const fpsId = useId();
@@ -85,6 +107,9 @@ export function RecordOptions({
   const countdownId = useId();
   const microphones = useMicrophones();
   const noMic = microphones.loaded && microphones.devices.length === 0;
+  const cameras = useCameras();
+  const noCamera = cameras.loaded && cameras.devices.length === 0;
+  const camera = options.camera;
   const platform = usePlatformCapabilities();
 
   return (
@@ -128,6 +153,55 @@ export function RecordOptions({
               onChange({ ...options, mic: { enabled: true, ...(deviceId && { deviceId }) } })
             }
           />
+        </Cell>
+        <Cell
+          id={cameraId}
+          label="Camera"
+          hint="Your webcam, in the corner of the video. Drag the bubble to move it."
+          control={
+            <Switch
+              aria-labelledby={cameraId}
+              data-testid="opt-camera"
+              checked={camera !== undefined && !noCamera}
+              disabled={disabled || noCamera}
+              onCheckedChange={(enabled) => {
+                const { camera: _drop, ...rest } = options;
+                onChange(enabled ? { ...rest, camera: { ...cameraStyle } } : rest);
+              }}
+            />
+          }
+        >
+          <CameraSelect
+            deviceId={camera?.deviceId}
+            disabled={disabled || camera === undefined}
+            labelledBy={cameraId}
+            testId="opt-camera-device"
+            onChange={(deviceId) => {
+              if (!camera) return;
+              const { deviceId: _old, ...rest } = camera;
+              onChange({ ...options, camera: { ...rest, ...(deviceId && { deviceId }) } });
+            }}
+          />
+          {camera ? (
+            <div className="flex flex-wrap gap-2">
+              <Segmented<CameraShape>
+                label="Camera shape"
+                data-testid="opt-camera-shape"
+                value={camera.shape}
+                options={CAMERA_SHAPE_OPTIONS}
+                disabled={disabled}
+                onChange={(shape) => onChange({ ...options, camera: { ...camera, shape } })}
+              />
+              <Segmented<CameraSize>
+                label="Camera size"
+                data-testid="opt-camera-size"
+                value={camera.size}
+                options={CAMERA_SIZE_OPTIONS}
+                disabled={disabled}
+                onChange={(size) => onChange({ ...options, camera: { ...camera, size } })}
+              />
+            </div>
+          ) : null}
         </Cell>
         <Cell
           id={systemId}

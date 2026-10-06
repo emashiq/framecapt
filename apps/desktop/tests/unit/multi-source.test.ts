@@ -261,6 +261,7 @@ describe('engine messages for several sources', () => {
       muted: { mic: false, system: false },
       lost: { mic: false, system: false },
       lostTiles: [1],
+      camera: null,
       choice: null,
       choiceCanUseDefault: false,
       quitting: false,

@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { installGlobalErrorReporting } from './lib/report-error';
 import { roleFromHash } from './role';
 import { CountdownView } from './views/CountdownView';
+import { CameraView } from './views/camera/CameraView';
 import { OverlayView } from './views/overlay/OverlayView';
 import { RecorderWorker } from './views/RecorderWorker';
 import { ToolbarView } from './views/toolbar/ToolbarView';
@@ -19,6 +20,7 @@ const roleViews: Partial<Record<Role, ComponentType>> = {
   recorder: RecorderWorker,
   toolbar: ToolbarView,
   countdown: CountdownView,
+  camera: CameraView,
 };
 
 installGlobalErrorReporting();
