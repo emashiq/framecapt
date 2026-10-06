@@ -91,6 +91,10 @@ const ENTRIES = {
     text: "Recording couldn't start. Check that the screen or window is still visible, then try again.",
   },
   CAPTURE_FAILED: { text: 'Could not capture the screen. Try again.' },
+  TOO_LARGE: {
+    text: 'Your screens together are too large for one image. Capture them one at a time.',
+    keepServerText: true,
+  },
   WINDOW_UNAVAILABLE: {
     text: "That window is minimized or can't be captured. Restore it and try again.",
   },

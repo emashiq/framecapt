@@ -29,10 +29,11 @@ export interface ActionDeps {
 }
 
 const SCREENSHOT_TARGETS = {
-  screenshotScreen: 'screen',
-  screenshotWindow: 'window',
-  screenshotRegion: 'region',
-} as const;
+  screenshotScreen: { target: 'screen' },
+  screenshotWindow: { target: 'window' },
+  screenshotRegion: { target: 'region' },
+  screenshotAllScreens: { target: 'screen', allScreens: true },
+} as const satisfies Record<string, StartScreenshotRequest>;
 const RECORD_TARGETS = {
   recordScreen: 'screen',
   recordWindow: 'window',
@@ -53,7 +54,9 @@ function errorToast(error: unknown): ToastEvent {
 
 /**
  * The one place global shortcuts, the tray menu and (through the same functions) the buttons start
- * things. Rules: a screenshot while anything runs is refused (BUSY, said in the UI); a record
+ * things. Rules: a screenshot while anything runs is refused (BUSY, said in the UI), except while a
+ * recording is live: then screen and region screenshots are saved directly and a window one is
+ * refused (its picker needs the main window, which must stay out of the video); a record
  * shortcut while recording stops it; pause toggles; window targets and an open editor go through
  * the main window, which needs a picker or the "discard this screenshot?" question.
  */
@@ -61,13 +64,22 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
   const busyToast = (): void =>
     deps.toast({ level: 'info', message: 'A capture is already in progress.' });
 
-  function screenshot(target: StartScreenshotRequest['target']): void {
-    if (deps.recorder.busy || deps.screenshotBusy()) return busyToast();
-    const editor = deps.editor();
-    if (target === 'window' || editor.dirty) {
-      return deps.askMain({ kind: 'screenshot', target });
+  function screenshot(request: StartScreenshotRequest): void {
+    const { status } = deps.recorder;
+    const live = status === 'recording' || status === 'paused';
+    if ((deps.recorder.busy && !live) || deps.screenshotBusy()) return busyToast();
+    if (live) {
+      if (request.target === 'window') {
+        return deps.toast({
+          level: 'error',
+          message:
+            "Window screenshots can't be taken while recording. Use the camera button on the recording toolbar instead.",
+        });
+      }
+    } else if (request.target === 'window' || deps.editor().dirty) {
+      return deps.askMain({ kind: 'screenshot', ...request });
     }
-    void deps.startScreenshot({ target }).catch((error: unknown) => deps.toast(errorToast(error)));
+    void deps.startScreenshot(request).catch((error: unknown) => deps.toast(errorToast(error)));
   }
 
   function record(target: RecorderStartRequest['target']): void {

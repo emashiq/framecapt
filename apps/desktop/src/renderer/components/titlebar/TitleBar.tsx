@@ -14,6 +14,7 @@ import { buildCommands, type Command, type CommandActions } from '../../commands
 import { titleBarLayout, type TitleBarLayout } from '../../commands/layout';
 import { loadRecents, pushRecent } from '../../commands/recents';
 import { notify } from '../../lib/notify';
+import { useMultiDisplay } from '../../lib/use-multi-display';
 import { useRecorderState } from '../../recorder/use-recorder';
 import { getSettings, updateSettings, useSettings } from '../../settings/store';
 import { createItemActions } from '../../views/history/actions';
@@ -61,6 +62,7 @@ function useBarLayout(areaRef: RefObject<HTMLDivElement | null>): TitleBarLayout
 export function TitleBar({ actions, onOpenCapture }: TitleBarProps) {
   const settings = useSettings();
   const recorder = useRecorderState();
+  const multiDisplay = useMultiDisplay();
   const areaRef = useRef<HTMLDivElement>(null);
   const layout = useBarLayout(areaRef);
   const [palette, setPalette] = useState<'all' | 'commands' | null>(null);
@@ -116,8 +118,8 @@ export function TitleBar({ actions, onOpenCapture }: TitleBarProps) {
   );
 
   const commands = useMemo(
-    () => buildCommands({ recorderStatus: recorder.status }, commandActions),
-    [recorder.status, commandActions],
+    () => buildCommands({ recorderStatus: recorder.status, multiDisplay }, commandActions),
+    [recorder.status, multiDisplay, commandActions],
   );
 
   const runFromPalette = (command: Command): void => {

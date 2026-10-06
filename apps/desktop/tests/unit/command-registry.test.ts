@@ -153,8 +153,19 @@ describe('commands call the app actions', () => {
     expect(calls.showKeyboardHelp).toHaveBeenCalled();
   });
 
+  it('offers a screenshot of all screens only with more than one display', () => {
+    const calls = actions();
+    expect(buildCommands(env(), calls).some((command) => command.id === 'shot.all')).toBe(false);
+    const command = find(buildCommands(env({ multiDisplay: true }), calls), 'shot.all');
+    expect(command.hint).toEqual({ kind: 'global', action: 'screenshotAllScreens' });
+    command.run();
+    expect(calls.startCapture).toHaveBeenCalledWith('screenshot', 'screen', true);
+  });
+
   it('every menu entry is a known command', () => {
-    const ids = new Set(buildCommands(env(), actions()).map((command) => command.id));
+    const ids = new Set(
+      buildCommands(env({ multiDisplay: true }), actions()).map((command) => command.id),
+    );
     for (const menu of MENUS) {
       for (const id of menu.items) if (id !== null) expect(ids.has(id), id).toBe(true);
     }

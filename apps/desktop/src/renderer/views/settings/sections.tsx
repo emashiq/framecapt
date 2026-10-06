@@ -625,6 +625,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Pick a window, then capture it.';
     case 'screenshotRegion':
       return 'Drag over the part of the screen you want.';
+    case 'screenshotAllScreens':
+      return 'Capture every screen in one image.';
     case 'recordScreen':
       return 'Record a whole screen. Press again to stop.';
     case 'recordWindow':

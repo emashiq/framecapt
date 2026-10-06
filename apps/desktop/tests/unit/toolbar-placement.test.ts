@@ -114,6 +114,8 @@ describe('placeToolbar: region', () => {
 describe('toolbarWidth', () => {
   it('grows with the recorded audio sources and more when one is lost', () => {
     const none = toolbarWidth({ mic: false, system: false });
+    // grip, timer, pause, screenshot and stop: the screenshot button added 40 DIP to the old 300
+    expect(none).toBe(340);
     const mic = toolbarWidth({ mic: true, system: false });
     const both = toolbarWidth({ mic: true, system: true });
     expect(mic).toBeGreaterThan(none);

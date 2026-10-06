@@ -219,6 +219,28 @@ describe('record options', () => {
   });
 });
 
+describe('the all screens shortcut (added after version 1 shipped)', () => {
+  it('a file from before it gets the default key', () => {
+    const { screenshotAllScreens, ...older } = DEFAULT_SETTINGS.shortcuts;
+    expect(screenshotAllScreens).toBe('Ctrl+Shift+4');
+    const parsed = parseSettings({ ...structuredClone(DEFAULT_SETTINGS), shortcuts: older });
+    expect(parsed.ok && parsed.settings.shortcuts.screenshotAllScreens).toBe('Ctrl+Shift+4');
+  });
+
+  it('a user key that clashes with the new default keeps the user key and leaves it unbound', () => {
+    const { screenshotAllScreens: _added, ...older } = DEFAULT_SETTINGS.shortcuts;
+    void _added;
+    const parsed = parseSettings({
+      ...structuredClone(DEFAULT_SETTINGS),
+      shortcuts: { ...older, recordScreen: 'Ctrl+Shift+4' },
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.settings.shortcuts.recordScreen).toBe('Ctrl+Shift+4');
+    expect(parsed.settings.shortcuts.screenshotAllScreens).toBeNull();
+  });
+});
+
 describe('the quick save editor shortcut (added after version 1 shipped)', () => {
   it('a settings file from before it loads unchanged and gets the default key', () => {
     const { quickSave, ...olderEditorKeys } = DEFAULT_SETTINGS.editorShortcuts;

@@ -5,7 +5,7 @@ import { BulkExportService } from './history/bulk-export';
 import { ExportService } from './history/export-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
 import { rescanLibrary } from './history/rescan';
-import { createAfterCapture } from './shots/after-capture';
+import { createAfterCapture, createSaveCaptureDirect } from './shots/after-capture';
 import { rememberExported } from './shots/exported-paths';
 import type { AppSettings } from './settings';
 import { probeWritable } from './settings/output-dirs';
@@ -209,8 +209,15 @@ export function registerHandlers(
   });
   const media = new MediaRegistry();
   installMediaProtocol(media, history);
+  const captureSaving = {
+    settings: () => settings.store.get(),
+    screenshotsDir: () => settings.dirs().screenshotsDir,
+    history,
+  };
+  const saveDirect = createSaveCaptureDirect(captureSaving);
   const recorder: RecorderController = new RecorderController({
     provider,
+    saveScreenshot: saveDirect,
     sessions,
     media,
     synthetic,
@@ -246,12 +253,16 @@ export function registerHandlers(
     provider,
     store,
     synthetic,
-    isBlocked: () => recorder.busy,
-    afterCapture: createAfterCapture({
-      settings: () => settings.store.get(),
-      screenshotsDir: () => settings.dirs().screenshotsDir,
-      history,
-    }),
+    // A screenshot may start while a recording runs (saved directly), not while one is set up or saved.
+    isBlocked: () => recorder.busy && !recorder.isLive,
+    isRecording: () => recorder.isLive,
+    saveDirect,
+    toast: (event) => recorder.toastToolbar(event),
+    afterCapture: createAfterCapture(captureSaving),
+  });
+  // The recording ended (or was stopped) while a screenshot selection was open: drop the selection.
+  recorder.onChange(() => {
+    if (flow.duringRecording && !recorder.isLive) flow.cancel();
   });
   registerWorkerHandlers();
   registerShotHandlers(

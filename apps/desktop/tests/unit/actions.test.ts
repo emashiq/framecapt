@@ -54,11 +54,60 @@ describe('screenshot actions', () => {
     });
   });
 
-  it('is ignored while a recording runs', () => {
+  it('all screens is a screen capture with the allScreens flag', () => {
+    const { run, deps } = setup();
+    run('screenshotAllScreens');
+    expect(deps.startScreenshot).toHaveBeenCalledWith({ target: 'screen', allScreens: true });
+  });
+
+  it('all screens goes through the main window while the editor holds unsaved work', () => {
+    const { run, deps } = setup('idle', { editor: () => ({ open: true, dirty: true }) });
+    run('screenshotAllScreens');
+    expect(deps.askMain).toHaveBeenCalledWith({
+      kind: 'screenshot',
+      target: 'screen',
+      allScreens: true,
+    });
+  });
+
+  it('is ignored while a recording is being set up or saved', () => {
+    for (const status of [
+      'selecting',
+      'preflight',
+      'countdown',
+      'starting',
+      'stopping',
+      'processing',
+    ] as const) {
+      const { run, deps } = setup(status);
+      run('screenshotRegion');
+      expect(deps.startScreenshot).not.toHaveBeenCalled();
+      expect(deps.toast).toHaveBeenCalled();
+    }
+  });
+
+  it('works while recording or paused, without touching the main window', () => {
+    for (const status of ['recording', 'paused'] as const) {
+      const { run, deps } = setup(status, { editor: () => ({ open: true, dirty: true }) });
+      run('screenshotRegion');
+      run('screenshotAllScreens');
+      expect(deps.startScreenshot).toHaveBeenNthCalledWith(1, { target: 'region' });
+      expect(deps.startScreenshot).toHaveBeenNthCalledWith(2, {
+        target: 'screen',
+        allScreens: true,
+      });
+      expect(deps.askMain).not.toHaveBeenCalled();
+    }
+  });
+
+  it('refuses a window screenshot while recording (its picker needs the main window)', () => {
     const { run, deps } = setup('recording');
-    run('screenshotRegion');
+    run('screenshotWindow');
     expect(deps.startScreenshot).not.toHaveBeenCalled();
-    expect(deps.toast).toHaveBeenCalled();
+    expect(deps.askMain).not.toHaveBeenCalled();
+    expect(deps.toast).toHaveBeenCalledWith(
+      expect.objectContaining({ level: 'error', message: expect.stringContaining('recording') }),
+    );
   });
 
   it('goes through the main window while the editor holds unsaved work', () => {

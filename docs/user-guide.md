@@ -22,6 +22,7 @@ Start from the home screen (**Capture > Screenshot**) or from a global shortcut:
 - **Screen** (`Ctrl+Shift+1`): with one display the capture happens at once. With several displays, a translucent overlay appears on each; click the display you want (or press `Enter`). The image is the display's full physical resolution.
 - **Window** (`Ctrl+Shift+2`): a picker lists the open windows (search or arrow keys). The window's visible frame and title bar are included; minimized windows are not listed.
 - **Region** (`Ctrl+Shift+3`): the screen freezes under an overlay; drag a rectangle, move it, resize it with the handles, or use the keyboard (arrow keys start a centered selection, `Shift` moves 10 px, `Alt` resizes, `Enter` captures, `Esc` or right click cancels). A region stays on **one** monitor.
+- **All screens** (`Ctrl+Shift+4`, shown when more than one display is connected): one image of every screen, each at its place on your desktop (gaps between screens are transparent). It must fit in 16384 px on each side, otherwise FrameCapt says so and you can capture the screens one at a time.
 
 After a capture the screenshot opens in the editor (Settings > Screenshots > "After a capture" can also copy it to the clipboard or save it first). The selection overlay, pill and dim layer are never part of the image.
 
@@ -76,7 +77,7 @@ Start from **Capture > Record** or a shortcut: **Screen** (`Ctrl+Shift+5`), **Wi
 - **Countdown**: a 3-2-1 countdown before recording starts (on by default).
 - **Also save an MP4**: converts every finished recording to MP4 next to the original (off by default).
 
-While recording, a small floating **toolbar** shows the timer and status with Pause/Resume, Mute buttons and Stop. **Hide controls** (the arrows at its end) tucks it into a small indicator with the timer and a button to bring the controls back; recording is not affected and `Ctrl+Shift+9` / `Ctrl+Shift+0` still pause and stop. The toolbar and the countdown are excluded from the recording (verified on the test machine through Windows' content-protection setting; this exclusion is a platform behavior, so do not rely on it for anything security-critical). Paused time is not recorded. Stop with the toolbar, the main window, the tray menu, or `Ctrl+Shift+0` (pressing the record shortcut again also stops).
+While recording, a small floating **toolbar** shows the timer and status with Pause/Resume, a **camera button (Take screenshot)**, Mute buttons and Stop. A screenshot taken while recording (the camera button, or the screen, region and all-screens shortcuts) is saved straight to your screenshots folder and listed in History; no editor opens, a short "Screenshot saved" appears in the toolbar, and FrameCapt's window is never brought up, so it cannot end up in the video. The toolbar button captures what is being recorded (the whole screen, the recorded region or the recorded window). Window screenshots from the shortcuts are not available while recording. **Hide controls** (the arrows at its end) tucks it into a small indicator with the timer and a button to bring the controls back; recording is not affected and `Ctrl+Shift+9` / `Ctrl+Shift+0` still pause and stop. The toolbar and the countdown are excluded from the recording (verified on the test machine through Windows' content-protection setting; this exclusion is a platform behavior, so do not rely on it for anything security-critical). Paused time is not recorded. Stop with the toolbar, the main window, the tray menu, or `Ctrl+Shift+0` (pressing the record shortcut again also stops).
 
 Recordings are written to disk **while** you record (bounded memory, a 30-minute 1080p30 recording was benchmarked: [performance.md](performance.md)) and finished into a seekable `.webm` (VP9 video, Opus audio) in `Videos\FrameCapt`, named `FrameCapt YYYY-MM-DD at HH.mm.ss.webm`. Existing files are never overwritten.
 
@@ -125,7 +126,7 @@ Sections: **General** (theme: follow Windows / light / dark; launch at login; cl
 
 ## Tray
 
-FrameCapt keeps one tray icon (a red dot while recording) with a menu for the capture actions. By default, closing the main window keeps FrameCapt running in the tray so global shortcuts keep working (a one-time notification explains this); turn "Close to tray" off to quit on close. "Launch at login" (off by default) starts FrameCapt hidden in the tray, and only works in the installed app. Quit from the tray menu.
+FrameCapt keeps one tray icon (a red dot while recording) with a menu for the capture actions (Screenshot: Screen, Window, Region and, with several displays, All screens). While recording, the screenshot items still work except Window. By default, closing the main window keeps FrameCapt running in the tray so global shortcuts keep working (a one-time notification explains this); turn "Close to tray" off to quit on close. "Launch at login" (off by default) starts FrameCapt hidden in the tray, and only works in the installed app. Quit from the tray menu.
 
 ## Troubleshooting
 

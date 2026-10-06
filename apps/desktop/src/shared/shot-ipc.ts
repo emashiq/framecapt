@@ -29,6 +29,12 @@ export const StartScreenshotRequestSchema = z
   .strictObject({
     target: ShotKindSchema,
     sourceId: SourceIdSchema.optional(),
+    /** One image of every screen, joined (target must be 'screen'). */
+    allScreens: z.boolean().optional(),
+  })
+  .refine((request) => !request.allScreens || request.target === 'screen', {
+    message: 'All screens is a screen capture.',
+    path: ['allScreens'],
   })
   .refine((request) => request.target !== 'window' || request.sourceId !== undefined, {
     message: 'A window capture needs a sourceId.',

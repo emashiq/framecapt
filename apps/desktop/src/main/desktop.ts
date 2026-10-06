@@ -4,6 +4,7 @@ import {
   Menu,
   nativeImage,
   Notification,
+  screen,
   Tray,
   type MenuItemConstructorOptions,
 } from 'electron';
@@ -194,6 +195,7 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
       activeMs: active,
       shortcuts: shortcuts.status(),
       screenshotBusy: flow.state.active,
+      multiDisplay: screen.getAllDisplays().length > 1,
     };
   };
   let clock: NodeJS.Timeout | undefined;
@@ -211,6 +213,9 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
   tray.ensure();
   refreshTray();
   recorder.onChange(refreshTray);
+  // "All screens" in the menu follows the connected displays.
+  screen.on('display-added', refreshTray);
+  screen.on('display-removed', refreshTray);
   shortcuts.onStatus(refreshTray);
 
   // --- close to tray ------------------------------------------------------------------------

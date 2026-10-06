@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AppWindow,
   Camera,
+  Fullscreen,
   Keyboard,
   Lightbulb,
   Loader2,
@@ -30,6 +31,7 @@ import { Kbd } from '../components/ui/Kbd';
 import { useCaptureFlow } from '../capture/use-capture-flow';
 import { subscribeLaunch } from '../lib/launch-bus';
 import { notify } from '../lib/notify';
+import { useMultiDisplay } from '../lib/use-multi-display';
 import { useRecorderState } from '../recorder/use-recorder';
 import {
   problemCount,
@@ -110,6 +112,8 @@ interface ModeCardProps {
   onStart: (target: ShotKind, trigger: HTMLElement) => void;
   /** While something runs, the card's buttons are disabled. */
   busy?: boolean;
+  /** One more row below the three sources. */
+  extra?: ReactNode;
 }
 
 function ModeCard({
@@ -121,6 +125,7 @@ function ModeCard({
   primaryTarget,
   onStart,
   busy = false,
+  extra,
 }: ModeCardProps) {
   return (
     <Card padding="lg" className="flex h-full flex-col" data-testid={`mode-${title.toLowerCase()}`}>
@@ -159,6 +164,7 @@ function ModeCard({
             </div>
           </li>
         ))}
+        {extra}
       </ul>
     </Card>
   );
@@ -207,6 +213,7 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
   const settings = useSettings();
   const dirs = useEffectiveDirs();
   const shortcutStates = useShortcutStates();
+  const multiDisplay = useMultiDisplay();
   const [picker, setPicker] = useState<'shot' | 'record' | null>(null);
   const [windowTrigger, setWindowTrigger] = useState<HTMLElement | null>(null);
 
@@ -221,13 +228,17 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
     regionShortcut !== null &&
     shortcutStates?.screenshotRegion.status === 'ok';
 
-  function startScreenshot(target: ShotKind, trigger: HTMLElement | null): void {
+  function startScreenshot(
+    target: ShotKind,
+    trigger: HTMLElement | null,
+    allScreens = false,
+  ): void {
     if (target === 'window') {
       setWindowTrigger(trigger);
       setPicker('shot');
       return;
     }
-    void flow.start(target, trigger);
+    void flow.start(target, trigger, undefined, allScreens);
   }
 
   async function startRecording(
@@ -259,14 +270,16 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
   const launchHandler = useRef<(request: StartRequestEvent) => void>(() => undefined);
   useEffect(() => {
     launchHandler.current = (request) => {
-      if (request.kind === 'screenshot') startScreenshot(request.target, null);
+      if (request.kind === 'screenshot') startScreenshot(request.target, null, request.allScreens);
       else onRecordClick(request.target, null);
     };
   });
   useEffect(() => subscribeLaunch((request) => launchHandler.current(request)), []);
 
   const statusText = flow.running
-    ? STATUS_TEXT[flow.running]
+    ? flow.allScreens
+      ? 'Capturing all screens…'
+      : STATUS_TEXT[flow.running]
     : recordingBusy
       ? `${RECORD_STATUS_TEXT[recorder.status] ?? ''}${
           recorder.progress !== null ? ` ${Math.round(recorder.progress * 100)}%` : ''
@@ -369,8 +382,27 @@ export function CaptureView({ onOpenHistory, onOpenSettings }: CaptureViewProps)
           actions={['screenshotScreen', 'screenshotWindow', 'screenshotRegion']}
           testPrefix="shot"
           primaryTarget="region"
-          onStart={startScreenshot}
+          onStart={(target, trigger) => startScreenshot(target, trigger)}
           busy={anythingBusy}
+          extra={
+            multiDisplay ? (
+              <li className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1 justify-start"
+                  icon={<Fullscreen className="size-4 text-fg-subtle" aria-hidden="true" />}
+                  disabled={anythingBusy}
+                  onClick={(event) => startScreenshot('screen', event.currentTarget, true)}
+                  data-testid="shot-all-screens"
+                >
+                  All screens
+                </Button>
+                <div className="flex min-w-32 justify-end">
+                  <ShortcutHint action="screenshotAllScreens" />
+                </div>
+              </li>
+            ) : null
+          }
         />
         <ModeCard
           title="Record"

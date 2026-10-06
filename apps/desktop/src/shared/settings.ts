@@ -5,10 +5,12 @@ import {
   DEFAULT_SHORTCUTS,
   EDITOR_ACTIONS,
   checkEditorShortcuts,
+  actionUsing,
   editorActionUsing,
   checkShortcuts,
   type EditorAction,
   type EditorShortcutsMap,
+  type ShortcutAction,
   type ShortcutsMap,
 } from './shortcuts';
 
@@ -57,6 +59,7 @@ export const ShortcutSettingsSchema = z.object({
   screenshotScreen: AcceleratorOrNull,
   screenshotWindow: AcceleratorOrNull,
   screenshotRegion: AcceleratorOrNull,
+  screenshotAllScreens: AcceleratorOrNull,
   recordScreen: AcceleratorOrNull,
   recordWindow: AcceleratorOrNull,
   recordRegion: AcceleratorOrNull,
@@ -221,6 +224,7 @@ function withDefaults(partial: Record<string, unknown>): Record<string, unknown>
     };
   }
   keepUserEditorKeys(merged.editorShortcuts as Record<string, unknown>, partial.editorShortcuts);
+  keepUserGlobalKeys(merged.shortcuts as Record<string, unknown>, partial.shortcuts);
   return merged;
 }
 
@@ -243,6 +247,24 @@ function keepUserEditorKeys(merged: Record<string, unknown>, given: unknown): vo
     if (action in had) continue;
     const key = DEFAULT_EDITOR_SHORTCUTS[action];
     if (editorActionUsing(bindings, key, action) !== null) merged[action] = null;
+  }
+}
+
+/**
+ * "Screenshot: all screens" was added after version 1 shipped: a file without it gets its default
+ * key, unless the user already uses that key for another action (then it starts with no key).
+ */
+function keepUserGlobalKeys(merged: Record<string, unknown>, given: unknown): void {
+  if (isRecord(given) && 'screenshotAllScreens' in given) return;
+  const key = DEFAULT_SHORTCUTS.screenshotAllScreens;
+  if (
+    actionUsing(
+      merged as Partial<Record<ShortcutAction, string | null>>,
+      key,
+      'screenshotAllScreens',
+    )
+  ) {
+    merged.screenshotAllScreens = null;
   }
 }
 

@@ -63,6 +63,12 @@ describe('IPC: every channel is closed to roles the contract does not name', () 
     expect(defOf('recorder:getState').roles).toEqual(['main', 'toolbar', 'recorder', 'countdown']);
   });
 
+  it('the screenshot of a running recording is the toolbar button alone and takes no payload', () => {
+    expect(defOf('recorder:screenshot').roles).toEqual(['toolbar']);
+    expect(defOf('recorder:screenshot').request.safeParse(undefined).success).toBe(true);
+    expect(defOf('recorder:screenshot').request.safeParse({ path: 'x.png' }).success).toBe(false);
+  });
+
   it('privileged actions belong to the main window alone (files, folders, settings, history, export)', () => {
     const mainOnly = IPC_CHANNELS.filter((channel) =>
       /^(history|export|settings|shortcuts|recovery|diagnostics|shot|editor|shell):/.test(channel),

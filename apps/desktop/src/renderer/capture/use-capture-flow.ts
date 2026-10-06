@@ -5,16 +5,24 @@ import type { ShotKind } from '../../shared/shots';
 export interface CaptureFlow {
   /** The target of the running flow, or null when idle. */
   running: ShotKind | null;
+  /** The running flow captures every screen in one image. */
+  allScreens: boolean;
   /**
    * Starts a screenshot flow. `trigger` is the element to focus again when the flow is cancelled
    * or fails (after a completed flow the result view takes over).
    */
-  start: (target: ShotKind, trigger: HTMLElement | null, sourceId?: string) => Promise<void>;
+  start: (
+    target: ShotKind,
+    trigger: HTMLElement | null,
+    sourceId?: string,
+    allScreens?: boolean,
+  ) => Promise<void>;
 }
 
 /** Drives `capture:startScreenshot` and follows its outcome events from main. */
 export function useCaptureFlow(): CaptureFlow {
   const [running, setRunning] = useState<ShotKind | null>(null);
+  const [allScreens, setAllScreens] = useState(false);
   const triggerRef = useRef<HTMLElement | null>(null);
   const refocus = useRef(false);
 
@@ -39,12 +47,14 @@ export function useCaptureFlow(): CaptureFlow {
     }
   }, [running]);
 
-  const start = useCallback<CaptureFlow['start']>(async (target, trigger, sourceId) => {
+  const start = useCallback<CaptureFlow['start']>(async (target, trigger, sourceId, all) => {
     triggerRef.current = trigger;
     setRunning(target);
+    setAllScreens(all === true);
     const result = await window.framecapt.invoke('capture:startScreenshot', {
       target,
       ...(sourceId !== undefined && { sourceId }),
+      ...(all && { allScreens: true }),
     });
     if (!result.ok) {
       setRunning(null);
@@ -53,5 +63,5 @@ export function useCaptureFlow(): CaptureFlow {
     }
   }, []);
 
-  return { running, start };
+  return { running, allScreens, start };
 }

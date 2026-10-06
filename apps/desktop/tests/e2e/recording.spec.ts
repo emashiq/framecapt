@@ -357,6 +357,50 @@ test.describe('one display', () => {
     await resetToHome();
   });
 
+  test('a screenshot during a recording is saved to history, the main window stays away and no editor opens', async () => {
+    const screenshots = async () => {
+      const result = await page.evaluate(() =>
+        window.framecapt.invoke('history:list', { filter: 'screenshot' }),
+      );
+      if (!result.ok) throw new Error('history:list failed');
+      return result.data.items;
+    };
+    const before = (await screenshots()).length;
+    await startScreen();
+    const toolbar = await toolbarPage();
+    expect(await mainIsMinimized()).toBe(true);
+
+    await toolbar.getByTestId('toolbar-screenshot').click();
+    await expect(toolbar.getByTestId('toolbar-toast')).toHaveText('Screenshot saved');
+    await expect
+      .poll(async () => (await screenshots()).length, { timeout: 15_000 })
+      .toBe(before + 1);
+    const item = (await screenshots())[0];
+    expect(item).toMatchObject({ type: 'screenshot', source: 'screen', exists: true });
+    expect(fs.existsSync(item?.path ?? '')).toBe(true);
+
+    // The recording carries on; the main window never came back and no editor was opened.
+    expect((await state()).status).toBe('recording');
+    expect(await mainIsMinimized()).toBe(true);
+    await expect(page.getByTestId('editor-view')).toHaveCount(0);
+
+    // A shortcut-style screen screenshot behaves the same (a window one is refused).
+    await app.evaluate(() => {
+      const hooks = (globalThis as Record<string, unknown>).__frameCaptTest as {
+        runAction: (action: string) => void;
+      };
+      hooks.runAction('screenshotScreen');
+    });
+    await expect
+      .poll(async () => (await screenshots()).length, { timeout: 15_000 })
+      .toBe(before + 2);
+    expect(await mainIsMinimized()).toBe(true);
+
+    await toolbar.getByTestId('toolbar-stop').click();
+    await finishAndWaitForResult();
+    await resetToHome();
+  });
+
   test('the media protocol serves only files FrameCapt produced, with ranges', async () => {
     await startScreen();
     const toolbar = await toolbarPage();
@@ -440,7 +484,7 @@ test.describe('one display', () => {
     await page.evaluate(() => window.framecapt.invoke('recorder:pause'));
     await page.evaluate(() => window.framecapt.invoke('recorder:pause')); // already paused
     await expect(toolbar.getByTestId('toolbar')).toHaveAttribute('data-status', 'paused');
-    // A new recording or a screenshot cannot start now.
+    // A new recording cannot start now.
     const again = await page.evaluate(() =>
       window.framecapt.invoke('recorder:start', {
         target: 'screen',
@@ -454,10 +498,18 @@ test.describe('one display', () => {
       }),
     );
     expect(again).toMatchObject({ ok: false, error: { code: 'BUSY' } });
+    // Screen and region screenshots are allowed while recording; a window one is not (its picker
+    // needs the main window, which must stay out of the video).
     const shot = await page.evaluate(() =>
-      window.framecapt.invoke('capture:startScreenshot', { target: 'region' }),
+      window.framecapt.invoke('capture:startScreenshot', {
+        target: 'window',
+        sourceId: 'window:1:0',
+      }),
     );
-    expect(shot).toMatchObject({ ok: false, error: { code: 'BUSY' } });
+    expect(shot).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_PAYLOAD', message: expect.stringContaining('while recording') },
+    });
     await toolbar.getByTestId('toolbar-resume').click();
     await toolbar.getByTestId('toolbar-stop').click();
     await finishAndWaitForResult();

@@ -68,7 +68,7 @@ describe('ShortcutManager', () => {
     const manager = new ShortcutManager({ api, run: vi.fn() });
     const states = manager.apply({ ...DEFAULT_SHORTCUTS, recordWindow: null });
     expect(states.recordWindow).toEqual({ accelerator: null, status: 'disabled' });
-    expect(held.size).toBe(7);
+    expect(held.size).toBe(8);
   });
 
   it('never registers a duplicate: the second action gets a conflict', () => {
@@ -129,7 +129,7 @@ describe('ShortcutManager', () => {
     expect(held.size).toBe(0);
     manager.setPaused(true); // idempotent
     manager.setPaused(false);
-    expect(held.size).toBe(8);
+    expect(held.size).toBe(9);
   });
 
   it('a change while paused takes effect on resume', () => {

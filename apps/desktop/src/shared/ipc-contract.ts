@@ -296,6 +296,8 @@ export const ipcContract = {
   'recorder:resume': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
   'recorder:stop': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
   'recorder:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  /** A screenshot of what is being recorded, saved straight to the screenshots folder. */
+  'recorder:screenshot': { request: z.undefined(), response: z.void(), roles: ['toolbar'] },
   'recorder:toggleMute': {
     request: ToggleMuteRequestSchema,
     response: z.void(),
@@ -484,6 +486,8 @@ export const ipcEvents = {
   'recorder:state': RecorderSnapshotSchema,
   /** Mic and system levels (0..1) for the toolbar meters; only while recording. */
   'recorder:levels': LevelsEventSchema,
+  /** The result of a screenshot taken during a recording, for the toolbar's inline status. */
+  'recorder:toast': ToastEventSchema,
   /** The list of unfinished recordings may have changed (the startup scan finished). */
   'recovery:changed': z.object({}),
   /** History changed (an item was added, removed or got its thumbnail): lists should reload. */

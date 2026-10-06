@@ -61,6 +61,8 @@ export const ResolveQuitRequestSchema = z.strictObject({ stop: z.boolean() });
 export const StartRequestEventSchema = z.object({
   kind: z.enum(['screenshot', 'record']),
   target: z.enum(['screen', 'window', 'region']),
+  /** A screenshot of every screen joined (target is 'screen'). */
+  allScreens: z.boolean().optional(),
 });
 export type StartRequestEvent = z.infer<typeof StartRequestEventSchema>;
 

@@ -2,6 +2,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { nativeImage, screen } from 'electron';
 import { overlayRectToFramePixels, type DisplayGeom } from '../shared/geometry';
 import type { Rect } from '../shared/rect';
+import { stitchBitmaps, StitchError } from '../shared/stitch';
+import type { ToastEvent } from '../shared/settings-ipc';
 import type { FlowEndedEvent, OverlayMode, StartScreenshotRequest } from '../shared/shot-ipc';
 import { isBlankBitmap, type ShotKind } from '../shared/shots';
 import { grabScreensExact, grabWindowExact } from './capture/exact-capture';
@@ -19,6 +21,8 @@ import { requestFrames, WorkerError, type WorkerFrame } from './worker';
 const SETTLE_MS = 200;
 const WINDOW_UNAVAILABLE =
   "That window is minimized or can't be captured. Restore it and try again.";
+const WINDOW_WHILE_RECORDING =
+  "Window screenshots can't be taken while recording. Use the camera button on the recording toolbar, or take a screen or region screenshot.";
 const SCREEN_FAILED = 'Could not capture the screen. Please try again.';
 
 export interface CaptureFlowDeps {
@@ -26,8 +30,19 @@ export interface CaptureFlowDeps {
   store: ShotSessionStore;
   /** E2E mock builds only: the worker draws generated frames instead of capturing. */
   synthetic: boolean;
-  /** True while something else (a recording) must keep a screenshot from starting. */
+  /** True while something else (a recording being set up or saved) must keep a screenshot from starting. */
   isBlocked?: () => boolean;
+  /** True while a recording runs: a flow started then saves directly and leaves the windows alone. */
+  isRecording?: () => boolean;
+  /** Saves a capture with no editor (during a recording); throws when it could not be saved. */
+  saveDirect?: (shot: {
+    kind: ShotKind;
+    width: number;
+    height: number;
+    png: Buffer;
+  }) => Promise<{ savedPath: string }>;
+  /** Tells the user the outcome of a direct save (the recording toolbar shows it). */
+  toast?: (event: ToastEvent) => void;
   /** The "after a capture" setting: copy or save before the editor opens (a failure is ignored). */
   afterCapture?: (shot: {
     kind: ShotKind;
@@ -62,6 +77,8 @@ export class CaptureFlow {
   private removeDisplayListeners: (() => void) | undefined;
   /** The main window was on screen when the flow began (a shortcut may start it from the tray). */
   private mainWasShown = true;
+  /** The flow began during a recording: no main window, no editor, the image is saved directly. */
+  private recordingFlow = false;
 
   constructor(private readonly deps: CaptureFlowDeps) {}
 
@@ -73,10 +90,15 @@ export class CaptureFlow {
     // The real entry point of every screenshot: the button, the shortcut, the tray and a direct IPC
     // call all land here.
     if (this.deps.isBlocked?.()) throw new IpcError('BUSY', 'A recording is in progress.');
+    const recording = this.deps.isRecording?.() ?? false;
+    if (recording && request.target === 'window') {
+      throw new IpcError('INVALID_PAYLOAD', WINDOW_WHILE_RECORDING);
+    }
     const claim = this.state.tryStart();
     if (!claim.ok) throw new IpcError('BUSY', 'A capture is already in progress.');
     const flowId = claim.flowId;
     this.flowId = flowId;
+    this.recordingFlow = recording;
     this.requestedAt = performance.now();
     const main = getMainWindow();
     this.mainWasShown = main !== undefined && main.isVisible() && !main.isMinimized();
@@ -99,6 +121,11 @@ export class CaptureFlow {
 
   private async run(flowId: number, request: StartScreenshotRequest): Promise<void> {
     this.displays = this.deps.provider.listDisplays();
+    if (request.allScreens) {
+      await this.hideMainWindow();
+      await this.captureAllScreens(flowId);
+      return;
+    }
     if (request.target === 'window' && request.sourceId) {
       await this.hideMainWindow();
       await this.captureSingle(flowId, request.sourceId, 'window');
@@ -186,6 +213,11 @@ export class CaptureFlow {
   /** The user started dragging on one display: selections on the others are cleared. */
   selectionStarted(webContentsId: number): void {
     this.overlays?.clearSelectionsExcept(this.overlays.displayIdOf(webContentsId));
+  }
+
+  /** A flow is running that was started during a recording. */
+  get duringRecording(): boolean {
+    return this.state.active && this.recordingFlow;
   }
 
   cancel(): void {
@@ -334,6 +366,36 @@ export class CaptureFlow {
     });
   }
 
+  /** Every screen in one image: each display's pixels at its place on the virtual desktop. */
+  private async captureAllScreens(flowId: number): Promise<void> {
+    this.state.setPhase(flowId, 'capturing');
+    const frames = await this.grabDisplays(this.displays);
+    if (!this.state.isCurrent(flowId)) return;
+    try {
+      const stitched = stitchBitmaps(
+        this.displays.map((display) => {
+          const frame = frames.get(display.id);
+          if (!frame) throw new FlowFailure('CAPTURE_FAILED', 'A screen returned no image.');
+          const { x, y } = physicalOrigin(display);
+          return { x, y, width: frame.width, height: frame.height, bitmap: frame.image.toBitmap() };
+        }),
+      );
+      const image = nativeImage.createFromBitmap(Buffer.from(stitched.bitmap.buffer), {
+        width: stitched.width,
+        height: stitched.height,
+        scaleFactor: 1,
+      });
+      await this.completeWith(flowId, {
+        kind: 'screen',
+        width: stitched.width,
+        height: stitched.height,
+        png: image.toPNG(),
+      });
+    } catch (error) {
+      throw error instanceof StitchError ? new FlowFailure(error.code, error.message) : error;
+    }
+  }
+
   private looksBlank(frame: { png: Buffer }): boolean {
     if (this.deps.synthetic) return false;
     const image = nativeImage.createFromBuffer(frame.png, { scaleFactor: 1 });
@@ -417,6 +479,7 @@ export class CaptureFlow {
     shot: { kind: ShotKind; width: number; height: number; png: Buffer },
   ): Promise<void> {
     if (!this.state.isCurrent(flowId)) return;
+    if (this.recordingFlow) return this.saveDirectly(flowId, shot);
     const session = await this.deps.store.create(shot);
     if (!this.state.isCurrent(flowId)) {
       await this.deps.store.discard(session.id);
@@ -436,12 +499,27 @@ export class CaptureFlow {
     });
   }
 
+  /** During a recording: no session, no editor; the file goes straight to the screenshots folder. */
+  private async saveDirectly(
+    flowId: number,
+    shot: { kind: ShotKind; width: number; height: number; png: Buffer },
+  ): Promise<void> {
+    if (!this.deps.saveDirect) throw new FlowFailure('CAPTURE_FAILED', SCREEN_FAILED);
+    await this.deps.saveDirect(shot);
+    log.info(`Screenshot saved during a recording: ${shot.kind} ${shot.width}x${shot.height}`);
+    this.deps.toast?.({ level: 'info', message: 'Screenshot saved' });
+    this.finish(flowId, { outcome: 'completed' });
+  }
+
   // --- ending ----------------------------------------------------------------------------
 
   private fail(flowId: number, error: unknown): void {
     const failure = describeFailure(error);
     if (error instanceof FlowFailure) log.warn(`Capture flow failed: ${failure.code}`);
     else log.error('Capture flow failed', error);
+    if (this.recordingFlow && this.state.isCurrent(flowId)) {
+      this.deps.toast?.({ level: 'error', message: failure.message });
+    }
     this.finish(flowId, { outcome: 'error', ...failure });
   }
 
@@ -458,7 +536,8 @@ export class CaptureFlow {
 
     const main = getMainWindow();
     // A capture that was cancelled leaves the window as it was (hidden in the tray stays hidden).
-    if (main && (ended.outcome !== 'cancelled' || this.mainWasShown)) {
+    // During a recording the main window is never touched: it would end up in the video.
+    if (!this.recordingFlow && main && (ended.outcome !== 'cancelled' || this.mainWasShown)) {
       if (main.isMinimized()) main.restore();
       main.show();
       main.focus();
@@ -468,7 +547,7 @@ export class CaptureFlow {
   }
 
   private async hideMainWindow(): Promise<void> {
-    const main = getMainWindow();
+    const main = this.recordingFlow ? undefined : getMainWindow();
     if (main?.isVisible()) {
       await new Promise<void>((resolve) => {
         main.once('hide', () => resolve());
@@ -485,6 +564,18 @@ function toGeom(display: DisplayInfo): DisplayGeom {
     bounds: display.bounds,
     scaleFactor: display.scaleFactor,
     rotation: display.rotation,
+  };
+}
+
+/** Where a display's top-left pixel sits on the virtual desktop, in physical pixels. */
+function physicalOrigin(display: DisplayInfo): { x: number; y: number } {
+  if (process.platform === 'win32') {
+    const { x, y } = screen.dipToScreenRect(null, display.bounds);
+    return { x, y };
+  }
+  return {
+    x: Math.round(display.bounds.x * display.scaleFactor),
+    y: Math.round(display.bounds.y * display.scaleFactor),
   };
 }
 

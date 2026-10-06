@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { globalShortcut, screen, type BrowserWindow } from 'electron';
+import { globalShortcut, nativeImage, screen, type BrowserWindow } from 'electron';
 import {
   framePixelsToDip,
   overlayRectToFramePixels,
@@ -29,7 +29,9 @@ import {
   type RecorderEvent,
   type RecorderMachineState,
 } from '../../shared/recorder-machine';
+import type { ToastEvent } from '../../shared/settings-ipc';
 import type { OverlayInit } from '../../shared/shot-ipc';
+import type { ShotKind } from '../../shared/shots';
 import type { Role } from '../../shared/types';
 import {
   placeToolbar,
@@ -44,7 +46,8 @@ import { log } from '../logger';
 import { OverlaySet } from '../overlay';
 import type { SelectionHost } from '../selection-host';
 import { getMainWindow, getWorkerWindow, peekWorkerWindow, webContentsWithRoles } from '../windows';
-import { whenWorkerReady } from '../worker';
+import { grabScreensExact } from '../capture/exact-capture';
+import { requestFrames, whenWorkerReady } from '../worker';
 import type { MediaTools } from '../media/ffmpeg';
 import type { HistorySink } from '../history/service';
 import type { MediaRegistry } from '../recording/media-protocol';
@@ -112,6 +115,13 @@ export interface RecorderDeps {
   media: MediaRegistry;
   /** E2E mock builds: the engine draws a synthetic picture and positions use real displays. */
   synthetic: boolean;
+  /** Saves a screenshot taken during the recording (a file in the screenshots folder, plus history). */
+  saveScreenshot: (shot: {
+    kind: ShotKind;
+    width: number;
+    height: number;
+    png: Buffer;
+  }) => Promise<unknown>;
   /** True while a screenshot flow runs (the two never overlap). */
   isScreenshotBusy: () => boolean;
   /** Folder of the finished recordings (the setting, else `Videos/FrameCapt`). */
@@ -165,6 +175,8 @@ export class RecorderController implements SelectionHost {
   private removeDisplayListeners: (() => void) | undefined;
   private watchedWorker: BrowserWindow | undefined;
   private levelsOn = false;
+  /** A screenshot of the recording is being taken (a second click waits for it). */
+  private snapping = false;
   /** The main window was on screen when this recording was requested (a shortcut may start it from the tray). */
   private mainWasShown = true;
   private readonly changeListeners = new Set<() => void>();
@@ -192,12 +204,17 @@ export class RecorderController implements SelectionHost {
     );
   }
 
+  /** Recording or paused: the one state in which a screenshot may be taken (and a recording is on screen). */
+  get isLive(): boolean {
+    return this.machine.status === 'recording' || this.machine.status === 'paused';
+  }
+
   /** The recorder owns the overlay windows right now (selection step). */
   get selecting(): boolean {
     return this.overlays !== undefined;
   }
 
-  /** Anything that must keep a screenshot from starting. */
+  /** Anything that must keep a screenshot from starting (see isLive: a live recording allows one). */
   get busy(): boolean {
     return !isFinished(this.machine.status);
   }
@@ -758,6 +775,73 @@ export class RecorderController implements SelectionHost {
     }
     // The countdown window is gone (it was content protected as well) before the first frame.
     await sleep(120);
+  }
+
+  // --- screenshots during a recording --------------------------------------------------------
+
+  /** A short result line in the toolbar's pill ("Screenshot saved"). */
+  toastToolbar(event: ToastEvent): void {
+    for (const contents of webContentsWithRoles(['toolbar']))
+      sendEvent(contents, 'recorder:toast', event);
+  }
+
+  /**
+   * The toolbar's camera button: a still of what is being recorded (the whole screen, the recorded
+   * region, or the recorded window), saved straight to the screenshots folder.
+   */
+  async screenshotNow(): Promise<void> {
+    const ctx = this.ctx;
+    if (!this.isLive || !ctx) throw new IpcError('NOT_FOUND', 'There is no recording to capture.');
+    if (this.snapping) throw new IpcError('BUSY', 'A screenshot is already being taken.');
+    this.snapping = true;
+    try {
+      const shot = await this.grabStill(ctx);
+      await this.deps.saveScreenshot(shot);
+      log.info(`Screenshot saved during a recording: ${shot.kind} ${shot.width}x${shot.height}`);
+      this.toastToolbar({ level: 'info', message: 'Screenshot saved' });
+    } catch (error) {
+      log.warn(`Screenshot during a recording failed: ${String(error)}`);
+      this.toastToolbar({ level: 'error', message: "Couldn't save the screenshot" });
+      throw error;
+    } finally {
+      this.snapping = false;
+    }
+  }
+
+  private async grabStill(
+    ctx: SessionContext,
+  ): Promise<{ kind: ShotKind; width: number; height: number; png: Buffer }> {
+    const { display, regionPx } = ctx;
+    const kind: ShotKind = ctx.target;
+    if (kind !== 'window' && display && !this.deps.synthetic) {
+      // Pixel-exact desktopCapturer image; the worker's video frame is the fallback.
+      const grab = await grabScreensExact([display]).catch(() => undefined);
+      const exact = grab?.frames.get(display.id);
+      if (exact) {
+        const image = regionPx ? exact.image.crop(regionPx) : exact.image;
+        const size = image.getSize();
+        return { kind, width: size.width, height: size.height, png: image.toPNG() };
+      }
+    }
+    const [frame] = await requestFrames(
+      [
+        {
+          sourceId: ctx.sourceId,
+          ...(display && { displayId: display.id }),
+          ...(this.deps.synthetic && {
+            syntheticSize: display ? { ...display.physicalSize } : { width: 1280, height: 720 },
+          }),
+        },
+      ],
+      { synthetic: this.deps.synthetic },
+    );
+    if (!frame) throw new Error('The capture returned no image.');
+    if (kind === 'window' || !regionPx) {
+      return { kind, width: frame.width, height: frame.height, png: frame.png };
+    }
+    const cropped = nativeImage.createFromBuffer(frame.png, { scaleFactor: 1 }).crop(regionPx);
+    const size = cropped.getSize();
+    return { kind, width: size.width, height: size.height, png: cropped.toPNG() };
   }
 
   // --- the toolbar -------------------------------------------------------------------------

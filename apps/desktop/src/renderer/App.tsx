@@ -270,8 +270,11 @@ export function App() {
   const titleBar = useMemo(
     () => ({
       actions: {
-        startCapture: (kind: StartRequestEvent['kind'], target: StartRequestEvent['target']) =>
-          startRequest({ kind, target }),
+        startCapture: (
+          kind: StartRequestEvent['kind'],
+          target: StartRequestEvent['target'],
+          allScreens?: boolean,
+        ) => startRequest({ kind, target, ...(allScreens && { allScreens }) }),
         navigate: (next: ViewId, section?: SettingsSectionId) => navigate(next, section),
         showKeyboardHelp: () => setHelpOpen(true),
       },
