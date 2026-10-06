@@ -16,12 +16,14 @@ import {
   type VideoProject,
 } from '../../shared/video-edit';
 import { detectImageFormat, readImageSize } from '../../shared/shots';
+import type { RecordingLayout } from '../../shared/recording-layout';
 import type { HistoryService } from '../history/service';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import { exportEdit as realExportEdit, withProbedSource } from '../media/edit-export';
 import type { MediaTools, ProbeResult } from '../media/ffmpeg';
 import type { JobRunner } from '../media/job-runner';
+import { readFcapHeaderCached } from '../recording/fcap';
 import type { VideoProjectStore } from './store';
 
 export interface VideoEditDeps {
@@ -67,8 +69,14 @@ export class VideoEditService {
   private async sourceOf(historyId: string): Promise<SourceItem> {
     const item = this.deps.history.get(historyId);
     if (!item) throw new IpcError('NOT_FOUND', 'That recording is not in history.');
-    if (item.type !== 'recording' || (item.format !== 'webm' && item.format !== 'mp4')) {
-      throw new IpcError('INVALID_PAYLOAD', 'Only WebM and MP4 recordings can be edited.');
+    if (
+      item.type !== 'recording' ||
+      (item.format !== 'webm' && item.format !== 'mp4' && item.format !== 'fcap')
+    ) {
+      throw new IpcError(
+        'INVALID_PAYLOAD',
+        'Only WebM, MP4 and multi-source recordings can be edited.',
+      );
     }
     const present = await fs.promises.stat(item.path).then(
       (stat) => stat.isFile(),
@@ -79,13 +87,22 @@ export class VideoEditService {
   }
 
   /** The saved project (checked against the file as it is now) or a new one made from the file. */
-  async open(
-    historyId: string,
-  ): Promise<{ project: VideoProject; fileName: string; restored: boolean }> {
+  async open(historyId: string): Promise<{
+    project: VideoProject;
+    fileName: string;
+    restored: boolean;
+    /** The sources of a multi-source recording (the editor's "Source" choice); null for any other. */
+    layout: RecordingLayout | null;
+  }> {
     const item = await this.sourceOf(historyId);
     let probe: ProbeResult;
+    let layout: RecordingLayout | null = null;
     try {
-      probe = await this.deps.tools.probe(item.path, { timeoutMs: 30_000 });
+      if (item.format === 'fcap') {
+        const { width, height, sources } = await readFcapHeaderCached(item.path);
+        layout = { width, height, sources };
+      }
+      probe = await this.deps.tools.probe(item.path, { timeoutMs: 30_000, format: item.format });
     } catch {
       throw new IpcError('INVALID_PAYLOAD', 'FrameCapt could not read that recording.');
     }
@@ -112,6 +129,7 @@ export class VideoEditService {
           fps === undefined ? refreshed : { ...refreshed, source: { ...refreshed.source, fps } },
         fileName: path.basename(item.path),
         restored: true,
+        layout,
       };
     }
     return {
@@ -124,6 +142,7 @@ export class VideoEditService {
       }),
       fileName: path.basename(item.path),
       restored: false,
+      layout,
     };
   }
 
@@ -293,6 +312,7 @@ export class VideoEditService {
       const result = await (this.deps.exportEdit ?? realExportEdit)({
         tools: this.deps.tools,
         sourcePath: item.path,
+        sourceFormat: item.format,
         destPath,
         project,
         format,

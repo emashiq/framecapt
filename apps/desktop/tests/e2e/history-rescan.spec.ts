@@ -3,6 +3,7 @@
  * output folder but not in history is added by the button, from the empty History page and again
  * from the toolbar (which then finds nothing new). The file itself is never touched.
  */
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,6 +16,7 @@ import {
 } from '@playwright/test';
 import { exitApp } from './app-exit';
 import { mockScreenshotPng } from './history-fixtures';
+import { FFMPEG } from './media-fixtures';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 const NAME = 'FrameCapt 2026-10-02 at 14.05.09.png';
@@ -70,4 +72,21 @@ test('Find existing captures adds a file from the output folder, once', async ()
   await expect(page.getByText('No new captures found')).toBeVisible();
   await expect(page.getByTestId('history-item')).toHaveCount(1);
   expect(fs.readFileSync(file).equals(bytes)).toBe(true);
+});
+
+test('Find existing captures also adds an animated GIF as a recording', async () => {
+  const gif = path.join(userDataDir, 'videos', 'FrameCapt', 'FrameCapt 2026-10-02 at 14.06.10.gif');
+  fs.mkdirSync(path.dirname(gif), { recursive: true });
+  const made = spawnSync(
+    FFMPEG,
+    ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=160x90:rate=10', '-t', '1', '-y', gif],
+    { shell: false, windowsHide: true },
+  );
+  expect(made.status, String(made.stderr)).toBe(0);
+
+  await page.getByTestId('history-find-existing').click();
+  await expect(page.getByText('Added 1 capture')).toBeVisible();
+  const card = page.getByTestId('history-item').filter({ hasText: 'gif' });
+  await expect(card).toHaveCount(1);
+  await expect(card.getByTestId('history-type')).toContainText('gif');
 });

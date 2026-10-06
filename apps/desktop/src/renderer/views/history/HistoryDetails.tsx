@@ -183,7 +183,8 @@ export function HistoryDetails({
           {item.format === 'fcap' && item.layout && !missing ? (
             <p className="text-[13px] text-fg-muted" data-testid="fcap-note">
               This recording opens only in FrameCapt. Use Extract to save one source, or a part of
-              it, as an MP4 or WebM video that plays anywhere.
+              it, as an MP4 or WebM video that plays anywhere, or Edit video to cut, crop and export
+              it.
             </p>
           ) : null}
           <p className="selectable text-xs break-all text-fg-subtle" data-testid="history-path">

@@ -88,6 +88,8 @@ describe('rescan of step guide folders', () => {
       hasThumb: true,
     });
     expect(item?.path).toBe(path.join(dir, 'flow.json'));
+    // A guide is named by its folder, not "flow.json" (every guide would look the same).
+    expect(item?.fileName).toBe(name);
     expect(item?.createdAt).toBe(new Date(2026, 9, 2, 14, 5, 9).getTime());
     expect(thumbed).toEqual([dir]);
   });

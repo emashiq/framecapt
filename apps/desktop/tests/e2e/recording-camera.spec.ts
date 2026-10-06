@@ -174,9 +174,17 @@ test('screen recording with the camera: a protected bubble, the toolbar toggle, 
     await expect.poll(async () => (await bubbleInfo(app))?.visible).toBe(true);
 
     // The bubble's own size button cycles the window M 220 -> L 300 -> S 160 -> M 220.
-    for (const width of [300, 160, 220]) {
+    // The button computes the next size from the size the bubble shows, which is updated by the
+    // reply to the previous change: wait for that reply (data-size), not only for the window to
+    // resize (main resizes it before the reply arrives), or a fast click repeats the last size.
+    for (const [width, size] of [
+      [300, 'l'],
+      [160, 's'],
+      [220, 'm'],
+    ] as const) {
       await bubblePage.getByTestId('camera-size').click({ force: true });
       await expect.poll(async () => (await bubbleInfo(app))?.bounds.width).toBe(width);
+      await expect(bubblePage.getByTestId('camera-bubble')).toHaveAttribute('data-size', size);
     }
 
     // Drag the bubble to the top left (a programmatic move sends the same live positions).

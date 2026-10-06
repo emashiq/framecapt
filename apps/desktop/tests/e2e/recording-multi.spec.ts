@@ -431,6 +431,60 @@ test('Extract can be cancelled and leaves nothing behind', async () => {
   await page.getByTestId('history-back').click();
 });
 
+test('Edit video: the .fcap opens in the video editor, Source crops to one window, the export is a normal MP4', async () => {
+  const [name] = fcapFiles();
+  const header = readHeader(path.join(videosDir(), name ?? ''));
+  const window2 = header.sources[1]!.rect;
+  await page
+    .getByTestId('history-item')
+    .filter({ hasText: 'Multi' })
+    .locator('[data-card-main]')
+    .click();
+  await page.getByTestId('details-edit').click();
+  await expect(page.getByTestId('video-editor')).toBeVisible();
+  // The preview plays the payload through the same media route as the History player.
+  await expect
+    .poll(() => page.getByTestId('video-preview').evaluate((v: HTMLVideoElement) => v.readyState), {
+      timeout: 15_000,
+    })
+    .toBeGreaterThanOrEqual(2);
+  await expect(page.getByTestId('output-size')).toHaveText(
+    new RegExp(`^Output ${header.width} × ${header.height}`),
+  );
+
+  // Source: All, Screen 1, Window 2 (from the layout); choosing one sets the crop to its tile.
+  const source = page.getByTestId('source-select');
+  await expect(source.locator('option:not([hidden])')).toHaveText(['All', 'Screen 1', 'Window 2']);
+  await source.selectOption({ label: 'Window 2' });
+  await expect(page.getByTestId('output-size')).toHaveText(
+    `Output ${window2.width} × ${window2.height} (cropped from ${header.width} × ${header.height})`,
+  );
+  await source.selectOption({ label: 'All' });
+  await expect(page.getByTestId('output-size')).toHaveText(
+    `Output ${header.width} × ${header.height}`,
+  );
+  await source.selectOption({ label: 'Window 2' });
+
+  await page.getByTestId('video-export').click();
+  await expect(page.locator('[data-sonner-toast]', { hasText: 'MP4 exported' })).toBeVisible({
+    timeout: 90_000,
+  });
+  const out = path.join(videosDir(), `${(name ?? '').replace(/.fcap$/, '')} (edited).mp4`);
+  const video = probeFile(out).streams.find((stream) => stream.codec_type === 'video');
+  expect(video).toMatchObject({ codec_name: 'h264', width: window2.width, height: window2.height });
+  // The fcap is untouched and the export is a normal MP4 derived from it.
+  expect(readHeader(path.join(videosDir(), name ?? '')).sources).toHaveLength(2);
+  const items = await historyItems();
+  const fcap = items.find((item) => item.format === 'fcap');
+  expect(items.find((item) => item.fileName === path.basename(out))).toMatchObject({
+    format: 'mp4',
+    derivedFrom: fcap?.id,
+  });
+
+  await page.getByTestId('video-back').click();
+  await page.getByTestId('history-back').click();
+});
+
 test('All screens records both displays at their places on the virtual desktop', async () => {
   await page
     .getByRole('navigation', { name: 'Primary' })

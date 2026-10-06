@@ -29,7 +29,8 @@ const distance = (a: Point, b: Point): number => Math.hypot(a.x - b.x, a.y - b.y
  * Finds the moments a person points at something: the pointer travels, then rests. Pure and fed
  * samples one at a time (the controller polls `screen.getCursorScreenPoint()`; no global hooks are
  * installed, see ADR-033). `feed` returns the sample at which a step should be captured, once per
- * rest. The first rest after starting is a step even though there is no earlier step to move from.
+ * rest. Starting counts the pointer's position as the last step (the Start button is there), so the
+ * first step needs real movement first.
  */
 export class FlowDetector {
   private readonly options: DetectorOptions;
@@ -55,6 +56,13 @@ export class FlowDetector {
     if (last && sample.t - last.t < minIntervalMs) return null;
     this.lastStep = sample;
     return sample;
+  }
+
+  /** Capture begins with the pointer here: it is not a step, so a rest on this spot makes none. */
+  start(sample: CursorSample): void {
+    // Never a step in time, so the minimum interval does not delay the first real one.
+    this.lastStep = { ...sample, t: Number.NEGATIVE_INFINITY };
+    this.anchor = sample;
   }
 
   /** A step the person asked for: automatic detection does not repeat it while the pointer stays. */

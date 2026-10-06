@@ -124,6 +124,14 @@ describe('rescanLibrary', () => {
     expect((await history.list()).total).toBe(0);
   });
 
+  it('adds an animated GIF as a recording of format gif', async () => {
+    fs.writeFileSync(path.join(videos, defaultRecordingFileName(at(6), 'gif')), 'gif');
+    const { history, run } = setup();
+    expect(await run()).toBe(1);
+    const { items } = await history.list();
+    expect(items[0]).toMatchObject({ type: 'recording', format: 'gif' });
+  });
+
   it('links an MP4 to the WebM of the same name', async () => {
     fs.writeFileSync(path.join(videos, defaultRecordingFileName(at(5))), 'webm');
     fs.writeFileSync(path.join(videos, defaultRecordingFileName(at(5), 'mp4')), 'mp4');

@@ -276,6 +276,24 @@ describe('buildEditArgs', () => {
     expect(args.at(-1)).toBe('C:\\videos\\out.mp4');
   });
 
+  it('reads a .fcap from its payload: header skipped, Matroska forced, file protocol only', () => {
+    const { args } = buildEditArgs(project(), 'C:\\videos\\in.fcap', 'C:\\videos\\out.mp4', {
+      filterScriptPath: 'C:\\tmp\\graph.txt',
+      sourceFormat: 'fcap',
+    });
+    const input = args.indexOf('-i');
+    expect(args.slice(input - 6, input + 2)).toEqual([
+      '-protocol_whitelist',
+      'file',
+      '-skip_initial_bytes',
+      '4096',
+      '-f',
+      'matroska',
+      '-i',
+      'C:\\videos\\in.fcap',
+    ]);
+  });
+
   it('does not force a demuxer for an MP4 source', () => {
     const { args } = run(project(), 'C:\\videos\\in.mp4');
     expect(args).not.toContain('matroska');

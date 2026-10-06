@@ -77,20 +77,24 @@ test('Ctrl+Shift+S saves into the screenshots folder with no dialog, lists it in
     }) as typeof shell.trashItem;
   });
   const folder = await shotsDir();
+  // A save is written to a `.tmp` file and renamed: only finished files count (the temp file is
+  // there for a moment and would be mistaken for the capture).
+  const saved = (): string[] =>
+    fs.existsSync(folder) ? fs.readdirSync(folder).filter((name) => !name.endsWith('.tmp')) : [];
 
   await page.getByTestId('shot-screen').click();
   await expect(page.getByTestId('editor-view')).toBeVisible();
   await page.getByTestId('editor-canvas').click({ position: { x: 40, y: 40 } });
   await page.keyboard.press('Control+Shift+S');
-  await expect.poll(() => (fs.existsSync(folder) ? fs.readdirSync(folder).length : 0)).toBe(1);
-  const first = fs.readdirSync(folder)[0] as string;
+  await expect.poll(() => saved().length).toBe(1);
+  const first = saved()[0] as string;
   expect(first).toMatch(/^FrameCapt \d{4}-\d{2}-\d{2} at \d{2}\.\d{2}\.\d{2}\.png$/);
   expect(fs.readdirSync(folder).filter((name) => name.endsWith('.tmp'))).toEqual([]);
   await expect(page.getByText(/Saved to/).first()).toBeVisible();
   // A second quick save of the same capture never overwrites the first.
   await page.keyboard.press('Control+Shift+S');
-  await expect.poll(() => fs.readdirSync(folder).length).toBe(2);
-  expect(fs.readdirSync(folder)).toContain(first);
+  await expect.poll(() => saved().length).toBe(2);
+  expect(saved()).toContain(first);
   expect(await app.evaluate(() => (globalThis as unknown as { __dialogs: number }).__dialogs)).toBe(
     0,
   );
@@ -98,19 +102,19 @@ test('Ctrl+Shift+S saves into the screenshots folder with no dialog, lists it in
   // The menu entry does the same.
   await page.getByTestId('editor-save-menu').click();
   await page.getByTestId('editor-quick-save').click();
-  await expect.poll(() => fs.readdirSync(folder).length).toBe(3);
+  await expect.poll(() => saved().length).toBe(3);
 
   // Undo the last one.
   // Stacked toasts overlap and animate: activate the newest Undo directly.
   await page.getByRole('button', { name: 'Undo' }).last().dispatchEvent('click');
-  await expect.poll(() => fs.readdirSync(folder).length).toBe(2);
+  await expect.poll(() => saved().length).toBe(2);
   expect(
     await app.evaluate(() => (globalThis as unknown as { __trashed: string[] }).__trashed),
   ).toHaveLength(1);
 
   // After the undo the editor holds unsaved work again; quick save once more, then leave.
   await page.keyboard.press('Control+Shift+S');
-  await expect.poll(() => fs.readdirSync(folder).length).toBe(3);
+  await expect.poll(() => saved().length).toBe(3);
   await page.getByTestId('editor-done').click();
   await nav('History');
   await expect(page.getByTestId('history-item')).toHaveCount(3);

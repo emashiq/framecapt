@@ -317,6 +317,7 @@ export function FcapExtract({ item, layout, className }: FcapExtractProps) {
       <Button
         variant="primary"
         data-testid="details-extract"
+        className="w-full"
         disabled={otherActive}
         icon={<Scissors className="size-4" aria-hidden="true" />}
         onClick={() => setOpen(true)}

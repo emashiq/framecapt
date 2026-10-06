@@ -8,7 +8,7 @@ FrameCapt is a screenshot and screen recorder for Windows: capture, mark up and 
 
 ## Short description (about 50 words)
 
-FrameCapt captures screenshots and screen recordings on Windows with a shortcut, lets you annotate and permanently redact sensitive areas, and saves everything on your own computer. You sign in once with a personal or organization account; your captures are never uploaded, and there is no telemetry. Free and open source (GPL-3.0); the official build is intended to add a signed installer (once the owner has a certificate), updates and support.
+FrameCapt captures screenshots and screen recordings on Windows with a shortcut, lets you annotate and permanently redact sensitive areas, and saves everything on your own computer. There is no account or sign-in; your captures are never uploaded, and there is no telemetry. Free and open source (GPL-3.0); the official build is intended to add a signed installer (once the owner has a certificate), updates and support.
 
 ## Long description
 

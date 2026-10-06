@@ -128,6 +128,7 @@ export class StepsController {
     this.lastOutside = null;
     this.startedAt = this.deps.now();
     this.detector.reset();
+    this.detector.start({ ...this.deps.cursor(), t: this.deps.monotonic() });
     this.deps.log?.info('Step capture started');
     this.startTimer();
     this.deps.ui.open();

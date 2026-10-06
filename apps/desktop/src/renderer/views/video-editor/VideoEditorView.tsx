@@ -650,6 +650,7 @@ export function VideoEditorView({
         </div>
         <Inspector
           project={project}
+          layout={api.layout}
           player={player}
           selection={selection}
           range={range}

@@ -9,6 +9,11 @@ export interface Searchable {
   source: HistorySource;
 }
 
+/** The name an item goes by: its file's, but a guide (a folder with `flow.json`) by its folder's. */
+export function itemName(item: Pick<Searchable, 'type' | 'path'>): string {
+  return path.basename(item.type === 'flow' ? path.dirname(item.path) : item.path);
+}
+
 const two = (value: number): string => String(value).padStart(2, '0');
 
 /** Everything a person might type to find an item: its name, kind, format and the date in a few spellings. */
@@ -27,9 +32,7 @@ export function searchText(item: Searchable): string {
       : item.type === 'flow'
         ? 'guide steps flow'
         : 'recording video';
-  return [path.basename(item.path), kind, item.format, item.source, iso, long]
-    .join(' ')
-    .toLowerCase();
+  return [itemName(item), kind, item.format, item.source, iso, long].join(' ').toLowerCase();
 }
 
 /** Every whitespace-separated word of `query` must appear (case-insensitive); an empty query matches. */

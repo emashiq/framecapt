@@ -9,6 +9,7 @@ import { JobRunner } from '../../src/main/media/job-runner';
 import { VideoEditService, editedDestination } from '../../src/main/video-projects/service';
 import { freeFileName } from '../../src/main/shots/free-name';
 import { applyCommand, createProject, newItem, rectOf } from '../../src/shared/video-edit';
+import { buildFcapHeaderBlock } from '../../src/main/recording/fcap';
 import { fakeTools, PLAYABLE } from './fake-tools';
 
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -30,15 +31,39 @@ function setup(
     format?: string;
     type?: string;
     missingFile?: boolean;
+    /** An fcap source file made from this header (the tests do not need a payload). */
+    fcap?: boolean;
     stored?: ReturnType<typeof createProject> | null;
     probe?: ProbeResult | Error;
     export?: typeof exportEdit;
   } = {},
 ) {
-  const source = path.join(dir, 'Clip.webm');
+  const source = path.join(dir, options.fcap ? 'Clip.fcap' : 'Clip.webm');
   if (options.missingFile) fs.rmSync(source, { force: true });
-  else fs.writeFileSync(source, 'webm');
+  else if (options.fcap) {
+    fs.writeFileSync(
+      source,
+      Buffer.concat([
+        buildFcapHeaderBlock(
+          {
+            width: 1280,
+            height: 720,
+            durationMs: 12_000,
+            hasAudio: true,
+            createdAt: 0,
+            sources: [
+              { name: 'Screen 1', kind: 'screen', rect: { x: 0, y: 0, width: 640, height: 720 } },
+              { name: 'Window 2', kind: 'window', rect: { x: 640, y: 0, width: 640, height: 720 } },
+            ],
+          },
+          4,
+        ),
+        Buffer.from('webm'),
+      ]),
+    );
+  } else fs.writeFileSync(source, 'webm');
   const events: string[] = [];
+  const probedAs: (string | undefined)[] = [];
   const written: unknown[] = [];
   const added: unknown[] = [];
   const runner = new JobRunner();
@@ -50,7 +75,7 @@ function setup(
               id: ID,
               type: options.type ?? 'recording',
               path: source,
-              format: options.format ?? 'webm',
+              format: options.fcap ? 'fcap' : (options.format ?? 'webm'),
               width: 1280,
               height: 720,
               durationMs: 12_000,
@@ -80,7 +105,12 @@ function setup(
       assetPath: () => null,
     },
     pickAudioFile: () => Promise.resolve(null),
-    tools: fakeTools({ probe: () => options.probe ?? PROBE }),
+    tools: fakeTools({
+      probe: (_file, format) => {
+        probedAs.push(format);
+        return options.probe ?? PROBE;
+      },
+    }),
     runner,
     destination: (src, extension) => editedDestination(src, extension, freeFileName),
     emit: {
@@ -91,7 +121,7 @@ function setup(
     },
     ...(options.export && { exportEdit: options.export }),
   });
-  return { service, runner, events, written, added, source };
+  return { service, runner, events, written, added, source, probedAs };
 }
 
 const okExport =
@@ -146,6 +176,16 @@ describe('VideoEditService.open', () => {
     // The box now has to fit the smaller frame.
     expect(rectOf(project.items[0])?.x).toBeLessThanOrEqual(1080);
     expect(project.items[0]?.endMs).toBeLessThanOrEqual(12_000);
+  });
+
+  it('opens a multi-source recording: probed from its payload, with its sources as the layout', async () => {
+    const { service, probedAs } = setup({ fcap: true });
+    const { project, layout } = await service.open(ID);
+    expect(probedAs).toEqual(['fcap']);
+    expect(layout?.sources.map((s) => s.name)).toEqual(['Screen 1', 'Window 2']);
+    expect(layout).toMatchObject({ width: 1280, height: 720 });
+    expect(project.source).toMatchObject({ width: 1280, height: 720 });
+    expect((await setup().service.open(ID)).layout).toBeNull();
   });
 
   it('refuses what it cannot edit', async () => {
@@ -208,6 +248,20 @@ describe('VideoEditService.export', () => {
       }),
     ]);
     expect(written).toHaveLength(1); // the project is saved with the export
+  });
+
+  it('exports a multi-source recording as a normal derived MP4 (the source is read as an fcap)', async () => {
+    let request: Parameters<typeof exportEdit>[0] | undefined;
+    const exporter: typeof exportEdit = (r) => {
+      request = r;
+      return okExport()(r);
+    };
+    const { service, runner, events, added } = setup({ fcap: true, export: exporter });
+    await service.export(ID, project(), 'mp4');
+    await runner.idle();
+    expect(request).toMatchObject({ sourceFormat: 'fcap' });
+    expect(events.at(-1)).toBe(`done:mp4:${NEW_ID}:Clip (edited).mp4`);
+    expect(added[0]).toMatchObject({ format: 'mp4', derivedFrom: ID });
   });
 
   it('adds a GIF as a recording of format gif and picks a free name', async () => {

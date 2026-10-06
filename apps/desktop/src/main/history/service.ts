@@ -24,7 +24,7 @@ import { readFcapHeader, readFcapHeaderCached } from '../recording/fcap';
 import { CompletionRecordSchema, COMPLETED_DIR } from '../recording/manifest';
 import { HistoryStore, type HistoryItem } from './store';
 import { mapLimit, samePath } from './files';
-import { matchesQuery } from './query';
+import { itemName, matchesQuery } from './query';
 import { ThumbStore, thumbNameFor, THUMBS_CAP_BYTES } from './thumbs';
 
 const STAT_CONCURRENCY = 8;
@@ -278,7 +278,7 @@ export class HistoryService {
       type: item.type,
       createdAt: item.createdAt,
       path: item.path,
-      fileName: path.basename(item.path),
+      fileName: itemName(item),
       width: item.width,
       height: item.height,
       durationMs: item.durationMs,

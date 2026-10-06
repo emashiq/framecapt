@@ -14,10 +14,15 @@ import { MAX_HISTORY_ITEMS } from './store';
 
 /**
  * File types a rescan adds. Everything here is final, flattened output of FrameCapt (ADR-026), so
- * this is the one place a new format is registered (the multi-source `.fcap` is the latest).
+ * this is the one place a new format is registered (the multi-source `.fcap` and the animated `.gif` are the latest).
  */
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
-const VIDEO_EXTENSIONS = new Set(['.webm', '.mp4', '.fcap']);
+const VIDEO_EXTENSIONS = new Set(['.webm', '.mp4', '.fcap', '.gif']);
+
+const FORMAT_BY_EXTENSION: Record<string, 'webm' | 'mp4' | 'gif'> = {
+  '.mp4': 'mp4',
+  '.gif': 'gif',
+};
 
 const PROBE_TIMEOUT_MS = 30_000;
 const HEADER_BYTES = 64 * 1024;
@@ -150,7 +155,7 @@ async function addVideoFile(deps: RescanDeps, candidate: Candidate): Promise<boo
   if (candidate.extension === '.fcap') return addFcapFile(deps, candidate);
   const probe = await deps.tools.probe(candidate.file, { timeoutMs: PROBE_TIMEOUT_MS });
   if (!probe.hasVideo) return false;
-  const format = candidate.extension === '.mp4' ? 'mp4' : 'webm';
+  const format = FORMAT_BY_EXTENSION[candidate.extension] ?? 'webm';
   // An MP4 next to a WebM of the same name is that recording's export.
   const webm =
     format === 'mp4'

@@ -146,7 +146,7 @@ function ModeCard({
           <p className="text-sm text-fg-muted">{description}</p>
         </div>
       </div>
-      <ul className="mt-auto flex flex-col gap-2.5">
+      <ul className="flex flex-col gap-2.5">
         {SOURCES.map(({ label, target, icon: Icon }, index) => (
           <li key={label} className="flex items-center gap-3">
             <Button

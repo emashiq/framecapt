@@ -140,11 +140,12 @@ export function startItemDrag(item: HistoryItemView): void {
   });
 }
 
-/** True for what the History "Edit" action can open: a screenshot (image editor) or a WebM/MP4 recording (video editor). */
+/** True for what the History "Edit" action can open: a screenshot (image editor) or a WebM, MP4 or multi-source recording (video editor). */
 export function canEditItem(item: HistoryItemView): boolean {
   return (
     item.type === 'screenshot' ||
-    (item.type === 'recording' && (item.format === 'webm' || item.format === 'mp4'))
+    (item.type === 'recording' &&
+      (item.format === 'webm' || item.format === 'mp4' || item.format === 'fcap'))
   );
 }
 

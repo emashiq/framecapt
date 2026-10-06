@@ -13,7 +13,7 @@ import {
   type VideoProject,
   type VisualItem,
 } from '../../shared/video-edit';
-import { localInput, mediaPath } from './ffmpeg';
+import { localInput, mediaInputArgs, mediaPath } from './ffmpeg';
 
 /**
  * Turns a video project into one ffmpeg command: a filter graph (written to a script file the
@@ -37,6 +37,8 @@ export interface EditArgsOptions {
    * clip (its asset), by item id. Made by main; never a renderer path.
    */
   inputFiles?: Readonly<Record<string, string>>;
+  /** The history format of the source: a `.fcap` is read from its payload (see `mediaInputArgs`). */
+  sourceFormat?: string;
 }
 
 /** An item that is an extra ffmpeg input: input 0 is the recording, these are 1, 2, ... in item order. */
@@ -414,10 +416,13 @@ export function buildEditArgs(
 ): EditCommand {
   const filterScript = buildFilterScript(project);
   const format = project.export.format;
-  const input = localInput(
-    inputPath,
-    path.extname(inputPath).toLowerCase() === '.webm' ? 'matroska' : undefined,
-  );
+  const input =
+    options.sourceFormat === 'fcap'
+      ? mediaInputArgs({ path: inputPath, format: 'fcap' })
+      : localInput(
+          inputPath,
+          path.extname(inputPath).toLowerCase() === '.webm' ? 'matroska' : undefined,
+        );
   const fps = frameRate(project);
   const extra = plannedInputs(project).flatMap(({ item }) => {
     const file = options.inputFiles?.[item.id];

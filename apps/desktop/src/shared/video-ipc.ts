@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { HistoryIdSchema } from './history-ipc';
 import { MAX_ASSET_BYTES } from './project-ipc';
+import { RecordingLayoutSchema } from './recording-layout';
 import {
   AUDIO_EXTENSIONS,
   AssetIdSchema,
@@ -19,6 +20,8 @@ export const VideoOpenResponseSchema = z.strictObject({
   fileName: z.string(),
   /** False when the project is new (nothing was saved before, or the saved file was unusable). */
   restored: z.boolean(),
+  /** The screens and windows of a multi-source recording (.fcap); null for any other recording. */
+  layout: RecordingLayoutSchema.nullable(),
 });
 
 export const VideoSaveRequestSchema = z.strictObject({

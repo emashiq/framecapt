@@ -753,7 +753,9 @@ test.describe('keyboard and focus', () => {
     // The canvas has the focus, so the keyboard works without a click.
     await expect(page.getByTestId('editor-canvas')).toBeFocused();
     await page.keyboard.press('Control+s');
-    await expect.poll(() => fs.existsSync(out)).toBe(true);
+    // Normally well under a second; about one run in twenty the export (OffscreenCanvas
+    // convertToBlob) stalls for about 6 s (measured), so the default 5 s poll was too tight.
+    await expect.poll(() => fs.existsSync(out), { timeout: 20_000 }).toBe(true);
     await expect(page.getByText('Saved to', { exact: false })).toBeVisible();
   });
 

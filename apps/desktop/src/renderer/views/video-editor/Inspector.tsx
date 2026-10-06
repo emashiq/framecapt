@@ -21,6 +21,7 @@ import {
   type VideoCommand,
   type VideoProject,
 } from '../../../shared/video-edit';
+import { layoutSourceRect, type RecordingLayout } from '../../../shared/recording-layout';
 import { Button } from '../../components/ui/Button';
 import { Segmented } from '../../components/ui/Segmented';
 import { Select, type SelectOption } from '../../components/ui/Select';
@@ -36,6 +37,8 @@ const SWATCHES = ['#000000', '#ffffff', '#ef4444', '#f59e0b', '#22c55e', '#3b82f
 
 export interface InspectorProps {
   project: VideoProject;
+  /** The screens and windows of a multi-source recording (.fcap), for the "Source" choice. */
+  layout: RecordingLayout | null;
   player: Player;
   selection: TimelineSelection;
   range: TimeRange | null;
@@ -163,6 +166,61 @@ function Section(props: { title: string; children: ReactNode; testId?: string })
 const seconds = (ms: number): number => ms / 1000;
 const toMs = (value: number): number => Math.round(value * 1000);
 
+const ALL_SOURCES = 'all';
+const CUSTOM_SOURCE = 'custom';
+
+/** Which source the crop is: all (no crop), one tile of the layout, or something else. */
+function sourceChoice(crop: PixelRect | null, layout: RecordingLayout): string {
+  if (crop === null) return ALL_SOURCES;
+  const index = layout.sources.findIndex((_, i) => {
+    const rect = layoutSourceRect(layout, i);
+    return (
+      rect?.x === crop.x &&
+      rect.y === crop.y &&
+      rect.width === crop.width &&
+      rect.height === crop.height
+    );
+  });
+  return index < 0 ? CUSTOM_SOURCE : String(index);
+}
+
+/** "Source" of a multi-source recording: All, or one screen or window cropped out of the picture. */
+function SourceSelect(props: {
+  layout: RecordingLayout;
+  project: VideoProject;
+  commit: InspectorProps['commit'];
+  onCropAspect: (aspect: AspectId) => void;
+}) {
+  const { layout, project } = props;
+  const options: SelectOption<string>[] = [
+    { value: ALL_SOURCES, label: 'All' },
+    ...layout.sources.map((source, index) => ({ value: String(index), label: source.name })),
+    { value: CUSTOM_SOURCE, label: 'Custom crop', hidden: true },
+  ];
+  const labelId = useId();
+  return (
+    <div>
+      <p id={labelId} className="mb-1 text-[11px] font-medium text-fg-muted">
+        Source
+      </p>
+      <Select
+        labelledBy={labelId}
+        value={sourceChoice(project.crop, layout)}
+        options={options}
+        data-testid="source-select"
+        onChange={(choice) => {
+          if (choice === CUSTOM_SOURCE) return;
+          props.onCropAspect('free');
+          props.commit({
+            type: 'setCrop',
+            crop: choice === ALL_SOURCES ? null : layoutSourceRect(layout, Number(choice)),
+          });
+        }}
+      />
+    </div>
+  );
+}
+
 /** The right-hand panel: the selected item, cut or range, then the crop, audio and fades of the project. */
 export function Inspector(props: InspectorProps) {
   const { project, selection, range, commit, endGesture } = props;
@@ -233,6 +291,14 @@ export function Inspector(props: InspectorProps) {
       )}
 
       <Section title="Crop" testId="inspector-crop">
+        {props.layout ? (
+          <SourceSelect
+            layout={props.layout}
+            project={project}
+            commit={commit}
+            onCropAspect={props.onCropAspect}
+          />
+        ) : null}
         <div className="flex items-center gap-2">
           <Button
             size="sm"
@@ -379,7 +445,8 @@ function ItemSection(props: InspectorProps & { item: Item; duration: number }) {
   };
 
   return (
-    <Section title={style.label} testId="inspector-item">
+    // "Audio" is also the section of the recording's own sound below: tell the clip apart.
+    <Section title={item.kind === 'audio' ? 'Audio clip' : style.label} testId="inspector-item">
       <div className="-mt-1 flex items-center gap-2">
         <span className="flex size-7 items-center justify-center rounded-md bg-surface-3 text-fg-muted">
           <Icon className="size-4" aria-hidden="true" />

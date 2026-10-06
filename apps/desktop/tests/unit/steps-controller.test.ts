@@ -163,6 +163,17 @@ describe('automatic steps', () => {
     expect('historyId' in done).toBe(true);
   });
 
+  it('resting where Start was clicked takes no step', async () => {
+    const { controller, move, wait } = setup();
+    move(300, 200);
+    await controller.start();
+    await wait(3000);
+    expect(controller.snapshot().count).toBe(0);
+    move(600, 300);
+    await wait(1000);
+    expect(controller.snapshot().count).toBe(1);
+  });
+
   it('maps the pointer to the display under it (scale 2 on the left, 1 on the right)', async () => {
     const { controller, deps, move, wait } = setup();
     await controller.start();

@@ -76,6 +76,8 @@ export function withProbedSource(project: VideoProject, probe: ProbeResult): Vid
 export interface EditExportRequest {
   tools: MediaTools;
   sourcePath: string;
+  /** The history format of the source; a `.fcap` is read from its payload. */
+  sourceFormat?: string;
   destPath: string;
   project: VideoProject;
   format: VideoExportFormat;
@@ -119,7 +121,7 @@ async function inputFilesFor(
  * runFileJob). The temporary folder is always removed; the source is only ever read.
  */
 export async function exportEdit(request: EditExportRequest): Promise<FileJobResult> {
-  const { tools, sourcePath, destPath, format, signal } = request;
+  const { tools, sourcePath, sourceFormat, destPath, format, signal } = request;
   if (!VIDEO_EXPORT_FORMATS.includes(format)) {
     return { ok: false, code: 'INVALID_DESTINATION', message: 'Unknown format.', stderrTail: '' };
   }
@@ -128,6 +130,7 @@ export async function exportEdit(request: EditExportRequest): Promise<FileJobRes
     probe = await tools.probe(sourcePath, {
       timeoutMs: PROBE_TIMEOUT_MS,
       ...(signal && { signal }),
+      ...(sourceFormat && { format: sourceFormat }),
     });
   } catch (error) {
     if (error instanceof FfmpegError && error.code === 'FFMPEG_ABORTED') {
@@ -163,11 +166,16 @@ export async function exportEdit(request: EditExportRequest): Promise<FileJobRes
     return await runFileJob({
       tools,
       sourcePath,
+      ...(sourceFormat && { sourceFormat }),
       destPath,
       ...(signal && { signal }),
       ...(request.onProgress && { onProgress: request.onProgress }),
       args: (partial) =>
-        buildEditArgs(project, sourcePath, partial, { filterScriptPath, inputFiles }).args,
+        buildEditArgs(project, sourcePath, partial, {
+          filterScriptPath,
+          inputFiles,
+          ...(sourceFormat && { sourceFormat }),
+        }).args,
       verify: (output) => verifyEdit(project, format, output),
       outputDurationSec: outputDurationMs(projectSegments(project)) / 1000,
       noun: 'export',

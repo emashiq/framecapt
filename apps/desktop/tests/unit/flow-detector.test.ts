@@ -28,6 +28,16 @@ describe('FlowDetector', () => {
     expect(hold(detector, { x: 100, y: 100 }, 800, 5000)).toEqual([]);
   });
 
+  it('the pointer where capture started is not a step; the first needs real movement', () => {
+    const detector = new FlowDetector();
+    detector.start({ x: 100, y: 100, t: 0 });
+    // Resting on the Start button makes nothing, however long.
+    expect(hold(detector, { x: 100, y: 100 }, 100, 5000)).toEqual([]);
+    // Moving to something and resting there does.
+    detector.feed({ x: 400, y: 300, t: 6000 });
+    expect(hold(detector, { x: 400, y: 300 }, 6100, 800)).toHaveLength(1);
+  });
+
   it('move, then rest: one step per item', () => {
     const detector = new FlowDetector();
     const first = hold(detector, { x: 100, y: 100 }, 0, 800);

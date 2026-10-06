@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Toaster } from 'sonner';
 import type { NavigateEvent, SettingsSectionId, StartRequestEvent } from '../shared/settings-ipc';
 import { AppShell, type ViewId } from './components/AppShell';
@@ -258,7 +258,9 @@ export function App() {
           return;
         }
         const latest = response.data.items.find(
-          (item) => item.exists && (item.format === 'webm' || item.format === 'mp4'),
+          (item) =>
+            item.exists &&
+            (item.format === 'webm' || item.format === 'mp4' || item.format === 'fcap'),
         );
         if (latest) editVideo(latest.id);
         else notify.info('There is no recording to edit yet. Record something first.');
@@ -597,8 +599,12 @@ export function App() {
       />
       <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <LiveRegion />
+      {/* Bottom left, over the sidebar: nothing the user has to press is there, whereas the
+          right side holds the primary actions of every view (New recording, Export, Save). */}
       <Toaster
-        position="bottom-right"
+        position="bottom-left"
+        offset={12}
+        style={{ '--width': '216px' } as CSSProperties}
         theme="system"
         toastOptions={{
           style: {

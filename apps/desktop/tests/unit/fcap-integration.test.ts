@@ -11,7 +11,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_RECORD_OPTIONS } from '../../src/shared/recorder-ipc';
-import type { RecordingLayout } from '../../src/shared/recording-layout';
+import { layoutSourceRect, type RecordingLayout } from '../../src/shared/recording-layout';
+import { applyCommand, createProject } from '../../src/shared/video-edit';
+import { exportEdit } from '../../src/main/media/edit-export';
 import { extractFromFcap } from '../../src/main/media/extract';
 import {
   createMediaTools,
@@ -226,6 +228,36 @@ describe.skipIf(paths === null)('real ffmpeg: .fcap', () => {
     expect(half('320:360:0:0').equals(half('320:360:320:0'))).toBe(false);
     // The fcap is untouched and no partial file is left.
     expect(fs.readdirSync(work).filter((name) => name.includes('.partial'))).toEqual([]);
+  });
+
+  it('edits an fcap in the video editor: crop to one source, exported as a normal MP4', async () => {
+    const probe = await tools.probe(fcap, { format: 'fcap', timeoutMs: 30_000 });
+    const project = applyCommand(
+      createProject('11111111-1111-4111-8111-111111111111', {
+        durationMs: Math.round((probe.durationSec ?? 0) * 1000),
+        width: 640,
+        height: 360,
+        hasAudio: true,
+      }),
+      { type: 'setCrop', crop: layoutSourceRect(LAYOUT, 1) },
+    );
+    const dest = path.join(work, 'FrameCapt 2026-10-07 at 10.00.00 (edited).mp4');
+    const result = await exportEdit({
+      tools,
+      sourcePath: fcap,
+      sourceFormat: 'fcap',
+      destPath: dest,
+      project,
+      format: 'mp4',
+    });
+    expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    expect(result.probe.video).toMatchObject({ width: 320, height: 360, codec: 'h264' });
+    expect(result.probe.audioCodec).toBe('aac');
+    expect(result.probe.durationSec).toBeGreaterThan(3.4);
+    expect(result.probe.durationSec).toBeLessThan(4.6);
+    // A normal MP4: it reads without any helper.
+    expect((await tools.probe(dest, { timeoutMs: 30_000 })).video?.width).toBe(320);
   });
 
   it('extracts the whole picture as WebM, and refuses a wrong destination extension', async () => {

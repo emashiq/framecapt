@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import type { RecordingLayout } from '../../../shared/recording-layout';
 import type { VideoCommand, VideoProject } from '../../../shared/video-edit';
 import {
   canRedoVideo,
@@ -43,6 +44,8 @@ export const AUTOSAVE_MS = 600;
 export interface VideoProjectApi {
   load: LoadState;
   fileName: string;
+  /** The sources of a multi-source recording (.fcap); null for any other recording. */
+  layout: RecordingLayout | null;
   project: VideoProject | null;
   save: SaveState;
   canUndo: boolean;
@@ -63,6 +66,7 @@ export function useVideoProject(historyId: string): VideoProjectApi {
   const [history, dispatch] = useReducer(reducer, null);
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
   const [fileName, setFileName] = useState('');
+  const [layout, setLayout] = useState<RecordingLayout | null>(null);
   const [save, setSave] = useState<SaveState>('saved');
   const present = history?.present ?? null;
   const savedRef = useRef<VideoProject | null>(null);
@@ -85,6 +89,7 @@ export function useVideoProject(historyId: string): VideoProjectApi {
       }
       savedRef.current = response.data.project;
       setFileName(response.data.fileName);
+      setLayout(response.data.layout);
       dispatch({ type: 'load', project: response.data.project });
       setSave('saved');
       setLoad({ status: 'ready' });
@@ -149,6 +154,7 @@ export function useVideoProject(historyId: string): VideoProjectApi {
   return {
     load,
     fileName,
+    layout,
     project: present,
     save,
     canUndo: history ? canUndoVideo(history) : false,

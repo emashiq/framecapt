@@ -128,7 +128,7 @@ export function HistoryCard({
   const kind =
     item.type === 'screenshot' ? 'screenshot' : item.type === 'flow' ? 'step guide' : 'recording';
   // The type badge already says ".png"; the name shows the part that tells captures apart.
-  const stem = item.fileName.replace(/[.][^.]+$/, '');
+  const stem = item.type === 'flow' ? item.fileName : item.fileName.replace(/[.][^.]+$/, '');
   const openMenu = (event: MouseEvent<HTMLElement>): void => {
     event.preventDefault();
     // The mouse reports button 2; the Menu key and Shift+F10 do not: anchor those at the card.
