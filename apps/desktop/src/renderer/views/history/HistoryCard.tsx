@@ -22,7 +22,7 @@ import { cn } from '../../lib/cn';
 import { formatExact, formatRelative } from '../../lib/time';
 import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/IconButton';
-import type { ItemActions } from './actions';
+import { canEditItem, editLabel, type ItemActions } from './actions';
 import { Thumb } from './Thumb';
 
 export interface HistoryCardProps {
@@ -231,11 +231,11 @@ export function HistoryCard({
         </div>
       ) : (
         <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-150 group-focus-within/card:opacity-100 group-hover/card:opacity-100">
-          {item.type === 'screenshot' && onEdit ? (
+          {canEditItem(item) && onEdit ? (
             <IconButton
               size="sm"
               variant="secondary"
-              aria-label="Edit"
+              aria-label={editLabel(item)}
               data-testid="history-edit"
               icon={<Pencil className="size-4" />}
               onClick={() => onEdit(item)}
@@ -281,14 +281,14 @@ export function HistoryCard({
                 sideOffset={6}
                 className="z-50 min-w-56 rounded-xl border border-line bg-surface p-1.5 text-fg shadow-raised"
               >
-                {item.type === 'screenshot' && onEdit ? (
+                {canEditItem(item) && onEdit ? (
                   <DropdownMenu.Item
                     data-testid="history-menu-edit"
                     onSelect={() => onEdit(item)}
                     className={menuItemClass}
                   >
                     <Pencil className="size-4 text-fg-subtle" aria-hidden="true" />
-                    Edit
+                    {editLabel(item)}
                   </DropdownMenu.Item>
                 ) : null}
                 {item.type === 'recording' && item.format === 'webm' ? (

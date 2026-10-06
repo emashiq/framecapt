@@ -16,8 +16,10 @@ import { RecordingResultView } from './views/RecordingResultView';
 import { EditorView, type EditorShot } from './views/editor/EditorView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
+import { VideoEditorView } from './views/video-editor/VideoEditorView';
 import { listenToBulk } from './history/bulk-store';
 import { listenToExports } from './history/export-store';
+import { listenToVideoExports } from './history/video-export-store';
 import { openFromHistory } from './editor/reedit';
 
 /** What the discard confirmation will do when the user agrees. */
@@ -70,6 +72,11 @@ export function App() {
   const [pending, setPending] = useState<PendingLeave | null>(null);
   const [quitAsk, setQuitAsk] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  /** The recording open in the video editor (it saves itself; leaving writes what is pending). */
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [videoLeave, setVideoLeave] = useState<{ then?: () => void } | null>(null);
+  const videoFlush = useRef<(() => Promise<boolean>) | null>(null);
+  const viewRef = useRef<ViewId>('capture');
   const shotRef = useRef<EditorShot | null>(null);
   const recorder = useRecorderState();
   useRecorderToasts(recorder);
@@ -77,6 +84,9 @@ export function App() {
   useEffect(() => {
     shotRef.current = shot;
   }, [shot]);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
 
   // The settings (and the theme) load once; main pushes every later change.
   useEffect(() => startSettingsSync(), []);
@@ -99,6 +109,7 @@ export function App() {
             ...(savedPath && { savedPath }),
           });
           setDirty(savedPath === undefined); // unsaved, unless "save after capture" already saved it
+          void videoFlush.current?.(); // a video being edited keeps its changes (it saves itself)
           setView('capture');
           if (savedPath) {
             notify.success(`Saved to ${shortPath(savedPath)}`, {
@@ -116,6 +127,7 @@ export function App() {
 
   // MP4 export progress and results are shown wherever the user is.
   useEffect(() => listenToExports(), []);
+  useEffect(() => listenToVideoExports(), []);
   useEffect(() => listenToBulk(), []);
 
   // A damaged history file is set aside at startup; say so once.
@@ -163,15 +175,31 @@ export function App() {
     setDirty(false);
   }, []);
 
+  const registerVideoFlush = useCallback((flush: (() => Promise<boolean>) | null) => {
+    videoFlush.current = flush;
+  }, []);
+
+  /** Leaving the video editor: its pending changes are written first; if that fails, ask. */
+  const leaveVideo = useCallback((then?: () => void) => {
+    void (videoFlush.current?.() ?? Promise.resolve(true)).then((saved) => {
+      if (saved) then?.();
+      else setVideoLeave(then ? { then } : {});
+    });
+  }, []);
+
   const requestLeave = useCallback(
     (then?: () => void) => {
+      if (viewRef.current === 'video-editor') {
+        leaveVideo(then);
+        return;
+      }
       if (shotRef.current && dirty) {
         setPending({ kind: 'leave', ...(then && { then }) });
         return;
       }
       void endSession().then(then);
     },
-    [dirty, endSession],
+    [dirty, endSession, leaveVideo],
   );
 
   const confirmDiscard = useCallback(async () => {
@@ -197,11 +225,40 @@ export function App() {
         setView(next);
         if (next === 'settings') setSettingsSection(section);
       };
-      if (shotRef.current && next !== 'capture') requestLeave(go);
+      if (viewRef.current === 'video-editor' && next !== 'video-editor') requestLeave(go);
+      else if (shotRef.current && next !== 'capture') requestLeave(go);
       else go();
     },
     [requestLeave],
   );
+
+  /** History's Edit video action: the recording opens in the video editor (asks first if work is unsaved). */
+  const editVideo = useCallback(
+    (id: string) => {
+      requestLeave(() => {
+        setVideoId(id);
+        setView('video-editor');
+      });
+    },
+    [requestLeave],
+  );
+
+  /** The command center's "Edit the latest recording". */
+  const editLatestVideo = useCallback(() => {
+    void window.framecapt
+      .invoke('history:list', { filter: 'recording', limit: 50 })
+      .then((response) => {
+        if (!response.ok) {
+          notify.error(response.error);
+          return;
+        }
+        const latest = response.data.items.find(
+          (item) => item.exists && (item.format === 'webm' || item.format === 'mp4'),
+        );
+        if (latest) editVideo(latest.id);
+        else notify.info('There is no recording to edit yet. Record something first.');
+      });
+  }, [editVideo]);
 
   /** History's Edit action: a new editor session for a saved screenshot (asks first if work is unsaved). */
   const editHistoryItem = useCallback(
@@ -274,15 +331,17 @@ export function App() {
           startRequest({ kind, target }),
         navigate: (next: ViewId, section?: SettingsSectionId) => navigate(next, section),
         showKeyboardHelp: () => setHelpOpen(true),
+        editVideo: editLatestVideo,
       },
       onOpenCapture: (id: string) => {
         setHistoryFocus(id);
         navigate('history');
       },
     }),
-    [startRequest, navigate],
+    [startRequest, navigate, editLatestVideo],
   );
 
+  const showVideoEditor = view === 'video-editor' && videoId !== null;
   const showEditor = view === 'capture' && shot !== null;
   const showRecording = view === 'capture' && !showEditor && recorder.status === 'completed';
 
@@ -291,7 +350,7 @@ export function App() {
       <AppShell
         view={view}
         onNavigate={(next) => navigate(next)}
-        editor={showEditor}
+        editor={showEditor || showVideoEditor}
         wide={view === 'history'}
         onHelp={() => setHelpOpen(true)}
         titleBar={titleBar}
@@ -303,6 +362,17 @@ export function App() {
             blocked={pending !== null || helpOpen}
             onDirtyChange={setDirty}
             onRequestLeave={() => requestLeave()}
+          />
+        ) : showVideoEditor ? (
+          <VideoEditorView
+            key={videoId}
+            historyId={videoId}
+            blocked={pending !== null || helpOpen || quitAsk || videoLeave !== null}
+            onBack={() => {
+              setHistoryFocus(videoId);
+              navigate('history');
+            }}
+            registerFlush={registerVideoFlush}
           />
         ) : showRecording && recorder.result ? (
           <RecordingResultView
@@ -324,11 +394,25 @@ export function App() {
             focusId={historyFocus}
             onFocusConsumed={() => setHistoryFocus(null)}
             onEditItem={editHistoryItem}
+            onEditVideo={editVideo}
           />
-        ) : (
+        ) : view === 'settings' ? (
           <SettingsView section={settingsSection} onSectionChange={setSettingsSection} />
-        )}
+        ) : null}
       </AppShell>
+      <AlertConfirm
+        open={videoLeave !== null}
+        title="Leave without saving?"
+        description="The latest changes to this video could not be saved. The recording itself is not affected."
+        cancelLabel="Keep editing"
+        confirmLabel="Leave"
+        onConfirm={() => {
+          const request = videoLeave;
+          setVideoLeave(null);
+          request?.then?.();
+        }}
+        onCancel={() => setVideoLeave(null)}
+      />
       <AlertConfirm
         open={pending !== null}
         title={shot?.edit ? 'Discard your changes?' : 'Discard this screenshot?'}

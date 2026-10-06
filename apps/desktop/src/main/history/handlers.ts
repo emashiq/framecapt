@@ -209,7 +209,7 @@ export function registerHistoryHandlers(
       ),
       filters: [
         {
-          name: extension === '.mp4' ? 'MP4 video' : 'WebM video',
+          name: extension === '.mp4' ? 'MP4 video' : extension === '.gif' ? 'GIF' : 'WebM video',
           extensions: [extension.slice(1)],
         },
       ],

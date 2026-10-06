@@ -34,6 +34,7 @@ const TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
 };
 
 export function mediaContentType(file: string): string {

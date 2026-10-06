@@ -29,13 +29,19 @@ function fakePng(width: number, extra = 100): Buffer {
   return header;
 }
 
-function makeService(options: { tools?: ReturnType<typeof fakeTools> } = {}) {
+function makeService(
+  options: {
+    tools?: ReturnType<typeof fakeTools>;
+    videoProjects?: NonNullable<ConstructorParameters<typeof HistoryService>[0]['videoProjects']>;
+  } = {},
+) {
   const trashed: string[] = [];
   const changes = { count: 0 };
   const tools = options.tools ?? fakeTools();
   const service = new HistoryService({
     dir: path.join(dir, 'history'),
     tools,
+    ...(options.videoProjects && { videoProjects: options.videoProjects }),
     trashItem: (file) => {
       trashed.push(file);
       fs.rmSync(file);
@@ -222,6 +228,68 @@ describe('recordings', () => {
       format: 'mp4',
       derivedFrom: source.id,
     });
+  });
+});
+
+describe('edited videos and GIFs', () => {
+  it('lists a GIF as a recording of format gif, linked to its source, with a thumbnail', async () => {
+    const { service, tools } = makeService();
+    const source = await addVideo(service, 'r.webm');
+    const gif = await addVideo(service, 'r (edited).gif', {
+      format: 'gif',
+      hasAudio: false,
+      derivedFrom: source.id,
+    });
+    await service.idle();
+    const { items } = await service.list();
+    expect(items.find((entry) => entry.id === gif.id)).toMatchObject({
+      type: 'recording',
+      format: 'gif',
+      derivedFrom: source.id,
+      hasThumb: true,
+    });
+    // The thumbnail of a GIF comes from ffmpeg like the one of any recording.
+    expect(tools.runs.some((args) => args.some((arg) => arg.endsWith('r (edited).gif')))).toBe(
+      true,
+    );
+  });
+
+  it('relinks a GIF only to a GIF file', async () => {
+    const tools = fakeTools({ probe: () => ({ ...PLAYABLE, formatName: 'gif' }) });
+    const { service } = makeService({ tools });
+    const { id } = await addVideo(service, 'a.gif', { format: 'gif' });
+    await service.idle();
+    await expect(service.relink(id, writeFile('b.webm'))).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD',
+    });
+    await service.relink(id, writeFile('b.gif'));
+    expect((await service.list()).items[0]?.path).toBe(path.join(files, 'b.gif'));
+  });
+
+  it('removes the video project with the file, and after the undo window with the entry', async () => {
+    const removed: string[] = [];
+    const swept: ReadonlySet<string>[] = [];
+    const { service } = makeService({
+      videoProjects: {
+        remove: (id) => {
+          removed.push(id);
+          return Promise.resolve();
+        },
+        sweep: (known) => {
+          swept.push(known);
+          return Promise.resolve({ scanned: 0, removed: 0 });
+        },
+      },
+    });
+    const first = await addVideo(service, 'one.webm');
+    const second = await addVideo(service, 'two.webm');
+    await service.deleteFile(first.id);
+    expect(removed).toEqual([first.id]);
+    await service.remove(second.id);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(removed).toEqual([first.id, second.id]);
+    // The startup sweep is given the ids that exist.
+    expect(swept).toHaveLength(1);
   });
 });
 

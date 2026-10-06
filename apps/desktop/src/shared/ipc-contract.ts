@@ -65,6 +65,16 @@ import {
   HistoryListResponseSchema,
 } from './history-ipc';
 import {
+  VideoExportDoneEventSchema,
+  VideoExportFailedEventSchema,
+  VideoExportProgressEventSchema,
+  VideoExportRequestSchema,
+  VideoExportResponseSchema,
+  VideoOpenRequestSchema,
+  VideoOpenResponseSchema,
+  VideoSaveRequestSchema,
+} from './video-ipc';
+import {
   RecoverResponseSchema,
   RecoveryListResponseSchema,
   RecoverySessionIdSchema,
@@ -410,6 +420,19 @@ export const ipcContract = {
     roles: ['main'],
   },
   'export:cancel': { request: ExportCancelRequestSchema, response: z.void(), roles: ['main'] },
+  // --- video editor: the saved project (a recipe, the video is never changed) and its export ---
+  'video:open': {
+    request: VideoOpenRequestSchema,
+    response: VideoOpenResponseSchema,
+    roles: ['main'],
+  },
+  'video:save': { request: VideoSaveRequestSchema, response: z.void(), roles: ['main'] },
+  /** Renders the edit into a new file next to the source (a queued job; cancel with export:cancel). */
+  'video:export': {
+    request: VideoExportRequestSchema,
+    response: VideoExportResponseSchema,
+    roles: ['main'],
+  },
   // --- settings, shortcuts and the app lifecycle (phase 08) ---
   'settings:get': { request: z.undefined(), response: SettingsStateSchema, roles: ['main'] },
   'settings:update': {
@@ -487,6 +510,9 @@ export const ipcEvents = {
   'export:progress': ExportProgressEventSchema,
   'export:done': ExportDoneEventSchema,
   'export:failed': ExportFailedEventSchema,
+  'video:exportProgress': VideoExportProgressEventSchema,
+  'video:exportDone': VideoExportDoneEventSchema,
+  'video:exportFailed': VideoExportFailedEventSchema,
   /** Settings changed (any window's change, a reset, a repaired file). */
   'settings:changed': SettingsStateSchema,
   'shortcuts:changed': ShortcutStatesSchema,

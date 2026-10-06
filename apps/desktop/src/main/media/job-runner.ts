@@ -151,6 +151,8 @@ export interface FileJobRequest {
   args: (partialPath: string) => string[];
   /** What is wrong with the finished partial file, or null. Runs before the rename. */
   verify: (output: ProbeResult, source: ProbeResult) => string | null;
+  /** Length of the output when it differs from the source's (an edit): progress is measured against it. */
+  outputDurationSec?: number;
   /** "export", "compression": used in the user-facing messages. */
   noun: string;
 }
@@ -212,7 +214,7 @@ export async function runFileJob(request: FileJobRequest): Promise<FileJobResult
         timeoutMs,
         ...(signal && { signal }),
         onProgress: (progress) => {
-          const percent = percentOf(progress, sourceProbe.durationSec);
+          const percent = percentOf(progress, request.outputDurationSec ?? sourceProbe.durationSec);
           if (percent === last) return;
           last = percent;
           request.onProgress?.(percent);

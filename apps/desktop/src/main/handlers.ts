@@ -25,6 +25,10 @@ import { CaptureFlow } from './capture-flow';
 import { isMockCaptureEnabled } from './capture';
 import { registerShotHandlers } from './shot-handlers';
 import { ProjectStore } from './projects/store';
+import { VideoEditService, editedDestination } from './video-projects/service';
+import { registerVideoHandlers } from './video-projects/handlers';
+import { VideoProjectStore } from './video-projects/store';
+import { freeFileName } from './shots/free-name';
 import { ShotSessionStore, SWEEP_MAX_AGE_MS } from './shots/session-store';
 import { registerWorkerHandlers } from './worker';
 import { installDisplayMediaGrants } from './capture/display-media';
@@ -81,7 +85,14 @@ function withE2eRemuxDelay(tools: MediaTools): MediaTools {
 }
 
 function emitToMain<
-  E extends 'export:progress' | 'export:done' | 'export:failed' | 'history:bulkProgress',
+  E extends
+    | 'export:progress'
+    | 'export:done'
+    | 'export:failed'
+    | 'history:bulkProgress'
+    | 'video:exportProgress'
+    | 'video:exportDone'
+    | 'video:exportFailed',
 >(event: E, payload: IpcEventPayload<E>): void {
   for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
 }
@@ -170,9 +181,11 @@ export function registerHandlers(
   });
   const historyDir = path.join(app.getPath('userData'), 'history');
   const projects = new ProjectStore(path.join(app.getPath('userData'), 'projects'));
+  const videoProjects = new VideoProjectStore(path.join(app.getPath('userData'), 'video-projects'));
   const history = new HistoryService({
     dir: historyDir,
     projects,
+    videoProjects,
     tools,
     trashItem: (file) => shell.trashItem(file),
     onChange: () => {
@@ -219,6 +232,20 @@ export function registerHandlers(
       failed: (event) => emitToMain('export:failed', event),
     },
   });
+  registerVideoHandlers(
+    new VideoEditService({
+      history,
+      store: videoProjects,
+      tools,
+      runner,
+      destination: (source, extension) => editedDestination(source, extension, freeFileName),
+      emit: {
+        progress: (event) => emitToMain('video:exportProgress', event),
+        done: (event) => emitToMain('video:exportDone', event),
+        failed: (event) => emitToMain('video:exportFailed', event),
+      },
+    }),
+  );
   const recovery = new RecoveryService({
     rootDir: recordingsDir,
     fs: nodeSessionFs,

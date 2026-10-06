@@ -348,3 +348,13 @@ html.overlay-root #root {
 [data-radix-popper-content-wrapper]:has(> .tooltip-passthrough) {
   pointer-events: none;
 }
+
+/* Video editor: a piece cut out of the recording is hatched on the timeline. */
+.cut-hatch {
+  background-color: var(--surface);
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--fg) 30%, transparent) 0 2px,
+    transparent 2px 7px
+  );
+}

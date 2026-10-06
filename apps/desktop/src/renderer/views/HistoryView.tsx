@@ -55,6 +55,8 @@ export interface HistoryViewProps {
   onFocusConsumed?: () => void;
   /** Opens a screenshot of history in the editor again. */
   onEditItem?: (id: string) => void;
+  /** Opens a recording of history in the video editor. */
+  onEditVideo?: (id: string) => void;
 }
 
 /**
@@ -63,7 +65,12 @@ export interface HistoryViewProps {
  * files stay listed in a calm "File moved or deleted" state until the user re-links or removes
  * them. Removing an entry never touches its file; deleting a file is a separate confirmed action.
  */
-export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: HistoryViewProps) {
+export function HistoryView({
+  focusId = null,
+  onFocusConsumed,
+  onEditItem,
+  onEditVideo,
+}: HistoryViewProps) {
   const [filter, setFilter] = useState<Filter>('all');
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
@@ -311,7 +318,10 @@ export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: His
       onCancel={() => setConfirmProject(null)}
     />
   );
-  const onEdit = onEditItem ? (item: HistoryItemView) => onEditItem(item.id) : undefined;
+  const onEdit =
+    onEditItem || onEditVideo
+      ? (item: HistoryItemView) => (item.type === 'recording' ? onEditVideo : onEditItem)?.(item.id)
+      : undefined;
 
   if (selected) {
     return (

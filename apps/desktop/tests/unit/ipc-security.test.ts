@@ -16,6 +16,7 @@ import {
 } from '../../src/shared/ipc-contract';
 import { MAX_EXPORT_BYTES } from '../../src/shared/shots';
 import { ROLES } from '../../src/shared/types';
+import { applyCommand, createProject, newItem } from '../../src/shared/video-edit';
 
 const origin: AppOriginConfig = {};
 const goodUrl = 'app://framecapt/index.html';
@@ -118,6 +119,13 @@ describe('IPC: every channel is closed to roles the contract does not name', () 
 const UUID = '0f0e0d0c-0b0a-4908-8706-050403020100';
 const bytes = (n: number): ArrayBuffer => new ArrayBuffer(n);
 
+const VIDEO_PROJECT = createProject(UUID, {
+  durationMs: 10_000,
+  width: 1280,
+  height: 720,
+  hasAudio: true,
+});
+
 /** One valid payload per representative channel (checked below, so they cannot rot). */
 const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   'app:reportError': { source: 'window-error', message: 'x' },
@@ -152,6 +160,9 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   'history:open': { id: UUID },
   'export:mp4': { historyId: UUID },
   'export:cancel': { jobId: 'job' },
+  'video:open': { historyId: UUID },
+  'video:save': { historyId: UUID, project: VIDEO_PROJECT },
+  'video:export': { historyId: UUID, project: VIDEO_PROJECT, format: 'mp4' },
   'settings:update': { patch: { general: { theme: 'dark' } } },
   'settings:reset': {},
   'settings:chooseOutputDir': { target: 'screenshots' },
@@ -265,6 +276,35 @@ describe('IPC: payloads are validated strictly', () => {
     expect(parses('shortcuts:validate', long)).toBe(false);
   });
 
+  it('video projects are bounded and carry no strings main would put into a command', () => {
+    const item = newItem('redact', 'r1', { x: 0, y: 0, width: 10, height: 10 }, 0, 1000);
+    const save = (project: unknown) => parses('video:save', { historyId: UUID, project });
+    const withItem = applyCommand(VIDEO_PROJECT, { type: 'addItem', item });
+    expect(save(withItem)).toBe(true);
+    expect(save({ ...withItem, items: [{ ...item, color: "#000000';movie=x" }] })).toBe(false);
+    expect(save({ ...withItem, items: [{ ...item, kind: 'drawtext', text: 'x' }] })).toBe(false);
+    expect(save({ ...withItem, items: [{ ...item, path: 'C:\\x' }] })).toBe(false);
+    expect(
+      save({
+        ...withItem,
+        items: Array.from({ length: 201 }, (_, i) => ({ ...item, id: `i${i}` })),
+      }),
+    ).toBe(false);
+    expect(
+      save({
+        ...withItem,
+        cuts: Array.from({ length: 101 }, (_, i) => ({ id: `c${i}`, startMs: 0, endMs: 1 })),
+      }),
+    ).toBe(false);
+    expect(save({ ...withItem, sourceId: '..\\..\\x' })).toBe(false);
+    expect(save({ ...withItem, source: { ...withItem.source, width: 1e9 } })).toBe(false);
+    expect(save({ ...withItem, export: { format: 'avi' } })).toBe(false);
+    expect(parses('video:export', { historyId: UUID, project: withItem, format: 'mov' })).toBe(
+      false,
+    );
+    expect(parses('video:open', { historyId: '../x' })).toBe(false);
+  });
+
   it('ids that are not uuids are refused before main looks anything up (no path, no traversal)', () => {
     const bad = [
       '..\\..\\Windows',
@@ -369,7 +409,7 @@ function isPlainStrings(payload: unknown): boolean {
     payload !== null &&
     !Array.isArray(payload) &&
     Object.keys(payload).length === 1 &&
-    Object.values(payload).every((value) => typeof value === 'string' && value.length < 64)
+    Object.values(payload).every((value) => typeof value === 'string' && value.length <= 1024)
   );
 }
 
