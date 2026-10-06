@@ -258,6 +258,19 @@ export function ToolbarView() {
                 Paused
               </span>
             ) : null}
+            {snapshot.lostTiles.length > 0 ? (
+              <span
+                role="status"
+                data-testid="badge-lost-tiles"
+                title="A source being recorded went away. The recording continues without it."
+                className="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-warning-soft px-2.5 text-xs font-medium whitespace-nowrap text-warning"
+              >
+                <TriangleAlert className="size-3.5" aria-hidden="true" />
+                {snapshot.lostTiles.length === 1
+                  ? 'A source ended'
+                  : `${snapshot.lostTiles.length} sources ended`}
+              </span>
+            ) : null}
             {toast ? (
               <span
                 role="status"

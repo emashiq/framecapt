@@ -2,6 +2,7 @@ import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:c
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { FCAP_PAYLOAD_OFFSET } from '../../shared/recording-layout';
 
 /** Directory of the bundled build below `vendor/ffmpeg` (dev) or `resources/ffmpeg` (packaged). */
 export function ffmpegPlatformDir(
@@ -255,6 +256,33 @@ export function localInput(file: string, format?: 'matroska'): string[] {
   return ['-protocol_whitelist', 'file', ...(format ? ['-f', format] : []), '-i', mediaPath(file)];
 }
 
+/** A file an ffmpeg tool reads: its absolute path and, when it is not a plain media file, its history format. */
+export interface MediaInput {
+  path: string;
+  format?: string;
+}
+
+/**
+ * The input options for any file the app hands to ffmpeg or ffprobe, up to and including `-i`. A
+ * `.fcap` (a header, then a WebM) is read as Matroska from the payload on, `skip_initial_bytes`
+ * jumping over the header (seeking and `-ss` work: Matroska positions are relative to the payload's
+ * own start, see tests/unit/fcap-integration.test.ts). Everything else is `localInput`. Use this
+ * wherever an item of history is an input: a thumbnail, a probe, an extract.
+ */
+export function mediaInputArgs(input: MediaInput): string[] {
+  if (input.format !== 'fcap') return localInput(input.path);
+  return [
+    '-protocol_whitelist',
+    'file',
+    '-skip_initial_bytes',
+    String(FCAP_PAYLOAD_OFFSET),
+    '-f',
+    'matroska',
+    '-i',
+    mediaPath(input.path),
+  ];
+}
+
 /**
  * Makes every packet's timestamps strictly increase (a packet that would not move up by at least one
  * timebase tick, 1 ms in WebM, is put one tick after its predecessor). MediaRecorder stamps frames
@@ -291,7 +319,18 @@ export function remuxArgs(input: string, output: string): string[] {
   ];
 }
 
-export function probeArgs(file: string): string[] {
+export function probeArgs(file: string, format?: string): string[] {
+  if (format === 'fcap') {
+    return [
+      '-v',
+      'error',
+      '-show_streams',
+      '-show_format',
+      '-of',
+      'json',
+      ...mediaInputArgs({ path: file, format }),
+    ];
+  }
   return [
     '-v',
     'error',
@@ -311,6 +350,7 @@ export function thumbnailArgs(
   output: string,
   seek: number,
   maxWidth: number,
+  format?: string,
 ): string[] {
   return [
     '-hide_banner',
@@ -319,7 +359,7 @@ export function thumbnailArgs(
     '-y',
     '-ss',
     seek.toFixed(3),
-    ...localInput(input),
+    ...mediaInputArgs({ path: input, ...(format && { format }) }),
     '-frames:v',
     '1',
     '-vf',
@@ -396,7 +436,11 @@ export interface MediaTools {
   /** Throws FFMPEG_MISSING when the binaries are not there. */
   paths(): FfmpegPaths;
   run(args: string[], options?: RunOptions): Promise<RunResult>;
-  probe(file: string, options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<ProbeResult>;
+  /** `format` is the history format of the file; a `.fcap` is read from its payload. */
+  probe(
+    file: string,
+    options?: { signal?: AbortSignal; timeoutMs?: number; format?: string },
+  ): Promise<ProbeResult>;
   /** The first line of `ffmpeg -version`. */
   version(): Promise<string>;
   /** The raw text of `ffmpeg -hide_banner -encoders` (which encoders this build contains). */
@@ -413,7 +457,12 @@ export function createMediaTools(
       return runProcess(locate().ffmpeg, args, options, deps);
     },
     async probe(file, options = {}) {
-      const result = await collect(locate().ffprobe, probeArgs(file), options, deps);
+      const result = await collect(
+        locate().ffprobe,
+        probeArgs(file, options.format),
+        options,
+        deps,
+      );
       if (result.code !== 0) {
         throw new FfmpegError(
           'PROBE_FAILED',

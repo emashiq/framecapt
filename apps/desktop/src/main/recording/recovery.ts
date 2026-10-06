@@ -6,7 +6,7 @@ import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import type { MediaTools } from '../media/ffmpeg';
 import { isInsideDir } from '../shots/session-store';
-import { completeSessionOnDisk, remuxToOutput, writeFinalizeLog } from './finalize';
+import { completeSessionOnDisk, remuxToFcap, remuxToOutput, writeFinalizeLog } from './finalize';
 import {
   COMPLETED_DIR,
   CORRUPT_MANIFEST_FILE,
@@ -14,7 +14,7 @@ import {
   isSessionId,
   MANIFEST_FILE,
   parseManifest,
-  partialFileName,
+  partialNameFor,
   STREAM_FILE,
   type SessionManifest,
 } from './manifest';
@@ -58,6 +58,11 @@ interface Inspected {
   streamBytes: number;
   /** The manifest could not be read and was replaced by a minimal one. */
   adopted: boolean;
+}
+
+/** `fcap` for a multi-source session (it has a layout), else `webm`. */
+function extensionOf(manifest: Pick<SessionManifest, 'layout'>): 'fcap' | 'webm' {
+  return manifest.layout ? 'fcap' : 'webm';
 }
 
 /**
@@ -287,7 +292,7 @@ export class RecoveryService {
   private async resumeFinalization(item: Inspected): Promise<void> {
     const { manifest } = item;
     const plan = manifest.finalize;
-    const expected = plan ? path.join(plan.outputDir, partialFileName(manifest.sessionId)) : null;
+    const expected = plan ? path.join(plan.outputDir, partialNameFor(manifest)) : null;
     if (
       plan &&
       expected &&
@@ -310,7 +315,7 @@ export class RecoveryService {
     const outputDir = planOk ? plan.outputDir : this.deps.outputDir();
     const fileName = planOk
       ? plan.fileName
-      : defaultRecordingFileName(new Date(manifest.createdAt));
+      : defaultRecordingFileName(new Date(manifest.createdAt), extensionOf(manifest));
     await this.remuxAndComplete(item, { outputDir, fileName, recovered: false });
   }
 
@@ -319,7 +324,7 @@ export class RecoveryService {
     target: { outputDir: string; fileName: string; recovered: boolean },
   ): Promise<RecoverOutcome> {
     const { manifest, dir } = item;
-    const partialPath = path.join(target.outputDir, partialFileName(manifest.sessionId));
+    const partialPath = path.join(target.outputDir, partialNameFor(manifest));
     manifest.state = 'finalizing';
     manifest.finalize = {
       outputDir: target.outputDir,
@@ -329,7 +334,7 @@ export class RecoveryService {
     };
     await this.writeManifest(dir, manifest).catch(() => undefined);
 
-    const outcome = await remuxToOutput({
+    const remux = {
       fs: this.deps.fs,
       tools: this.deps.tools,
       streamPath: path.join(dir, STREAM_FILE),
@@ -337,7 +342,11 @@ export class RecoveryService {
       outputDir: target.outputDir,
       fileName: target.fileName,
       partialPath,
-    });
+    };
+    // A multi-source session is wrapped as `.fcap` the same way a fresh recording is.
+    const outcome = manifest.layout
+      ? await remuxToFcap(remux, manifest.layout, manifest.createdAt)
+      : await remuxToOutput(remux);
     if (outcome.ok) {
       const durationMs = Math.round((outcome.probe.durationSec ?? 0) * 1000);
       await completeSessionOnDisk(
@@ -358,7 +367,7 @@ export class RecoveryService {
       await this.deps.history
         ?.addVideo({
           path: outcome.outputPath,
-          format: 'webm',
+          format: manifest.layout ? 'fcap' : 'webm',
           durationMs,
           width: manifest.width,
           height: manifest.height,
@@ -416,7 +425,7 @@ export class RecoveryService {
       const created = new Date(item.manifest.createdAt);
       return await this.remuxAndComplete(item, {
         outputDir: this.deps.outputDir(),
-        fileName: defaultRecordingFileName(created, 'webm', ' (recovered)'),
+        fileName: defaultRecordingFileName(created, extensionOf(item.manifest), ' (recovered)'),
         recovered: true,
       });
     } finally {
@@ -445,7 +454,7 @@ export class RecoveryService {
     await this.writeManifest(dir, manifest).catch(() => undefined);
     const plan = manifest.finalize;
     if (plan) {
-      const expected = path.join(plan.outputDir, partialFileName(sessionId));
+      const expected = path.join(plan.outputDir, partialNameFor(manifest));
       if (
         path.isAbsolute(plan.outputDir) &&
         path.resolve(plan.partialPath) === path.resolve(expected)

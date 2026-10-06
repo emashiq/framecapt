@@ -19,6 +19,7 @@ import { recordOptionsFromSettings } from '../../shared/settings';
 import { getSettings } from '../settings/store';
 import {
   createItemActions,
+  type ItemActions,
   deleteItemFile,
   deleteItemProject,
   removeItems,
@@ -92,7 +93,6 @@ export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: His
         },
   );
   const { items, total, loaded, failed, reload } = list;
-  const actions = useMemo(() => createItemActions(reload), [reload]);
   const order = useMemo(() => items.map((item) => item.id), [items]);
   // Cards that are no longer listed (removed, filtered out) leave the selection, so a bulk action
   // can only ever touch what the grid shows.
@@ -138,6 +138,15 @@ export function HistoryView({ focusId = null, onFocusConsumed, onEditItem }: His
     setTabStopId(item.id);
     setSelectedId(item.id);
   }, []);
+  // A multi-source recording opens inside FrameCapt (its details view), never in another player.
+  const baseActions = useMemo(() => createItemActions(reload), [reload]);
+  const actions = useMemo<ItemActions>(
+    () => ({
+      ...baseActions,
+      open: (item) => (item.format === 'fcap' ? select(item) : baseActions.open(item)),
+    }),
+    [baseActions, select],
+  );
 
   const selectClick = useCallback(
     (item: HistoryItemView, modifiers: { ctrl: boolean; shift: boolean }) => {

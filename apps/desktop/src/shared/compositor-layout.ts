@@ -1,6 +1,6 @@
 import type { Size } from './geometry';
 import type { Rect } from './rect';
-import { floorEven } from './recording';
+import { floorEven, type RecordQuality } from './recording';
 
 /** Zoom factors of the follow-mouse recording. */
 export const FOLLOW_ZOOMS = [1.5, 2, 3] as const;
@@ -118,6 +118,58 @@ export function mosaicLayout(
       };
     }),
   };
+}
+
+/** The rectangle of a frame fitted inside `box`, centered (never upscaled beyond the box). */
+export function fitInside(frame: Size, box: Rect): Rect {
+  if (frame.width <= 0 || frame.height <= 0) return box;
+  const scale = Math.min(box.width / frame.width, box.height / frame.height);
+  const width = Math.round(frame.width * scale);
+  const height = Math.round(frame.height * scale);
+  return {
+    x: box.x + Math.round((box.width - width) / 2),
+    y: box.y + Math.round((box.height - height) / 2),
+    width,
+    height,
+  };
+}
+
+/**
+ * The cap of the WHOLE mosaic (not of each tile): the picture of several sources is one video, so
+ * its size and pixel count are bounded as one. "1080p" allows up to 3840 x 2160 but at most
+ * 3840 x 1080 pixels (two 1080p screens side by side keep their size); "source" keeps up to 8.3
+ * million pixels (one 4K picture) and 7680 across.
+ */
+export function mosaicLimit(quality: RecordQuality): MosaicLimit {
+  return quality === '1080p'
+    ? { maxWidth: 3840, maxHeight: 2160, maxPixels: 3840 * 1080 }
+    : { maxWidth: 7680, maxHeight: 4320, maxPixels: 8_300_000 };
+}
+
+export interface MultiSourceFrame {
+  kind: 'screen' | 'window';
+  /** The size of the source's frame in pixels. */
+  size: Size;
+  /** Screens: where the display sits on the virtual desktop (physical pixels). */
+  position: { x: number; y: number } | null;
+}
+
+/**
+ * The picture of a multi-source recording. Screens only keep their places on the virtual desktop
+ * ('virtual'); as soon as a window is among them the sources go into an equal-cell 'grid'. The
+ * result is capped as a whole (`mosaicLimit`).
+ */
+export function multiSourceLayout(
+  sources: readonly MultiSourceFrame[],
+  quality: RecordQuality,
+): MosaicLayout {
+  const virtual = sources.every((source) => source.kind === 'screen' && source.position !== null);
+  const tiles: MosaicTile[] = sources.map((source) => ({
+    width: source.size.width,
+    height: source.size.height,
+    ...(virtual && source.position && { x: source.position.x, y: source.position.y }),
+  }));
+  return mosaicLayout(tiles, virtual ? 'virtual' : 'grid', mosaicLimit(quality));
 }
 
 function placeVirtual(tiles: readonly MosaicTile[]): { size: Size; rects: Rect[] } {

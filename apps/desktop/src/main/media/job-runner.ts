@@ -153,6 +153,10 @@ export interface FileJobRequest {
   verify: (output: ProbeResult, source: ProbeResult) => string | null;
   /** "export", "compression": used in the user-facing messages. */
   noun: string;
+  /** The history format of the source when it is not a plain WebM/MP4 (a `.fcap` is read from its payload). */
+  sourceFormat?: string;
+  /** The length progress is measured against, when the output is shorter than the source (an extract). */
+  progressDurationSec?: number;
 }
 
 function failure(code: FileJobFailureCode, message: string, stderrTail = ''): FileJobResult {
@@ -191,6 +195,7 @@ export async function runFileJob(request: FileJobRequest): Promise<FileJobResult
     sourceProbe = await tools.probe(sourcePath, {
       timeoutMs: PROBE_TIMEOUT_MS,
       ...(signal && { signal }),
+      ...(request.sourceFormat && { format: request.sourceFormat }),
     });
   } catch (error) {
     if (error instanceof FfmpegError && error.code === 'FFMPEG_ABORTED') return cancelled();
@@ -212,7 +217,10 @@ export async function runFileJob(request: FileJobRequest): Promise<FileJobResult
         timeoutMs,
         ...(signal && { signal }),
         onProgress: (progress) => {
-          const percent = percentOf(progress, sourceProbe.durationSec);
+          const percent = percentOf(
+            progress,
+            request.progressDurationSec ?? sourceProbe.durationSec,
+          );
           if (percent === last) return;
           last = percent;
           request.onProgress?.(percent);

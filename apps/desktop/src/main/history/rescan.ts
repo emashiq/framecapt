@@ -5,16 +5,17 @@ import { createdAtFromName } from '../../shared/capture-names';
 import { detectImageFormat, MAX_EXPORT_BYTES, readImageSize } from '../../shared/shots';
 import { log } from '../logger';
 import type { MediaTools } from '../media/ffmpeg';
+import { readFcapHeader } from '../recording/fcap';
 import { samePath } from './files';
 import type { HistoryService } from './service';
 import { MAX_HISTORY_ITEMS } from './store';
 
 /**
  * File types a rescan adds. Everything here is final, flattened output of FrameCapt (ADR-026), so
- * this is the one place a future format (a multi-source `.fcap`) is registered.
+ * this is the one place a new format is registered (the multi-source `.fcap` is the latest).
  */
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
-const VIDEO_EXTENSIONS = new Set(['.webm', '.mp4']);
+const VIDEO_EXTENSIONS = new Set(['.webm', '.mp4', '.fcap']);
 
 const PROBE_TIMEOUT_MS = 30_000;
 const HEADER_BYTES = 64 * 1024;
@@ -91,7 +92,25 @@ async function addImage(deps: RescanDeps, candidate: Candidate): Promise<boolean
   return true;
 }
 
+/** A multi-source recording: the facts come from its own header, no ffprobe. */
+async function addFcapFile(deps: RescanDeps, candidate: Candidate): Promise<boolean> {
+  const header = await readFcapHeader(candidate.file);
+  await deps.history.addVideo({
+    path: candidate.file,
+    format: 'fcap',
+    durationMs: header.durationMs,
+    width: header.width,
+    height: header.height,
+    sizeBytes: candidate.sizeBytes,
+    hasAudio: header.hasAudio,
+    source: 'multi',
+    createdAt: candidate.createdAt,
+  });
+  return true;
+}
+
 async function addVideoFile(deps: RescanDeps, candidate: Candidate): Promise<boolean> {
+  if (candidate.extension === '.fcap') return addFcapFile(deps, candidate);
   const probe = await deps.tools.probe(candidate.file, { timeoutMs: PROBE_TIMEOUT_MS });
   if (!probe.hasVideo) return false;
   const format = candidate.extension === '.mp4' ? 'mp4' : 'webm';

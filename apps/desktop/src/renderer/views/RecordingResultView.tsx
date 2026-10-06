@@ -75,6 +75,8 @@ export function RecordingResultView({
   const videoRef = useRef<HTMLVideoElement>(null);
   const headingRef = useRef<HTMLDivElement>(null);
   const notice = earlyStopNotice(snapshot);
+  // Several sources in one file that only FrameCapt opens: no MP4 export here, History extracts.
+  const isFcap = result.fileName.toLowerCase().endsWith('.fcap');
   const unindexedNotice = result.unindexed
     ? 'Saved without a seeking index: the video plays, but jumping to a time may not work. The original data was kept; FrameCapt will offer to repair it the next time it starts.'
     : null;
@@ -169,7 +171,13 @@ export function RecordingResultView({
         </p>
       </Card>
 
-      {result.historyId ? (
+      {isFcap ? (
+        <p className="mt-4 max-w-xl text-[13px] text-fg-muted" data-testid="result-fcap-note">
+          This recording of several sources opens only in FrameCapt. Open it in History to watch
+          each source on its own, or to extract one source, or a part of it, as an MP4 or WebM
+          video.
+        </p>
+      ) : result.historyId ? (
         <Mp4Export historyId={result.historyId} className="mt-4 max-w-sm" />
       ) : null}
 

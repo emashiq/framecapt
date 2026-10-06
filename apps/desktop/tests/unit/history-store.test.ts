@@ -109,11 +109,11 @@ describe('HistoryStore', () => {
   it('keeps items it does not understand, unlisted, and writes them back unchanged', async () => {
     const good = item({ createdAt: 5 });
     const flow = { id: id(), type: 'flow', createdAt: 9, extra: { steps: [1, 2] } };
-    const fcap = { ...item(), format: 'fcap' };
+    const future = { ...item(), format: 'gif' };
     const escape = { ...item(), thumbnail: '../../escape.png' };
     fs.writeFileSync(
       path.join(dir, HISTORY_FILE),
-      JSON.stringify({ version: 1, items: [flow, good, fcap, escape, 7] }),
+      JSON.stringify({ version: 1, items: [flow, good, future, escape, 7] }),
     );
     const store = new HistoryStore(dir);
     expect(await store.load()).toEqual({ existed: true, reset: false });
@@ -124,7 +124,7 @@ describe('HistoryStore', () => {
     await store.put(newer);
     await store.remove([good.id]);
     const onDisk = JSON.parse(fs.readFileSync(path.join(dir, HISTORY_FILE), 'utf8'));
-    expect(onDisk.items).toEqual([newer, flow, fcap, escape, 7]);
+    expect(onDisk.items).toEqual([newer, flow, future, escape, 7]);
     expect(fs.readdirSync(dir)).toEqual([HISTORY_FILE]);
   });
 

@@ -11,7 +11,7 @@ export const RecoveryCandidateSchema = z.object({
   createdAt: z.number(),
   /** Size of the unfinished stream on disk. */
   bytes: z.number(),
-  sourceKind: z.enum(['screen', 'window', 'region', 'unknown']),
+  sourceKind: z.enum(['screen', 'window', 'region', 'multi', 'unknown']),
   chunks: z.number(),
   /** The state the session was left in; `unknown` when its manifest could not be read. */
   state: z.enum(['recording', 'stopping', 'stopped', 'finalizing', 'failed', 'unknown']),

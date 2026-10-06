@@ -7,6 +7,7 @@ import {
   FileX2,
   Film,
   FolderOpen,
+  Layers,
   Link2,
   Loader2,
   MoreHorizontal,
@@ -67,6 +68,21 @@ export function TypeBadge({ item }: { item: Pick<HistoryItemView, 'type' | 'form
     >
       <Icon className="size-3" aria-hidden="true" />
       {item.format}
+    </span>
+  );
+}
+
+/** A multi-source recording says so, with its number of sources. */
+export function MultiBadge({ item }: { item: Pick<HistoryItemView, 'format' | 'layout'> }) {
+  if (item.format !== 'fcap') return null;
+  const count = item.layout?.sources.length;
+  return (
+    <span
+      data-testid="history-multi"
+      className="inline-flex items-center gap-1 rounded-md bg-accent-solid px-1.5 py-0.5 text-xs font-semibold text-white shadow-card"
+    >
+      <Layers className="size-3" aria-hidden="true" />
+      {count ? `Multi · ${count}` : 'Multi'}
     </span>
   );
 }
@@ -151,8 +167,9 @@ export function HistoryCard({
       >
         <span className="relative block">
           <Thumb item={item} className="aspect-video w-full" />
-          <span className="absolute bottom-2 left-2">
+          <span className="absolute bottom-2 left-2 flex items-center gap-1.5">
             <TypeBadge item={item} />
+            <MultiBadge item={item} />
           </span>
           <span className="absolute right-2 bottom-2 flex items-center gap-1.5">
             {converting ? (

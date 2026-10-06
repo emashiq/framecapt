@@ -4,6 +4,7 @@ import { app, nativeImage, session, shell } from 'electron';
 import { BulkExportService } from './history/bulk-export';
 import { CompressService, postSaveAction } from './history/compress-service';
 import { ExportService } from './history/export-service';
+import { ExtractService } from './history/extract-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
 import { rescanLibrary } from './history/rescan';
 import { createAfterCapture, createSaveCaptureDirect } from './shots/after-capture';
@@ -206,6 +207,17 @@ export function registerHandlers(
       failed: (event) => emitToMain('export:failed', event),
     },
   });
+  const extracts = new ExtractService({
+    history,
+    tools,
+    capability: () => mp4Capability,
+    runner,
+    emit: {
+      progress: (event) => emitToMain('export:progress', event),
+      done: (event) => emitToMain('export:done', event),
+      failed: (event) => emitToMain('export:failed', event),
+    },
+  });
   const compress = new CompressService({
     history,
     tools,
@@ -317,7 +329,7 @@ export function registerHandlers(
         return image.isEmpty() ? undefined : image.resize({ width }).toPNG();
       },
     });
-  registerHistoryHandlers(history, exports, bulk, () => mp4Capability, outputDir, rescan);
+  registerHistoryHandlers(history, exports, extracts, bulk, () => mp4Capability, outputDir, rescan);
   registerRecorderHandlers(recorder, sessions, media);
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.

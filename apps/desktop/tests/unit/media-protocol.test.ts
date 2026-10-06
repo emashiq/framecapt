@@ -18,6 +18,7 @@ vi.mock('electron', () => ({
   },
 }));
 
+import { buildFcapHeaderBlock } from '../../src/main/recording/fcap';
 import { installMediaProtocol, MediaRegistry } from '../../src/main/recording/media-protocol';
 
 const ID = '4a4b4c4d-4e4f-4a4b-8c4d-4e4f4a4b4c4d';
@@ -211,5 +212,111 @@ describe('framecapt-media: what is never served', () => {
       );
       expect([400, 404], url).toContain(status);
     }
+  });
+});
+
+describe('framecapt-media: a multi-source recording (.fcap) is served as its WebM payload', () => {
+  const META = {
+    width: 3840,
+    height: 1080,
+    durationMs: 1000,
+    hasAudio: false,
+    createdAt: 1,
+    sources: [
+      {
+        name: 'Screen 1',
+        kind: 'screen' as const,
+        rect: { x: 0, y: 0, width: 1920, height: 1080 },
+      },
+      {
+        name: 'Screen 2',
+        kind: 'screen' as const,
+        rect: { x: 1920, y: 0, width: 1920, height: 1080 },
+      },
+    ],
+  };
+  const PAYLOAD = Buffer.from(Array.from({ length: 5000 }, (_, i) => (i * 13 + 5) % 253));
+  let fcapUrl = '';
+  let badUrl = '';
+
+  beforeAll(() => {
+    const good = path.join(dir, 'multi.fcap');
+    fs.writeFileSync(good, Buffer.concat([buildFcapHeaderBlock(META, PAYLOAD.length), PAYLOAD]));
+    // A header that promises more bytes than the file has.
+    const cut = path.join(dir, 'cut.fcap');
+    fs.writeFileSync(
+      cut,
+      Buffer.concat([buildFcapHeaderBlock(META, PAYLOAD.length), PAYLOAD.subarray(0, 100)]),
+    );
+    fcapUrl = `framecapt-media://${registry.register(good)}`;
+    badUrl = `framecapt-media://${registry.register(cut)}`;
+  });
+
+  it('a plain GET is the payload only, never the header, typed video/webm', async () => {
+    handler();
+    const response = await get(fcapUrl);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('video/webm');
+    expect(response.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(Number(response.headers.get('Content-Length'))).toBe(PAYLOAD.length);
+    const body = Buffer.from(await response.arrayBuffer());
+    expect(Buffer.compare(body, PAYLOAD)).toBe(0);
+    expect(body.subarray(0, 4).toString('latin1')).not.toBe('FCAP');
+  });
+
+  it('ranges are in payload bytes: start-end, open end, suffix and a clamped end', async () => {
+    handler();
+    const part = await get(fcapUrl, { Range: 'bytes=10-19' });
+    expect(part.status).toBe(206);
+    expect(part.headers.get('Content-Range')).toBe('bytes 10-19/5000');
+    expect(Number(part.headers.get('Content-Length'))).toBe(10);
+    expect(Buffer.compare(Buffer.from(await part.arrayBuffer()), PAYLOAD.subarray(10, 20))).toBe(0);
+
+    const open = await get(fcapUrl, { Range: 'bytes=4990-' });
+    expect(open.headers.get('Content-Range')).toBe('bytes 4990-4999/5000');
+    expect(Buffer.compare(Buffer.from(await open.arrayBuffer()), PAYLOAD.subarray(4990))).toBe(0);
+
+    const suffix = await get(fcapUrl, { Range: 'bytes=-7' });
+    expect(suffix.status).toBe(206);
+    expect(suffix.headers.get('Content-Range')).toBe('bytes 4993-4999/5000');
+    expect(Buffer.compare(Buffer.from(await suffix.arrayBuffer()), PAYLOAD.subarray(4993))).toBe(0);
+
+    // A suffix larger than the payload is the whole payload, not the header bytes before it.
+    const big = await get(fcapUrl, { Range: 'bytes=-999999' });
+    expect(big.headers.get('Content-Range')).toBe('bytes 0-4999/5000');
+    expect(Buffer.compare(Buffer.from(await big.arrayBuffer()), PAYLOAD)).toBe(0);
+
+    const clamped = await get(fcapUrl, { Range: 'bytes=4000-99999999' });
+    expect(clamped.headers.get('Content-Range')).toBe('bytes 4000-4999/5000');
+  });
+
+  it('416 when the range starts past the payload, with the payload length', async () => {
+    handler();
+    for (const range of ['bytes=5000-', 'bytes=6000-7000', 'bytes=-0']) {
+      const refused = await get(fcapUrl, { Range: range });
+      expect(refused.status, range).toBe(416);
+      expect(refused.headers.get('Content-Range'), range).toBe('bytes */5000');
+    }
+  });
+
+  it('HEAD reports the payload length', async () => {
+    handler();
+    const head = await get(fcapUrl, {}, 'HEAD');
+    expect(head.status).toBe(200);
+    expect(head.headers.get('Content-Length')).toBe('5000');
+    expect(await head.text()).toBe('');
+  });
+
+  it('a file with a damaged or truncated header is 404', async () => {
+    handler();
+    expect((await get(badUrl)).status).toBe(404);
+    const notFcap = registry.register(
+      (() => {
+        const file = path.join(dir, 'fake.fcap');
+        fs.writeFileSync(file, 'not an fcap at all');
+        return file;
+      })(),
+    );
+    expect((await get(`framecapt-media://${notFcap}`)).status).toBe(404);
   });
 });

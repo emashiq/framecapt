@@ -82,7 +82,7 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
     void deps.startScreenshot(request).catch((error: unknown) => deps.toast(errorToast(error)));
   }
 
-  function record(target: RecorderStartRequest['target']): void {
+  function record(target: Exclude<RecorderStartRequest['target'], 'multi'>): void {
     const { status } = deps.recorder;
     if (status === 'recording' || status === 'paused') {
       deps.log.info('Record shortcut pressed while recording: stopping');

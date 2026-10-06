@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { MAX_CHUNK_BYTES, type RecordOptions } from '../../shared/recorder-ipc';
 import { defaultRecordingFileName } from '../../shared/recording';
+import type { RecordingLayout } from '../../shared/recording-layout';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import type { FfmpegProgress, MediaTools } from '../media/ffmpeg';
@@ -9,6 +10,7 @@ import { isInsideDir } from '../shots/session-store';
 import {
   completeSessionOnDisk,
   copyRawAsOutput,
+  remuxToFcap,
   remuxToOutput,
   writeFinalizeLog,
   type RemuxRequest,
@@ -17,7 +19,7 @@ import {
   freshStats,
   isSessionId,
   MANIFEST_FILE,
-  partialFileName,
+  partialNameFor,
   STREAM_FILE,
   type PausedInterval,
   type SessionManifest,
@@ -42,6 +44,8 @@ export const DISK_CHECK_EVERY_MS = 30_000;
 export interface SessionConfig {
   mime: string;
   source: SessionManifest['source'];
+  /** Multi-source recordings: where each source sits in the picture (the output is a `.fcap`). */
+  layout?: RecordingLayout;
   options: RecordOptions;
   width: number;
   height: number;
@@ -208,6 +212,7 @@ export class SessionService {
           state: 'recording',
           mime: config.mime,
           source: config.source,
+          ...(config.layout && { layout: config.layout }),
           options: config.options,
           width: config.width,
           height: config.height,
@@ -502,8 +507,8 @@ export class SessionService {
       }
 
       const date = request.date ?? new Date();
-      const fileName = defaultRecordingFileName(date);
-      const partialPath = path.join(request.outputDir, partialFileName(sessionId));
+      const fileName = defaultRecordingFileName(date, manifest.layout ? 'fcap' : 'webm');
+      const partialPath = path.join(request.outputDir, partialNameFor(manifest));
       manifest.state = 'finalizing';
       manifest.finalize = {
         outputDir: request.outputDir,
@@ -524,7 +529,9 @@ export class SessionService {
         ...(request.signal && { signal: request.signal }),
         ...(request.onProgress && { onProgress: request.onProgress }),
       };
-      const outcome = await remuxToOutput(remux);
+      const outcome = manifest.layout
+        ? await remuxToFcap(remux, manifest.layout, manifest.createdAt)
+        : await remuxToOutput(remux);
 
       if (outcome.ok) {
         const durationMs = Math.round((outcome.probe.durationSec ?? 0) * 1000);
@@ -569,7 +576,8 @@ export class SessionService {
         );
       }
 
-      const raw = await copyRawAsOutput(remux);
+      // A multi-source recording has no use for a raw copy (it needs its `.fcap` header): its data stays.
+      const raw = manifest.layout ? { ok: false as const } : await copyRawAsOutput(remux);
       if (raw.ok) {
         manifest.outputPath = raw.outputPath;
         manifest.unindexed = true;

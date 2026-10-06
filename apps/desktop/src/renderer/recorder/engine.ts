@@ -1,7 +1,18 @@
-import type { EngineCommand, EngineEvent, EnginePrepareCommand } from '../../shared/recorder-ipc';
+import type {
+  EngineCommand,
+  EngineEvent,
+  EngineMultiSource,
+  EnginePrepareCommand,
+} from '../../shared/recorder-ipc';
 import { CHUNK_TIMESLICE_MS } from '../../shared/recorder-ipc';
 import type { AudioSource } from '../../shared/recorder-machine';
-import { followCrop, followCropSize, type FollowZoom } from '../../shared/compositor-layout';
+import {
+  followCrop,
+  followCropSize,
+  multiSourceLayout,
+  type FollowZoom,
+  type MosaicLayout,
+} from '../../shared/compositor-layout';
 import type { Size } from '../../shared/geometry';
 import type { Rect } from '../../shared/rect';
 import {
@@ -34,7 +45,10 @@ export interface EngineDeps {
 }
 
 interface Prepared {
-  displayStream: MediaStream;
+  /** One stream per source (a single-source recording has one); the first carries the system audio. */
+  displayStreams: MediaStream[];
+  /** Each source's tile in the picture (multi-source recordings only). */
+  tiles: Rect[] | undefined;
   micStream: MediaStream | undefined;
   crop: CroppedStream;
   mix: AudioMix | undefined;
@@ -93,6 +107,9 @@ export class RecorderEngine {
   private stopSampler: (() => void) | undefined;
   /** Sources already reported as lost (reported once). */
   private lost = new Set<AudioSource>();
+  /** Multi-source recordings: the sources that ended, and how many there are. */
+  private lostTiles = new Set<number>();
+  private tileCount = 0;
   private queue: Promise<void> = Promise.resolve();
   /** The mouse on the recorded display (0..1), from main; the follow window aims at it. */
   private cursor = { nx: 0.5, ny: 0.5 };
@@ -150,7 +167,7 @@ export class RecorderEngine {
       this.deps.send({ type: 'needsChoice', requestId, choice: kind, canUseDefaultMic });
     };
 
-    let displayStream: MediaStream | undefined;
+    let displayStreams: MediaStream[] = [];
     let micStream: MediaStream | undefined;
     try {
       const formats = detectRecorderFormats();
@@ -180,7 +197,7 @@ export class RecorderEngine {
 
       // The picture (and system audio). A missing loopback track is a choice, never silence.
       try {
-        displayStream = await this.acquireDisplay(command);
+        displayStreams = await this.acquireDisplays(command);
       } catch (error) {
         if (error instanceof CaptureError && error.code === 'system-audio-unavailable') {
           return choice('system-audio-unavailable');
@@ -193,8 +210,8 @@ export class RecorderEngine {
           micStream = await acquireMicrophoneStream(micDeviceId, { processing: true });
         } catch (error) {
           const mapped = mapMediaError(error);
-          stopStream(displayStream);
-          displayStream = undefined;
+          displayStreams.forEach((stream) => stopStream(stream));
+          displayStreams = [];
           if (mapped.code === 'denied') return choice('mic-denied');
           if (mapped.code === 'source-gone') return choice('mic-unavailable', defaultMicExists);
           throw mapped;
@@ -202,18 +219,27 @@ export class RecorderEngine {
       }
 
       const follow = followZoom(command);
+      const displayStream = displayStreams[0] as MediaStream;
       this.cursor = { nx: 0.5, ny: 0.5 };
-      const crop = follow
-        ? await this.createFollowCompositor(displayStream, follow, command)
-        : await createCanvasTransform(
-            displayStream,
-            {
-              rect: command.region ?? undefined,
-              limit: qualityLimit(options.quality),
-            },
-            options.fps,
-            'timer',
-          );
+      this.lostTiles = new Set();
+      this.tileCount = command.multi?.length ?? 0;
+      let tiles: Rect[] | undefined;
+      const crop = command.multi
+        ? await this.createMultiCompositor(displayStreams, command.multi, command).then((made) => {
+            tiles = made.tiles;
+            return made.crop;
+          })
+        : follow
+          ? await this.createFollowCompositor(displayStream, follow, command)
+          : await createCanvasTransform(
+              displayStream,
+              {
+                rect: command.region ?? undefined,
+                limit: qualityLimit(options.quality),
+              },
+              options.fps,
+              'timer',
+            );
       const { outWidth: width, outHeight: height } = crop.stats();
 
       const mic = micStream !== undefined;
@@ -223,7 +249,8 @@ export class RecorderEngine {
 
       this.lost = new Set();
       const prepared: Prepared = {
-        displayStream,
+        displayStreams,
+        tiles,
         micStream,
         crop,
         mix,
@@ -244,32 +271,59 @@ export class RecorderEngine {
         width,
         height,
         audio: prepared.audio,
+        ...(tiles && { tiles }),
       });
     } catch (error) {
       stopStream(micStream);
-      stopStream(displayStream);
+      displayStreams.forEach((stream) => stopStream(stream));
       this.releaseAll();
       const { code, message } = failure(error);
       this.deps.send({ type: 'prepareFailed', requestId, code, message });
     }
   }
 
-  private async acquireDisplay(command: EnginePrepareCommand): Promise<MediaStream> {
-    if (__FRAMECAPT_E2E__ && command.synthetic) {
+  /**
+   * The streams of a recording: one, or (multi-source) one per source, acquired SEQUENTIALLY (a
+   * grant is one-shot and belongs to one request at a time). Only the first carries system audio.
+   * On any failure the streams already acquired are released.
+   */
+  private async acquireDisplays(command: EnginePrepareCommand): Promise<MediaStream[]> {
+    if (!command.multi) return [await this.acquireDisplay(command)];
+    const streams: MediaStream[] = [];
+    try {
+      for (const [index, source] of command.multi.entries()) {
+        streams.push(await this.acquireDisplay(command, source, index === 0));
+      }
+    } catch (error) {
+      streams.forEach((stream) => stopStream(stream));
+      throw error;
+    }
+    return streams;
+  }
+
+  private async acquireDisplay(
+    command: EnginePrepareCommand,
+    source?: EngineMultiSource,
+    primary = true,
+  ): Promise<MediaStream> {
+    const systemAudio = command.options.systemAudio && primary;
+    const synthetic = source?.synthetic ?? command.synthetic;
+    if (__FRAMECAPT_E2E__ && synthetic) {
       const { createSyntheticDisplayStream } = await import('../capture/synthetic-stream');
-      if (command.options.systemAudio) {
+      if (systemAudio) {
         // The mock has no loopback audio: exercises the "system audio isn't available" choice.
         throw new CaptureError('system-audio-unavailable', 'Synthetic: no system audio.');
       }
-      return createSyntheticDisplayStream(command.synthetic.width, command.synthetic.height);
+      return createSyntheticDisplayStream(synthetic.width, synthetic.height);
     }
     return acquireDisplayStream({
-      sourceId: command.sourceId,
-      systemAudio: command.options.systemAudio,
+      sourceId: source?.sourceId ?? command.sourceId,
+      systemAudio,
       maxFrameRate: command.options.fps,
-      // A region and a follow-mouse window are cut from the unscaled frame.
+      // A region and a follow-mouse window are cut from the unscaled frame, and so are the sources
+      // of a mosaic (the whole mosaic is scaled to its cap afterwards).
       maxSize:
-        command.region || followZoom(command)
+        command.region || followZoom(command) || command.multi
           ? undefined
           : (qualityLimit(command.options.quality) ?? undefined),
     });
@@ -312,9 +366,57 @@ export class RecorderEngine {
     });
   }
 
+  /**
+   * Several sources in one picture: every source is a tile, laid out once all have delivered a
+   * frame ('virtual' for screens only, else an equal-cell 'grid') and capped as a whole by the
+   * quality preset. A tile that ends is blanked (the compositor draws "Source ended"), reported with
+   * `tileLost`, and the recording goes on; only when every tile has ended does it stop.
+   */
+  private async createMultiCompositor(
+    streams: MediaStream[],
+    multi: readonly EngineMultiSource[],
+    command: EnginePrepareCommand,
+  ): Promise<{ crop: CroppedStream; tiles: Rect[] }> {
+    const plan: { layout?: MosaicLayout } = {};
+    const crop = await createCompositor({
+      tiles: streams.map((stream, index) => ({
+        stream,
+        // A window can change size while it is recorded: its frame is fitted into the tile.
+        fit: true,
+        dst: () => (plan.layout as MosaicLayout).rects[index] as Rect,
+      })),
+      outSize: (sizes) => {
+        plan.layout = multiSourceLayout(
+          sizes.map((size, index) => {
+            const source = multi[index] as EngineMultiSource;
+            return {
+              kind: source.kind,
+              size,
+              position: source.rect ? { x: source.rect.x, y: source.rect.y } : null,
+            };
+          }),
+          command.options.quality,
+        );
+        return { width: plan.layout.width, height: plan.layout.height };
+      },
+      fps: command.options.fps,
+      driver: 'timer',
+      onTileLost: (index) => this.onTileLost(index),
+    });
+    return { crop, tiles: (plan.layout as MosaicLayout).rects };
+  }
+
+  private onTileLost(index: number): void {
+    if (this.lostTiles.has(index)) return;
+    this.lostTiles.add(index);
+    this.deps.send({ type: 'tileLost', index });
+    if (this.lostTiles.size >= this.tileCount) this.deps.send({ type: 'sourceLost' });
+  }
+
   /** Watches for the picture and the audio sources going away. Returns the unwatcher. */
   private watchSources(prepared: Prepared): () => void {
-    const video = prepared.displayStream.getVideoTracks()[0];
+    // A multi-source recording watches its tiles in the compositor instead (see onTileLost).
+    const video = prepared.tiles ? undefined : prepared.displayStreams[0]?.getVideoTracks()[0];
     const onVideoEnded = (): void => this.deps.send({ type: 'sourceLost' });
     video?.addEventListener('ended', onVideoEnded);
 
@@ -545,7 +647,7 @@ export class RecorderEngine {
       prepared.mix?.dispose();
       prepared.crop.dispose();
       stopStream(prepared.micStream);
-      stopStream(prepared.displayStream);
+      prepared.displayStreams.forEach((stream) => stopStream(stream));
     }
   }
 }

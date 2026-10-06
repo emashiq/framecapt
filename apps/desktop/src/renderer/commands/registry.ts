@@ -47,7 +47,11 @@ export type Target = 'screen' | 'window' | 'region';
 /** The things a command can do: each one is an existing function of the app. */
 export interface CommandActions {
   /** Same as the Screenshot and Record buttons of the Capture view (and the tray). */
-  startCapture: (kind: 'screenshot' | 'record', target: Target, allScreens?: boolean) => void;
+  startCapture: (
+    kind: 'screenshot' | 'record',
+    target: Target | 'multi',
+    allScreens?: boolean,
+  ) => void;
   stopRecording: () => void;
   togglePause: () => void;
   navigate: (view: 'capture' | 'history' | 'settings', section?: SettingsSectionId) => void;
@@ -132,6 +136,27 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.startCapture('record', target),
     });
   }
+  // Several sources into one video (a `.fcap`): every screen, or a picker for screens and windows.
+  if (env.multiDisplay) {
+    add({
+      id: 'rec.all',
+      title: 'Record – all screens',
+      menuLabel: 'New recording – all screens',
+      group: 'Capture',
+      keywords: ['video', 'screen recording', 'capture', 'every screen', 'monitors', 'displays'],
+      disabledReason: captureBlockedReason(env),
+      run: () => actions.startCapture('record', 'multi', true),
+    });
+  }
+  add({
+    id: 'rec.multi',
+    title: 'Record – multiple sources…',
+    menuLabel: 'New recording – multiple sources…',
+    group: 'Capture',
+    keywords: ['video', 'screen recording', 'capture', 'several', 'screens and windows', 'fcap'],
+    disabledReason: captureBlockedReason(env),
+    run: () => actions.startCapture('record', 'multi'),
+  });
   add({
     id: 'file.openImage',
     title: 'Open image…',

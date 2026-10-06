@@ -38,6 +38,7 @@ describe('ipc contract', () => {
       'history:deleteFile',
       'history:deleteProject',
       'history:exportMany',
+      'history:extractFcap',
       'history:list',
       'history:open',
       'history:relink',

@@ -6,6 +6,7 @@ import {
   FolderOpen,
   ImagePlus,
   Keyboard,
+  Layers,
   Lightbulb,
   Loader2,
   Monitor,
@@ -18,6 +19,7 @@ import { friendlyError } from '../../shared/error-messages';
 import type { RecordTarget } from '../../shared/recorder-ipc';
 import { patchFromRecordOptions, recordOptionsFromSettings } from '../../shared/settings';
 import type { SettingsSectionId, StartRequestEvent } from '../../shared/settings-ipc';
+import { MAX_MULTI_SOURCES } from '../../shared/recording-layout';
 import { acceleratorKeys, type ShortcutAction } from '../../shared/shortcuts';
 import type { CaptureTarget } from '../../shared/shots';
 import { Loader } from '../components/Loader';
@@ -253,7 +255,7 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
   const dirs = useEffectiveDirs();
   const shortcutStates = useShortcutStates();
   const multiDisplay = useMultiDisplay();
-  const [picker, setPicker] = useState<'shot' | 'record' | null>(null);
+  const [picker, setPicker] = useState<'shot' | 'record' | 'multi' | null>(null);
   const [windowTrigger, setWindowTrigger] = useState<HTMLElement | null>(null);
 
   const options = recordOptionsFromSettings(settings.recording);
@@ -296,7 +298,53 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
     }
   }
 
-  function onRecordClick(target: RecordTarget, trigger: HTMLElement | null): void {
+  /** Records 2 to 4 screens and/or windows together into one `.fcap` (the first is the primary). */
+  async function startMulti(sourceIds: string[], trigger: HTMLElement | null): Promise<void> {
+    const result = await window.framecapt.invoke('recorder:start', {
+      target: 'multi',
+      sources: sourceIds.map((sourceId) => ({ sourceId })),
+      options,
+    });
+    if (!result.ok) {
+      notify.error(result.error);
+      trigger?.focus();
+    }
+  }
+
+  /** Every screen (the primary first, then left to right), up to the limit. */
+  async function recordAllScreens(trigger: HTMLElement | null): Promise<void> {
+    const [displays, screens] = await Promise.all([
+      window.framecapt.invoke('capture:listDisplays'),
+      window.framecapt.invoke('capture:listSources', { types: ['screen'], thumbnailWidth: 0 }),
+    ]);
+    if (!displays.ok) return void notify.error(displays.error);
+    if (!screens.ok) return void notify.error(screens.error);
+    const order = [...displays.data].sort(
+      (a, b) => Number(b.isPrimary) - Number(a.isPrimary) || a.bounds.x - b.bounds.x,
+    );
+    const ids = order.flatMap((display) =>
+      screens.data.filter((source) => source.displayId === display.id).map((source) => source.id),
+    );
+    if (ids.length < 2) {
+      notify.error({ code: 'SOURCE_MISSING', message: 'Only one screen was found.' });
+      return;
+    }
+    await startMulti(ids.slice(0, MAX_MULTI_SOURCES), trigger);
+  }
+
+  function onRecordClick(
+    target: RecordTarget,
+    trigger: HTMLElement | null,
+    allScreens = false,
+  ): void {
+    if (target === 'multi') {
+      if (allScreens) void recordAllScreens(trigger);
+      else {
+        setWindowTrigger(trigger);
+        setPicker('multi');
+      }
+      return;
+    }
     if (target === 'window') {
       setWindowTrigger(trigger);
       setPicker('record');
@@ -309,8 +357,9 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
   const launchHandler = useRef<(request: StartRequestEvent) => void>(() => undefined);
   useEffect(() => {
     launchHandler.current = (request) => {
-      if (request.kind === 'screenshot') startScreenshot(request.target, null, request.allScreens);
-      else onRecordClick(request.target, null);
+      if (request.kind === 'screenshot') {
+        if (request.target !== 'multi') startScreenshot(request.target, null, request.allScreens);
+      } else onRecordClick(request.target, null, request.allScreens);
     };
   });
   useEffect(() => subscribeLaunch((request) => launchHandler.current(request)), []);
@@ -451,6 +500,40 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
           testPrefix="record"
           onStart={onRecordClick}
           busy={anythingBusy}
+          extra={
+            <>
+              {multiDisplay ? (
+                <li className="flex items-center gap-3">
+                  <Button
+                    variant="secondary"
+                    className="flex-1 justify-start"
+                    icon={<Fullscreen className="size-4 text-fg-subtle" aria-hidden="true" />}
+                    disabled={anythingBusy}
+                    onClick={(event) => void recordAllScreens(event.currentTarget)}
+                    data-testid="record-all-screens"
+                  >
+                    All screens
+                  </Button>
+                  <div className="flex min-w-32 justify-end text-xs text-fg-muted">One video</div>
+                </li>
+              ) : null}
+              <li className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1 justify-start"
+                  icon={<Layers className="size-4 text-fg-subtle" aria-hidden="true" />}
+                  disabled={anythingBusy}
+                  onClick={(event) => onRecordClick('multi', event.currentTarget)}
+                  data-testid="record-multi"
+                >
+                  Multiple…
+                </Button>
+                <div className="flex min-w-32 justify-end text-xs text-fg-muted">
+                  Screens and windows
+                </div>
+              </li>
+            </>
+          }
         />
       </div>
 
@@ -487,8 +570,16 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
 
       <SourcePicker
         open={picker !== null}
-        purpose={picker === 'record' ? 'record' : 'capture'}
+        purpose={picker === 'record' || picker === 'multi' ? 'record' : 'capture'}
+        mode={picker === 'multi' ? 'many' : 'one'}
         onClose={() => setPicker(null)}
+        onPickMany={(sources) => {
+          setPicker(null);
+          void startMulti(
+            sources.map((source) => source.id),
+            windowTrigger,
+          );
+        }}
         onPick={(source) => {
           const purpose = picker;
           setPicker(null);

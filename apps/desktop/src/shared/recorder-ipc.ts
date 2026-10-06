@@ -4,11 +4,12 @@ import { FOLLOW_ZOOMS } from './compositor-layout';
 import { HistoryIdSchema } from './history-ipc';
 import { FPS_VALUES, QUALITY_VALUES } from './recording';
 import { RECORDER_STATUSES } from './recorder-machine';
+import { MAX_MULTI_SOURCES } from './recording-layout';
 import { SourceIdSchema } from './shot-ipc';
 
 // --- options and requests (main window -> main) ----------------------------------------------
 
-export const RecordTargetSchema = z.enum(['screen', 'window', 'region']);
+export const RecordTargetSchema = z.enum(['screen', 'window', 'region', 'multi']);
 export type RecordTarget = z.infer<typeof RecordTargetSchema>;
 
 const FOLLOW_ZOOM_LITERALS = [
@@ -51,6 +52,12 @@ export const RecorderStartRequestSchema = z
     target: RecordTargetSchema,
     /** Window recordings: the window to record. */
     sourceId: SourceIdSchema.optional(),
+    /** Multi-source recordings: 2 to 4 screens and/or windows; the first is the primary. */
+    sources: z
+      .array(z.strictObject({ sourceId: SourceIdSchema }))
+      .min(2)
+      .max(MAX_MULTI_SOURCES)
+      .optional(),
     /** Screen recordings: skip the "pick a screen" step. */
     displayId: z.string().min(1).max(64).optional(),
     options: RecordOptionsSchema,
@@ -58,7 +65,17 @@ export const RecorderStartRequestSchema = z
   .refine((request) => request.target !== 'window' || request.sourceId !== undefined, {
     message: 'A window recording needs a sourceId.',
     path: ['sourceId'],
-  });
+  })
+  .refine((request) => (request.target === 'multi') === (request.sources !== undefined), {
+    message: 'Only a multi-source recording takes sources (and it needs them).',
+    path: ['sources'],
+  })
+  .refine(
+    (request) =>
+      new Set(request.sources?.map((source) => source.sourceId)).size ===
+      (request.sources?.length ?? 0),
+    { message: 'Each source can be recorded once.', path: ['sources'] },
+  );
 export type RecorderStartRequest = z.infer<typeof RecorderStartRequestSchema>;
 
 export const AudioSourceSchema = z.enum(['mic', 'system']);
@@ -114,6 +131,14 @@ export const RecorderSnapshotSchema = z.object({
   audio: AudioFlagsSchema,
   muted: AudioFlagsSchema,
   lost: AudioFlagsSchema,
+  /** Multi-source recordings: indexes of the sources that went away (the recording goes on). */
+  lostTiles: z.array(
+    z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_MULTI_SOURCES - 1),
+  ),
   choice: PreflightChoiceKindSchema.nullable(),
   /** The "Use default microphone" answer is only offered when a default microphone exists. */
   choiceCanUseDefault: z.boolean(),
@@ -136,6 +161,17 @@ export const LevelsEventSchema = z.object({ mic: z.number(), system: z.number() 
 
 const RequestIdSchema = z.string().min(1).max(64);
 
+/** One source of a multi-source recording, as main hands it to the engine. */
+export const EngineMultiSourceSchema = z.strictObject({
+  sourceId: SourceIdSchema,
+  kind: z.enum(['screen', 'window']),
+  /** Screens: where the display sits on the virtual desktop, in physical pixels (null: a window). */
+  rect: RectSchema.strict().nullable(),
+  /** E2E builds only: draw a synthetic picture of this size instead of capturing. */
+  synthetic: z.object({ width: z.number(), height: z.number() }).optional(),
+});
+export type EngineMultiSource = z.infer<typeof EngineMultiSourceSchema>;
+
 export const EnginePrepareSchema = z.object({
   cmd: z.literal('prepare'),
   requestId: RequestIdSchema,
@@ -146,6 +182,8 @@ export const EnginePrepareSchema = z.object({
   /** Physical size of the display (screen and region); used for sizing and validation. */
   displaySize: z.object({ width: z.number(), height: z.number() }).nullable(),
   options: RecordOptionsSchema,
+  /** Multi-source recordings: every source, in order (the first is the primary and gets the system audio). */
+  multi: z.array(EngineMultiSourceSchema).min(2).max(MAX_MULTI_SOURCES).optional(),
   /** E2E builds only: draw a synthetic picture of this size instead of capturing. */
   synthetic: z.object({ width: z.number(), height: z.number() }).optional(),
 });
@@ -178,6 +216,8 @@ export const EngineEventSchema = z.discriminatedUnion('type', [
     width: z.number().int(),
     height: z.number().int(),
     audio: AudioFlagsSchema,
+    /** Multi-source recordings: each source's tile in the picture, in order. */
+    tiles: z.array(RectSchema.strict()).max(MAX_MULTI_SOURCES).optional(),
   }),
   z.strictObject({
     type: z.literal('needsChoice'),
@@ -202,6 +242,15 @@ export const EngineEventSchema = z.discriminatedUnion('type', [
     bytes: z.number().min(0),
   }),
   z.strictObject({ type: z.literal('sourceLost') }),
+  /** Multi-source recordings: one source ended; its tile is blank and the recording continues. */
+  z.strictObject({
+    type: z.literal('tileLost'),
+    index: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_MULTI_SOURCES - 1),
+  }),
   z.strictObject({ type: z.literal('trackEnded'), source: AudioSourceSchema }),
   z.strictObject({ type: z.literal('levels'), mic: z.number(), system: z.number() }),
   z.strictObject({

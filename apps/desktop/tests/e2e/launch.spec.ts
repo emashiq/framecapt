@@ -75,7 +75,7 @@ test('screenshot and record buttons are enabled', async () => {
   const record = page.getByTestId('mode-record');
   for (const name of ['Screen', 'Window', 'Region']) {
     await expect(shots.getByRole('button', { name, exact: true })).toBeEnabled();
-    await expect(record.getByRole('button', { name })).toBeEnabled();
+    await expect(record.getByRole('button', { name, exact: true })).toBeEnabled();
   }
 });
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RecordingLayoutSchema } from './recording-layout';
 
 /** History ids are random uuids made by main; the renderer only ever sends them back. */
 export const HISTORY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -7,10 +8,10 @@ export const HistoryIdSchema = z.string().regex(HISTORY_ID_PATTERN);
 export const HistoryTypeSchema = z.enum(['screenshot', 'recording']);
 export type HistoryType = z.infer<typeof HistoryTypeSchema>;
 
-export const HistorySourceSchema = z.enum(['screen', 'window', 'region', 'unknown']);
+export const HistorySourceSchema = z.enum(['screen', 'window', 'region', 'multi', 'unknown']);
 export type HistorySource = z.infer<typeof HistorySourceSchema>;
 
-export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4'] as const;
+export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4', 'fcap'] as const;
 export const HistoryFormatSchema = z.enum(HISTORY_FORMATS);
 export type HistoryFormat = z.infer<typeof HistoryFormatSchema>;
 
@@ -42,6 +43,8 @@ export const HistoryItemViewSchema = z.object({
   exists: z.boolean(),
   /** An editable project (the unredacted original and the annotations) is stored for this item. */
   editable: z.boolean(),
+  /** `.fcap` recordings: where each source sits in the picture (read from the file's header). */
+  layout: RecordingLayoutSchema.nullable().optional(),
 });
 export type HistoryItemView = z.infer<typeof HistoryItemViewSchema>;
 
@@ -78,8 +81,8 @@ export const ExportMp4ResponseSchema = z.union([
 ]);
 export const ExportCancelRequestSchema = z.strictObject({ jobId: z.string().min(1).max(64) });
 
-/** What the job is: the user's MP4 export (default) or the compressed-storage re-encode. */
-const ExportKindSchema = z.enum(['export', 'compress']).optional();
+/** What the job is: the user's MP4 export (default), the compressed-storage re-encode or a `.fcap` extract. */
+const ExportKindSchema = z.enum(['export', 'compress', 'extract']).optional();
 
 export const ExportProgressEventSchema = z.object({
   kind: ExportKindSchema,
@@ -107,6 +110,27 @@ export const ExportFailedEventSchema = z.object({
 export type ExportProgressEvent = z.infer<typeof ExportProgressEventSchema>;
 export type ExportDoneEvent = z.infer<typeof ExportDoneEventSchema>;
 export type ExportFailedEvent = z.infer<typeof ExportFailedEventSchema>;
+
+// --- extracting from a multi-source recording ---------------------------------------------------
+
+export const EXTRACT_FORMATS = ['mp4', 'webm'] as const;
+export type ExtractFormat = (typeof EXTRACT_FORMATS)[number];
+
+/** `history:extractFcap`: one source (or null: the whole picture) of a `.fcap`, between two times. */
+export const ExtractFcapRequestSchema = z
+  .strictObject({
+    id: HistoryIdSchema,
+    sourceIndex: z.number().int().min(0).max(3).nullable(),
+    startMs: z.number().int().min(0).max(86_400_000),
+    endMs: z.number().int().min(1).max(86_400_000),
+    format: z.enum(EXTRACT_FORMATS),
+  })
+  .refine((request) => request.endMs > request.startMs, {
+    message: 'The end must be after the start.',
+    path: ['endMs'],
+  });
+export type ExtractFcapRequest = z.infer<typeof ExtractFcapRequestSchema>;
+export const ExtractFcapResponseSchema = z.strictObject({ jobId: z.string() });
 
 // --- bulk save of copies and drag-out ---------------------------------------------------------
 

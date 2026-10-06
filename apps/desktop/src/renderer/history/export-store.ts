@@ -1,9 +1,16 @@
 import { useSyncExternalStore } from 'react';
+import type { ExtractFcapRequest } from '../../shared/history-ipc';
 import { notify } from '../lib/notify';
 
 export type ExportState =
   | { status: 'starting' }
-  | { status: 'running'; jobId: string; percent: number | null; compressing?: boolean }
+  | {
+      status: 'running';
+      jobId: string;
+      percent: number | null;
+      compressing?: boolean;
+      extracting?: boolean;
+    }
   | { status: 'done'; path: string; itemId: string | null }
   | { status: 'failed'; message: string };
 
@@ -49,30 +56,37 @@ export function listenToExports(): () => void {
         jobId: event.jobId,
         percent: event.percent,
         ...(event.kind === 'compress' && { compressing: true }),
+        ...(event.kind === 'extract' && { extracting: true }),
       });
     }),
     window.framecapt.on('export:done', (event) => {
       const compressed = event.kind === 'compress';
+      const extracted = event.kind === 'extract';
       // A compressed recording replaces its WebM in the list: no "MP4 saved" card for it.
       set(
         event.historyId,
         compressed ? null : { status: 'done', path: event.path, itemId: event.itemId },
       );
-      notify.success(compressed ? 'Recording compressed' : 'MP4 saved', {
-        action: event.itemId
-          ? {
-              label: 'Show in folder',
-              onClick: () => void window.framecapt.invoke('history:reveal', { id: event.itemId! }),
-            }
-          : undefined,
-      });
+      notify.success(
+        compressed ? 'Recording compressed' : extracted ? 'Extract saved' : 'MP4 saved',
+        {
+          action: event.itemId
+            ? {
+                label: 'Show in folder',
+                onClick: () =>
+                  void window.framecapt.invoke('history:reveal', { id: event.itemId! }),
+              }
+            : undefined,
+        },
+      );
     }),
     window.framecapt.on('export:failed', (event) => {
       const compressing = event.kind === 'compress';
+      const extracting = event.kind === 'extract';
       if (event.cancelled) {
         set(event.historyId, null);
         notify.info(
-          `${compressing ? 'Compression' : 'Export'} cancelled. Your recording was not changed.`,
+          `${compressing ? 'Compression' : extracting ? 'Extract' : 'Export'} cancelled. Your recording was not changed.`,
         );
         return;
       }
@@ -80,7 +94,9 @@ export function listenToExports(): () => void {
       notify.error(
         compressing
           ? `Compression failed. ${event.message} Your recording was kept as WebM.`
-          : `MP4 export failed. ${event.message}`,
+          : extracting
+            ? `Extract failed. ${event.message}`
+            : `MP4 export failed. ${event.message}`,
       );
     }),
   ];
@@ -101,6 +117,25 @@ export async function startMp4Export(historyId: string): Promise<void> {
     if (current?.status === 'starting') {
       set(historyId, { status: 'running', jobId: response.data.jobId, percent: null });
     }
+  }
+}
+
+/** Starts an extract from a multi-source recording; the progress events arrive like an export's. */
+export async function startFcapExtract(request: ExtractFcapRequest): Promise<void> {
+  set(request.id, { status: 'starting' });
+  const response = await window.framecapt.invoke('history:extractFcap', request);
+  if (!response.ok) {
+    set(request.id, null);
+    notify.error(response.error);
+    return;
+  }
+  if (states.get(request.id)?.status === 'starting') {
+    set(request.id, {
+      status: 'running',
+      jobId: response.data.jobId,
+      percent: null,
+      extracting: true,
+    });
   }
 }
 

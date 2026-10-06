@@ -12,6 +12,7 @@ import { getMainWindow } from '../windows';
 import type { BulkExportService } from './bulk-export';
 import { planDrag } from './drag';
 import type { ExportService } from './export-service';
+import type { ExtractService } from './extract-service';
 import { copyFileAtomic, isOpenableMedia } from './files';
 import type { HistoryService } from './service';
 
@@ -87,6 +88,7 @@ export async function mp4SaveDialog(
 export function registerHistoryHandlers(
   history: HistoryService,
   exports: ExportService,
+  extracts: ExtractService,
   bulk: BulkExportService,
   capability: () => Promise<Mp4Capability>,
   recordingsDir: () => string,
@@ -212,7 +214,12 @@ export function registerHistoryHandlers(
       ),
       filters: [
         {
-          name: extension === '.mp4' ? 'MP4 video' : 'WebM video',
+          name:
+            extension === '.mp4'
+              ? 'MP4 video'
+              : extension === '.fcap'
+                ? 'FrameCapt multi-source recording'
+                : 'WebM video',
           extensions: [extension.slice(1)],
         },
       ],
@@ -228,6 +235,9 @@ export function registerHistoryHandlers(
     }
     return { path: target };
   });
+
+  // Multi-source recordings: one source (or all) between two times, as a new MP4 or WebM.
+  handle('history:extractFcap', { roles: ['main'] }, (request) => extracts.start(request));
 
   handle('export:capabilities', { roles: ['main'] }, async () => {
     const result = await capability();

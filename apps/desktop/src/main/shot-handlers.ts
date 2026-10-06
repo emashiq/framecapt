@@ -298,7 +298,9 @@ export function registerShotHandlers(
     }
     png ??= pngOf(await fs.promises.readFile(item.path));
     const size = checkedSize(png);
-    const kind: ShotKind = item.source === 'unknown' ? 'import' : item.source;
+    // A screenshot is never a multi-source item; anything not a plain capture opens as an import.
+    const kind: ShotKind =
+      item.source === 'unknown' || item.source === 'multi' ? 'import' : item.source;
     const session = await store.create({ kind, width: size.width, height: size.height, png });
     links.set(session.id, item.id);
     editorSessionId = session.id;

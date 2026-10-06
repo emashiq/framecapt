@@ -60,8 +60,8 @@ export const ResolveQuitRequestSchema = z.strictObject({ stop: z.boolean() });
 /** A tray or shortcut action that needs the main window (a window picker, or an unsaved editor). */
 export const StartRequestEventSchema = z.object({
   kind: z.enum(['screenshot', 'record']),
-  target: z.enum(['screen', 'window', 'region']),
-  /** A screenshot of every screen joined (target is 'screen'). */
+  target: z.enum(['screen', 'window', 'region', 'multi']),
+  /** A screenshot of every screen joined (target 'screen'), or a recording of every screen (target 'multi'). */
   allScreens: z.boolean().optional(),
 });
 export type StartRequestEvent = z.infer<typeof StartRequestEventSchema>;

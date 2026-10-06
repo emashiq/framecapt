@@ -27,8 +27,55 @@ export function parseRange(
   return { start, end };
 }
 
+/**
+ * A byte window inside a file: the WebM payload of a `.fcap` (the bytes before it are FrameCapt's
+ * own header and are never served).
+ */
+export interface PayloadWindow {
+  offset: number;
+  length: number;
+}
+
+export type MediaSlice =
+  | { status: 416; contentRange: string }
+  | {
+      status: 200 | 206;
+      /** First and last byte to read from the FILE (inclusive); the window's offset is already added. */
+      start: number;
+      end: number;
+      length: number;
+      /** `Content-Range` of a 206, in the coordinates the client sees (the payload's own). */
+      contentRange: string | null;
+    };
+
+/**
+ * What to answer for a `Range` header: the file itself, or only `window` of it (a `.fcap` payload,
+ * offset-shifted so the client sees a file that starts at byte 0).
+ */
+export function planMediaSlice(
+  rangeHeader: string | null,
+  fileSize: number,
+  window?: PayloadWindow,
+): MediaSlice {
+  const total = window ? window.length : fileSize;
+  const base = window ? window.offset : 0;
+  const range = parseRange(rangeHeader, total);
+  if (range === 'unsatisfiable') return { status: 416, contentRange: `bytes */${total}` };
+  const start = range?.start ?? 0;
+  const end = range?.end ?? total - 1;
+  return {
+    status: range ? 206 : 200,
+    start: base + start,
+    end: base + end,
+    length: total === 0 ? 0 : end - start + 1,
+    contentRange: range ? `bytes ${start}-${end}/${total}` : null,
+  };
+}
+
 const TYPES: Record<string, string> = {
   '.webm': 'video/webm',
+  // A `.fcap` is served as its WebM payload only (see the media protocol).
+  '.fcap': 'video/webm',
   '.mp4': 'video/mp4',
   '.mkv': 'video/x-matroska',
   '.png': 'image/png',

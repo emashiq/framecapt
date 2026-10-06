@@ -17,6 +17,7 @@ import { thumbnailArgs, type MediaTools } from '../media/ffmpeg';
 import type { ProjectAsset, ProjectInput, ProjectStore } from '../projects/store';
 import type { ProjectDoc } from '../../shared/project-ipc';
 import { writeFileAtomic } from '../shots/atomic-write';
+import { readFcapHeader, readFcapHeaderCached } from '../recording/fcap';
 import { CompletionRecordSchema, COMPLETED_DIR } from '../recording/manifest';
 import { HistoryStore, type HistoryItem } from './store';
 import { mapLimit, samePath } from './files';
@@ -34,7 +35,11 @@ const IMAGE_EXTENSIONS: Record<'png' | 'jpeg', readonly string[]> = {
   png: ['.png'],
   jpeg: ['.jpg', '.jpeg'],
 };
-const VIDEO_EXTENSION: Record<'webm' | 'mp4', string> = { webm: '.webm', mp4: '.mp4' };
+const VIDEO_EXTENSION: Record<'webm' | 'mp4' | 'fcap', string> = {
+  webm: '.webm',
+  mp4: '.mp4',
+  fcap: '.fcap',
+};
 
 export interface HistoryDeps {
   /** `<userData>/history`: `history.json` and `thumbs/`. */
@@ -87,7 +92,7 @@ export interface ScreenshotOverwrite {
 
 export interface NewVideo {
   path: string;
-  format: 'webm' | 'mp4';
+  format: 'webm' | 'mp4' | 'fcap';
   durationMs: number | null;
   width: number;
   height: number;
@@ -98,8 +103,9 @@ export interface NewVideo {
   createdAt?: number;
 }
 
-function formatOfVideoPath(file: string): 'webm' | 'mp4' {
-  return path.extname(file).toLowerCase() === '.mp4' ? 'mp4' : 'webm';
+function formatOfVideoPath(file: string): 'webm' | 'mp4' | 'fcap' {
+  const extension = path.extname(file).toLowerCase();
+  return extension === '.mp4' ? 'mp4' : extension === '.fcap' ? 'fcap' : 'webm';
 }
 
 /** What the recorder and recovery need of history: adding a finished video. */
@@ -249,6 +255,7 @@ export class HistoryService {
       derivedFrom: item.derivedFrom,
       exists,
       editable: item.type === 'screenshot' && item.projectId !== undefined,
+      ...(item.format === 'fcap' && { layout: exists ? await fcapLayout(item.path) : null }),
     };
   }
 
@@ -472,7 +479,7 @@ export class HistoryService {
     try {
       await fs.promises.mkdir(this.thumbs.dir, { recursive: true });
       const result = await this.deps.tools.run(
-        thumbnailArgs(item.path, partial, seek, MAX_THUMBNAIL_WIDTH),
+        thumbnailArgs(item.path, partial, seek, MAX_THUMBNAIL_WIDTH, item.format),
         { timeoutMs: THUMB_TIMEOUT_MS },
       );
       const size = result.code === 0 ? (await fs.promises.stat(partial)).size : 0;
@@ -616,8 +623,13 @@ export class HistoryService {
       if (extension !== VIDEO_EXTENSION[item.format]) {
         throw new IpcError('INVALID_PAYLOAD', `Pick a ${item.format.toUpperCase()} video.`);
       }
-      const probe = await this.deps.tools.probe(resolved, { timeoutMs: 30_000 }).catch(() => null);
-      if (!probe?.hasVideo || !probe.formatName.split(',').includes(item.format)) {
+      // A `.fcap` must have a valid header first; its payload is then probed as Matroska.
+      if (item.format === 'fcap') await readFcapHeader(resolved).catch(() => notVideo(item.format));
+      const probe = await this.deps.tools
+        .probe(resolved, { timeoutMs: 30_000, format: item.format })
+        .catch(() => null);
+      const container = item.format === 'fcap' ? 'matroska' : item.format;
+      if (!probe?.hasVideo || !probe.formatName.split(',').includes(container)) {
         throw new IpcError(
           'INVALID_PAYLOAD',
           `That file is not a ${item.format.toUpperCase()} video.`,
@@ -678,6 +690,20 @@ export class HistoryService {
     }
     await this.store.markBackfilled();
     return added;
+  }
+}
+
+function notVideo(format: string): never {
+  throw new IpcError('INVALID_PAYLOAD', `That file is not a ${format.toUpperCase()} video.`);
+}
+
+/** The picture layout of a `.fcap` (its header), or null when the header cannot be read. */
+async function fcapLayout(file: string): Promise<NonNullable<HistoryItemView['layout']> | null> {
+  try {
+    const { width, height, sources } = await readFcapHeaderCached(file);
+    return { width, height, sources };
+  } catch {
+    return null;
   }
 }
 

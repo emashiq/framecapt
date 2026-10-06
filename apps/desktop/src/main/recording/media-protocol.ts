@@ -4,7 +4,8 @@ import { Readable } from 'node:stream';
 import { protocol } from 'electron';
 import { HISTORY_ID_PATTERN } from '../../shared/history-ipc';
 import { log } from '../logger';
-import { mediaContentType, parseRange } from './range';
+import { isFcapPath, readFcapHeaderCached } from './fcap';
+import { mediaContentType, planMediaSlice, type PayloadWindow } from './range';
 
 export const MEDIA_SCHEME = 'framecapt-media';
 
@@ -83,7 +84,9 @@ export function resolveMediaUrl(
 
 /**
  * `framecapt-media://<id>` serves a finished recording with Range support, so <video> can seek
- * (net.fetch(file://) was not relied on for ranges: they are answered here from the file).
+ * (net.fetch(file://) was not relied on for ranges: they are answered here from the file). A `.fcap`
+ * is answered from its WebM payload only, as a file that starts at byte 0 (offset-shifted ranges);
+ * its header is cached by path and modification time.
  */
 export function installMediaProtocol(registry: MediaRegistry, history?: HistoryMedia): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
@@ -112,27 +115,34 @@ export function installMediaProtocol(registry: MediaRegistry, history?: HistoryM
       log.warn('Media file is gone');
       return new Response(null, { status: 404, headers: NO_STORE });
     }
+    let window: PayloadWindow | undefined;
+    if (isFcapPath(file)) {
+      try {
+        const header = await readFcapHeaderCached(file);
+        window = { offset: header.payloadOffset, length: header.payloadLength };
+      } catch {
+        log.warn('A multi-source recording has no valid header');
+        return new Response(null, { status: 404, headers: NO_STORE });
+      }
+    }
     const baseHeaders: Record<string, string> = {
       'Content-Type': mediaContentType(file),
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-store',
     };
-    const range = parseRange(request.headers.get('range'), size);
-    if (range === 'unsatisfiable') {
+    const slice = planMediaSlice(request.headers.get('range'), size, window);
+    if (slice.status === 416) {
       return new Response(null, {
         status: 416,
-        headers: { ...baseHeaders, 'Content-Range': `bytes */${size}` },
+        headers: { ...baseHeaders, 'Content-Range': slice.contentRange },
       });
     }
-    const start = range?.start ?? 0;
-    const end = range?.end ?? size - 1;
-    const length = size === 0 ? 0 : end - start + 1;
+    const { status, start, end, length } = slice;
     const headers = {
       ...baseHeaders,
       'Content-Length': String(length),
-      ...(range && { 'Content-Range': `bytes ${start}-${end}/${size}` }),
+      ...(slice.contentRange && { 'Content-Range': slice.contentRange }),
     };
-    const status = range ? 206 : 200;
     if (request.method === 'HEAD' || length === 0) return new Response(null, { status, headers });
     const stream = Readable.toWeb(fs.createReadStream(file, { start, end })) as ReadableStream;
     return new Response(stream, { status, headers });

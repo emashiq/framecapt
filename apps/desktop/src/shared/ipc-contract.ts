@@ -63,6 +63,8 @@ import {
   ExportFailedEventSchema,
   ExportMp4RequestSchema,
   ExportMp4ResponseSchema,
+  ExtractFcapRequestSchema,
+  ExtractFcapResponseSchema,
   ExportProgressEventSchema,
   HistoryCancelledSchema,
   HistoryIdRequestSchema,
@@ -436,6 +438,12 @@ export const ipcContract = {
   },
   /** Cancels the running "save copies" (the rest are skipped). */
   'history:cancelBulk': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  /** Multi-source recordings (`.fcap`): extracts one source or the whole picture, between two times. */
+  'history:extractFcap': {
+    request: ExtractFcapRequestSchema,
+    response: ExtractFcapResponseSchema,
+    roles: ['main'],
+  },
   'export:capabilities': {
     request: z.undefined(),
     response: ExportCapabilitiesSchema,

@@ -91,6 +91,16 @@ If the disk gets low, FrameCapt refuses to start below 1 GB free and stops safel
 
 Quitting while recording asks first; if you quit, FrameCapt stops and finishes the recording (up to 15 seconds; otherwise it finishes at the next start).
 
+### Recording several screens or windows together
+
+On **Capture > Record**, **All screens** (shown when you have two or more screens) records every screen into one video, and **Multiple...** opens a picker with your screens **and** open windows: tick 2 to 4 of them (click, or `Space` on a focused card). The numbers on the cards show the order; the first one is the main source (it also carries the system audio). **Record N sources** starts the recording. The command center (`Ctrl+K`) has the same two entries ("Record - all screens", "Record - multiple sources...").
+
+- Screens only keep their places side by side, as they sit on your desk. As soon as a window is among the sources, they are laid out in a grid. The whole picture is capped at 3840 × 2160 (and about 4 million pixels) with the 1080p quality, and about 8 million pixels with Source quality, so each source may be smaller than on screen.
+- If one source goes away (a screen is unplugged, a window is closed) its place shows "Source ended", the toolbar shows a warning and the recording goes on with the others. When every source is gone the recording is saved.
+- Follow mouse does not apply. The camera button on the toolbar takes a screenshot of the main (first) source.
+
+The result is saved as `FrameCapt YYYY-MM-DD at HH.mm.ss.fcap` in `Videos\FrameCapt`. **A `.fcap` file plays only in FrameCapt**: other players cannot open it, and there is no "Open" in another program. In History the card carries a **Multi** badge with the number of sources, and its details view plays it with tabs (**All**, **Screen 1**, **Window 2** ...) that show the whole picture or one source. **Extract...** saves one source (or all of it), between a start and an end time you choose with the time fields or the sliders, as an ordinary **MP4** or **WebM** video next to the original (`... - Screen 1.mp4`); it appears in History as a new item, with progress and **Cancel** like an MP4 export. The `.fcap` itself is never changed. An interrupted multi-source recording is recovered into a `.fcap` too. **Export MP4** and **Compressed storage** do not apply to a `.fcap` (extract an MP4 instead).
+
 ## Unfinished recordings
 
 If FrameCapt or Windows ends abruptly during a recording (crash, forced kill, power loss), the next start shows a card: "We found an unfinished recording" with **Recover** and **Discard**. Recovery is **best effort, not lossless**:
@@ -111,7 +121,7 @@ With **Settings > Recording > Video storage: Compressed**, a saved recording is 
 
 ## History
 
-**History** lists screenshots and recordings you saved (the newest six also appear on the home screen). Filter All / Screenshots / Recordings, search by name, date or type, press `Enter` to open the details, where you can open the file, show it in its folder, copy the image or the path, export MP4, save a copy of a recording, or remove it.
+**History** lists screenshots and recordings you saved (the newest six also appear on the home screen). Filter All / Screenshots / Recordings, search by name, date or type, press `Enter` to open the details, where you can open the file, show it in its folder, copy the image or the path, export MP4, save a copy of a recording, or remove it. A multi-source `.fcap` recording opens in FrameCapt itself (a player with a tab per source and **Extract...**), see [Recording several screens or windows together](#recording-several-screens-or-windows-together).
 
 - **Select several**: `Ctrl`-click or `Shift`-click cards (or tick the checkbox on a card, or press `Ctrl+A`). A bar shows how many are selected with **Save copies...** (one folder dialog; each file is copied under a free name, existing files are never overwritten; progress, **Cancel** and a per-item summary if anything was skipped), **Remove from history** (asks first, with Undo), **Select all** and **Clear selection** (`Esc`). Viewers can select but not save copies.
 - **Right-click a card** (or `Shift+F10`) for Edit, Open, Show in folder, Copy, Save a copy, Remove, Delete editable data and Delete file. Entries that are not available stay listed, disabled, with the reason.

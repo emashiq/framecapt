@@ -15,6 +15,7 @@ export const IDLE_SNAPSHOT: RecorderSnapshot = {
   audio: { mic: false, system: false },
   muted: { mic: false, system: false },
   lost: { mic: false, system: false },
+  lostTiles: [],
   choice: null,
   choiceCanUseDefault: false,
   quitting: false,

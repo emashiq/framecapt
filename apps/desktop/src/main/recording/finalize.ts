@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { withCollisionSuffix } from '../../shared/recording';
+import type { RecordingLayout } from '../../shared/recording-layout';
 import {
   FfmpegError,
   remuxArgs,
@@ -8,9 +9,11 @@ import {
   type MediaTools,
   type ProbeResult,
 } from '../media/ffmpeg';
+import { writeFcap } from './fcap';
 import {
   COMPLETED_DIR,
   FINALIZE_LOG_FILE,
+  REMUXED_FILE,
   STREAM_FILE,
   type CompletionRecord,
   type SessionManifest,
@@ -141,6 +144,75 @@ export async function remuxToOutput(request: RemuxRequest): Promise<RemuxOutcome
   } finally {
     // Any partial file that is still here belongs to this attempt (success renamed it away).
     await api.rm(partialPath, { force: true }).catch(() => undefined);
+  }
+}
+
+/**
+ * Multi-source recordings: the normal remux into a temporary WebM that stays in the session
+ * directory (never the output folder), then that WebM is wrapped into a `.fcap` at
+ * `request.partialPath` and renamed to a free `request.fileName` (a `.fcap` name) in the output
+ * folder. The outcome is the remux's, with the `.fcap` as the output. Both temporary files are
+ * removed on every path; the stream is never modified.
+ */
+export async function remuxToFcap(
+  request: RemuxRequest,
+  layout: RecordingLayout,
+  createdAt: number,
+): Promise<RemuxOutcome> {
+  const { fs: api } = request;
+  const sessionDir = path.dirname(request.streamPath);
+  const remuxedPath = path.join(sessionDir, REMUXED_FILE);
+  try {
+    await api.rm(remuxedPath, { force: true });
+    const remux = await remuxToOutput({
+      ...request,
+      outputDir: sessionDir,
+      fileName: REMUXED_FILE,
+      partialPath: path.join(sessionDir, '.remux.partial.webm'),
+    });
+    if (!remux.ok) return remux;
+
+    await api.mkdir(request.outputDir, { recursive: true });
+    const free = await freeBytes(api, request.outputDir);
+    if (free !== null && free < remux.bytes + REMUX_MARGIN_BYTES) {
+      return failure('LOW_DISK', 'There is not enough free space to finish the recording.');
+    }
+    await api.rm(request.partialPath, { force: true });
+    try {
+      await writeFcap(
+        remux.outputPath,
+        request.partialPath,
+        {
+          width: layout.width,
+          height: layout.height,
+          durationMs: Math.min(86_400_000, Math.round((remux.probe.durationSec ?? 0) * 1000)),
+          hasAudio: remux.probe.hasAudio,
+          createdAt,
+          sources: layout.sources,
+        },
+        request.signal,
+      );
+    } catch (error) {
+      if (request.signal?.aborted) {
+        return failure('ABORTED', 'Finishing the recording was interrupted.');
+      }
+      return failure(
+        'REMUX_FAILED',
+        'The recording could not be stored.',
+        error instanceof Error ? error.message : '',
+      );
+    }
+    const partialSize = (await api.stat(request.partialPath)).size;
+    const target = await freeTarget(api, request.outputDir, request.fileName);
+    await api.rename(request.partialPath, target);
+    const finalSize = (await api.stat(target)).size;
+    if (finalSize !== partialSize) {
+      return failure('REMUX_FAILED', 'The finished file does not have the expected size.');
+    }
+    return { ok: true, outputPath: target, bytes: finalSize, probe: remux.probe };
+  } finally {
+    await api.rm(request.partialPath, { force: true }).catch(() => undefined);
+    await api.rm(remuxedPath, { force: true }).catch(() => undefined);
   }
 }
 

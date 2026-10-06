@@ -21,6 +21,8 @@ import { revealDuration } from '../../lib/reveal-duration';
 import { formatExact, formatRelative } from '../../lib/time';
 import type { ItemActions } from './actions';
 import { dimensionsText, TypeBadge } from './HistoryCard';
+import { FcapExtract } from './FcapExtract';
+import { FcapPlayer } from './FcapPlayer';
 import { Thumb } from './Thumb';
 
 export interface HistoryDetailsProps {
@@ -42,6 +44,7 @@ const SOURCE_LABEL: Record<HistoryItemView['source'], string> = {
   screen: 'Whole screen',
   window: 'Window',
   region: 'Region',
+  multi: 'Multiple sources',
   unknown: 'Unknown',
 };
 
@@ -65,6 +68,20 @@ function Row({ label, children, testId }: { label: string; children: ReactNode; 
 function Preview({ item }: { item: HistoryItemView }) {
   const [nonce] = useState(newNonce);
   const src = fileUrl(item.id, nonce);
+  // A multi-source recording plays only here: tabs choose the whole picture or one source.
+  if (item.format === 'fcap') {
+    return item.layout ? (
+      <FcapPlayer item={item} layout={item.layout} />
+    ) : (
+      <p
+        role="alert"
+        data-testid="fcap-unreadable"
+        className="rounded-lg bg-danger-soft px-3 py-6 text-center text-[13px] text-danger"
+      >
+        FrameCapt cannot read this recording. The file may be damaged or incomplete.
+      </p>
+    );
+  }
   return item.type === 'recording' ? (
     <video
       data-testid="history-video"
@@ -157,6 +174,12 @@ export function HistoryDetails({
           {isVideo && item.format === 'webm' && !missing ? (
             <Mp4Export historyId={item.id} className="w-full" />
           ) : null}
+          {item.format === 'fcap' && item.layout && !missing ? (
+            <p className="text-[13px] text-fg-muted" data-testid="fcap-note">
+              This recording opens only in FrameCapt. Use Extract to save one source, or a part of
+              it, as an MP4 or WebM video that plays anywhere.
+            </p>
+          ) : null}
           <p className="selectable text-xs break-all text-fg-subtle" data-testid="history-path">
             {item.path}
           </p>
@@ -182,6 +205,11 @@ export function HistoryDetails({
                 <Row label="Audio">{item.hasAudio ? 'With audio' : 'No audio'}</Row>
               ) : null}
               <Row label="Captured">{SOURCE_LABEL[item.source]}</Row>
+              {item.layout ? (
+                <Row label="Sources" testId="fcap-sources">
+                  {item.layout.sources.map((source) => source.name).join(', ')}
+                </Row>
+              ) : null}
               {item.derivedFrom ? (
                 <Row label="Converted from">
                   {original ? (
@@ -225,14 +253,20 @@ export function HistoryDetails({
               </>
             ) : (
               <>
-                <Button
-                  variant="primary"
-                  data-testid="details-open"
-                  icon={<ExternalLink className="size-4" aria-hidden="true" />}
-                  onClick={() => actions.open(item)}
-                >
-                  Open
-                </Button>
+                {item.format === 'fcap' ? (
+                  item.layout ? (
+                    <FcapExtract key={item.id} item={item} layout={item.layout} />
+                  ) : null
+                ) : (
+                  <Button
+                    variant="primary"
+                    data-testid="details-open"
+                    icon={<ExternalLink className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.open(item)}
+                  >
+                    Open
+                  </Button>
+                )}
                 {!isVideo && onEdit ? (
                   <Button
                     variant="secondary"

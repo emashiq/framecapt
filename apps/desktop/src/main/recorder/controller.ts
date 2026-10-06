@@ -10,6 +10,7 @@ import {
 } from '../../shared/geometry';
 import { checkPixelRect, type Rect } from '../../shared/rect';
 import { platformCapabilities } from '../../shared/platform';
+import { layoutSourceName, type RecordingLayout } from '../../shared/recording-layout';
 import type {
   EngineCommand,
   EngineEvent,
@@ -84,6 +85,20 @@ class StartFailure extends Error {
   }
 }
 
+/** The sources of a multi-source recording, in the order the user chose them (the first is the primary). */
+interface MultiContext {
+  sources: {
+    sourceId: string;
+    kind: 'screen' | 'window';
+    /** Generic ("Screen 1", "Window 2"): window titles never reach disk. */
+    name: string;
+    /** Screens only. */
+    display: DisplayInfo | undefined;
+  }[];
+  /** Each source's tile in the recorded picture (known once the engine has prepared). */
+  tiles: Rect[];
+}
+
 interface SessionContext {
   sessionId: string;
   target: RecordTarget;
@@ -91,6 +106,12 @@ interface SessionContext {
   sourceId: string;
   sourceName: string;
   display: DisplayInfo | undefined;
+  /** Multi-source recordings: the sources and where they sit in the picture. */
+  multi: MultiContext | null;
+  /** The ids of the requested sources (multi-source recordings), until they are resolved. */
+  multiIds: string[];
+  /** Multi-source recordings: indexes of the sources that went away (the recording goes on). */
+  lostTiles: Set<number>;
   /** Region in pixels of the display (even aligned), and in global DIP. */
   regionPx: Rect | null;
   regionDip: Rect | null;
@@ -141,6 +162,28 @@ export interface RecorderDeps {
   quitCapMs?: number;
   /** E2E builds only: the engine's start command is sent this many ms late (a slow PC). */
   engineStartDelayMs?: number;
+}
+
+/** Where a display sits on the virtual desktop, in physical pixels. */
+function physicalRect(display: DisplayInfo): Rect {
+  return {
+    x: Math.round(display.bounds.x * display.scaleFactor),
+    y: Math.round(display.bounds.y * display.scaleFactor),
+    ...display.physicalSize,
+  };
+}
+
+/** The recorded layout of a multi-source recording, with generic names only. */
+function multiLayout(multi: MultiContext, width: number, height: number): RecordingLayout {
+  return {
+    width,
+    height,
+    sources: multi.sources.map((source, index) => ({
+      name: source.name,
+      kind: source.kind,
+      rect: multi.tiles[index] ?? { x: 0, y: 0, width, height },
+    })),
+  };
 }
 
 function toGeom(display: DisplayInfo): DisplayGeom {
@@ -242,6 +285,7 @@ export class RecorderController implements SelectionHost {
       audio: state.audio,
       muted: state.muted,
       lost: state.lost,
+      lostTiles: [...(ctx?.lostTiles ?? [])].sort((a, b) => a - b),
       choice: state.choice,
       choiceCanUseDefault: ctx?.canUseDefaultMic ?? false,
       quitting: this.quitting,
@@ -314,6 +358,17 @@ export class RecorderController implements SelectionHost {
         throw new IpcError('NOT_FOUND', 'That window is no longer available.');
       }
     }
+    if (request.target === 'multi') {
+      // Every source must still exist: screens and windows come from one fresh listing.
+      const listed = await this.deps.provider.listSources({
+        types: ['screen', 'window'],
+        thumbnailWidth: 0,
+      });
+      const gone = request.sources?.some(
+        ({ sourceId }) => !listed.some((source) => source.id === sourceId),
+      );
+      if (gone) throw new IpcError('NOT_FOUND', 'One of the sources is no longer available.');
+    }
     await this.ensureCanRecord();
     const main = getMainWindow();
     this.mainWasShown = main !== undefined && main.isVisible() && !main.isMinimized();
@@ -334,9 +389,12 @@ export class RecorderController implements SelectionHost {
         systemAudio:
           request.options.systemAudio && platformCapabilities(process.platform).systemAudio,
       },
-      sourceId: request.sourceId ?? '',
+      sourceId: request.sourceId ?? request.sources?.[0]?.sourceId ?? '',
       sourceName: '',
       display: undefined,
+      multi: null,
+      multiIds: request.sources?.map(({ sourceId }) => sourceId) ?? [],
+      lostTiles: new Set(),
       regionPx: null,
       regionDip: null,
       mime: '',
@@ -349,7 +407,7 @@ export class RecorderController implements SelectionHost {
       result: null,
       sessionCreated: false,
     };
-    // Only a whole screen follows the mouse.
+    // Only a whole screen follows the mouse (several sources never do).
     if (request.target !== 'screen') delete this.ctx.options.follow;
     this.dispatch({ type: 'START_REQUESTED', sessionId });
     const token = this.token;
@@ -471,6 +529,18 @@ export class RecorderController implements SelectionHost {
           region: ctx.regionPx,
           displaySize: ctx.display?.physicalSize ?? null,
           options: ctx.options,
+          ...(ctx.multi && {
+            multi: ctx.multi.sources.map((source) => ({
+              sourceId: source.sourceId,
+              kind: source.kind,
+              rect: source.display ? physicalRect(source.display) : null,
+              ...(this.deps.synthetic && {
+                synthetic: source.display
+                  ? { ...source.display.physicalSize }
+                  : { width: 1280, height: 720 },
+              }),
+            })),
+          }),
           ...(this.deps.synthetic && {
             synthetic:
               ctx.display !== undefined
@@ -487,6 +557,12 @@ export class RecorderController implements SelectionHost {
         ctx.width = reply.width;
         ctx.height = reply.height;
         ctx.audio = reply.audio;
+        if (ctx.multi) {
+          if (reply.tiles?.length !== ctx.multi.sources.length) {
+            throw new StartFailure('PREPARE_FAILED', 'Could not get ready to record.');
+          }
+          ctx.multi.tiles = reply.tiles;
+        }
         break;
       }
       if (reply.type === 'needsChoice') {
@@ -535,9 +611,10 @@ export class RecorderController implements SelectionHost {
           kind: ctx.target,
           // A generic label, never the window's title: titles name documents and people, and this file
           // stays on disk for as long as a session is unfinished.
-          name: ctx.target === 'window' ? 'Window' : 'Screen',
-          ...(ctx.display && { displayId: ctx.display.id }),
+          name: ctx.multi ? 'Multiple sources' : ctx.target === 'window' ? 'Window' : 'Screen',
+          ...(ctx.display && !ctx.multi && { displayId: ctx.display.id }),
         },
+        ...(ctx.multi && { layout: multiLayout(ctx.multi, ctx.width ?? 0, ctx.height ?? 0) }),
         options: ctx.options,
         width: ctx.width ?? 0,
         height: ctx.height ?? 0,
@@ -590,6 +667,12 @@ export class RecorderController implements SelectionHost {
     displays: readonly DisplayInfo[],
   ): Promise<Selection> {
     if (request.target === 'window') return { display: undefined, regionPx: null, regionDip: null };
+    if (request.target === 'multi') {
+      // No selection step: the sources are chosen already. The countdown and the toolbar use the primary screen.
+      const primary = displays.find((display) => display.isPrimary) ?? displays[0];
+      if (!primary) throw new StartFailure('SOURCE_MISSING', 'No screen was found to record.');
+      return { display: primary, regionPx: null, regionDip: null };
+    }
 
     if (request.target === 'screen') {
       const only = request.displayId
@@ -621,6 +704,7 @@ export class RecorderController implements SelectionHost {
   }
 
   private async resolveSource(ctx: SessionContext): Promise<void> {
+    if (ctx.target === 'multi') return this.resolveMulti(ctx);
     if (ctx.target === 'window') {
       const windows = await this.deps.provider.listSources({
         types: ['window'],
@@ -638,6 +722,35 @@ export class RecorderController implements SelectionHost {
     if (!source) throw new StartFailure('SOURCE_MISSING', 'That screen is no longer available.');
     ctx.sourceId = source.id;
     ctx.sourceName = source.name;
+  }
+
+  /** Every requested source, checked again against a fresh listing (screens need their display). */
+  private async resolveMulti(ctx: SessionContext): Promise<void> {
+    const listed = await this.deps.provider.listSources({
+      types: ['screen', 'window'],
+      thumbnailWidth: 0,
+    });
+    const displays = this.deps.provider.listDisplays();
+    const sources: MultiContext['sources'] = [];
+    for (const [index, sourceId] of ctx.multiIds.entries()) {
+      const found = listed.find((source) => source.id === sourceId);
+      const display =
+        found?.kind === 'screen'
+          ? displays.find((candidate) => candidate.id === found.displayId)
+          : undefined;
+      if (!found || (found.kind === 'screen' && !display)) {
+        throw new StartFailure('SOURCE_MISSING', 'One of the sources is no longer available.');
+      }
+      sources.push({
+        sourceId,
+        kind: found.kind,
+        name: layoutSourceName(found.kind, index),
+        display,
+      });
+    }
+    ctx.multi = { sources, tiles: [] };
+    ctx.sourceId = ctx.multiIds[0] ?? '';
+    ctx.sourceName = 'Multiple sources';
   }
 
   private watchDisplays(token: number): void {
@@ -821,8 +934,11 @@ export class RecorderController implements SelectionHost {
   private async grabStill(
     ctx: SessionContext,
   ): Promise<{ kind: CaptureTarget; width: number; height: number; png: Buffer }> {
-    const { display, regionPx } = ctx;
-    const kind: CaptureTarget = ctx.target;
+    // A multi-source recording takes the still of its primary (first) source.
+    const first = ctx.multi?.sources[0];
+    const kind: CaptureTarget = first ? first.kind : (ctx.target as CaptureTarget);
+    const display = first ? first.display : ctx.display;
+    const regionPx = first ? null : ctx.regionPx;
     if (kind !== 'window' && display && !this.deps.synthetic) {
       // Pixel-exact desktopCapturer image; the worker's video frame is the fallback.
       const grab = await grabScreensExact([display]).catch(() => undefined);
@@ -1061,7 +1177,7 @@ export class RecorderController implements SelectionHost {
     try {
       const added = await this.deps.history?.addVideo({
         path: file,
-        format: 'webm',
+        format: ctx.multi ? 'fcap' : 'webm',
         durationMs,
         width: ctx.width ?? 0,
         height: ctx.height ?? 0,
@@ -1171,6 +1287,13 @@ export class RecorderController implements SelectionHost {
           this.stopPromise ??= this.finalize();
         } else if (isPreRecording(this.machine.status)) {
           this.failStart(this.token, new StartFailure('SOURCE_LOST', 'The source went away.'));
+        }
+        return;
+      case 'tileLost':
+        if (this.ctx && !this.ctx.lostTiles.has(event.index)) {
+          log.warn(`A recorded source ended (source ${event.index + 1}); recording continues`);
+          this.ctx.lostTiles.add(event.index);
+          this.broadcast();
         }
         return;
       case 'trackEnded':
