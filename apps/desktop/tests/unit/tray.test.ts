@@ -63,6 +63,7 @@ describe('buildTrayTemplate', () => {
     expect(labels(template)).toEqual([
       'Screenshot',
       'Record',
+      'Capture steps',
       '-',
       'Open FrameCapt',
       'History',
@@ -111,6 +112,29 @@ describe('buildTrayTemplate', () => {
     const template = buildTrayTemplate({ ...idle, shortcuts: off }, handlers());
     const shot = find(template, 'screenshot')?.submenu as MenuItemConstructorOptions[];
     expect(shot[2]?.accelerator).toBeUndefined();
+  });
+
+  it('Steps: starts a guide, finishes the one that runs, and waits while another capture runs', () => {
+    const h = handlers();
+    const template = buildTrayTemplate(idle, h);
+    const item = find(template, 'steps');
+    expect(item?.label).toBe('Capture steps');
+    expect(item?.accelerator).toBe('Ctrl+Shift+8');
+    expect(item?.enabled).toBe(true);
+    (item?.click as () => void)();
+    expect(h.run).toHaveBeenCalledWith('stepsToggle');
+    const live = find(
+      buildTrayTemplate({ ...idle, screenshotBusy: true, stepsActive: true }, h),
+      'steps',
+    );
+    expect(live?.label).toBe('Finish step capture');
+    expect(live?.enabled).toBe(true);
+    expect(find(buildTrayTemplate({ ...idle, status: 'recording' }, h), 'steps')?.enabled).toBe(
+      false,
+    );
+    expect(find(buildTrayTemplate({ ...idle, screenshotBusy: true }, h), 'steps')?.enabled).toBe(
+      false,
+    );
   });
 
   it('a screenshot in progress disables starting another', () => {

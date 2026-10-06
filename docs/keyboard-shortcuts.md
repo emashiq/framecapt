@@ -15,9 +15,12 @@ Global shortcuts work from any app while FrameCapt is running (also with its win
 | Record: region                | `Ctrl+Shift+7` | Selection overlay first; the same key stops.                            |
 | Stop recording                | `Ctrl+Shift+0` | Also cancels a recording that is still starting (selection, countdown). |
 | Pause or resume the recording | `Ctrl+Shift+9` | Toggles.                                                                |
+| Start or finish step capture  | `Ctrl+Shift+8` | Starts a step guide; pressing it again is Done (saves the guide).       |
+| Capture a step                | not set        | A step now, at the pointer. No default: every comfortable key is taken. |
 
 Rules:
 
+- Step capture: while a guide is being captured, screenshot and record shortcuts are ignored ("A capture is already in progress"); a step guide cannot start during a recording or a screenshot. Files written by older versions get `Ctrl+Shift+8` for "Start or finish step capture" unless you already use that combination for something else (then it starts as "Not set").
 - A shortcut needs `Ctrl` or `Alt` (a bare key or `Shift` + key would be typed by accident). `F1`..`F24` and `PrintScreen` work without a modifier. The Windows key is not offered.
 - Two actions cannot share one shortcut. When you press a combination that another action already has, Settings says "already used by <action>" and offers **Swap**: the two actions exchange their shortcuts in one saved change (if the action you are editing had none, the other one becomes "Not set"). A shortcut can be turned off (`Backspace` or **Off** in Settings), shown as "Not set".
 - `PrintScreen` is **not** a default because the Windows Snipping Tool owns it by default; you can still choose it, and Settings shows a note next to it saying the Snipping Tool may answer first.

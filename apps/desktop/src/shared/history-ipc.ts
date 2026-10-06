@@ -5,13 +5,13 @@ import { RecordingLayoutSchema } from './recording-layout';
 export const HISTORY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const HistoryIdSchema = z.string().regex(HISTORY_ID_PATTERN);
 
-export const HistoryTypeSchema = z.enum(['screenshot', 'recording']);
+export const HistoryTypeSchema = z.enum(['screenshot', 'recording', 'flow']);
 export type HistoryType = z.infer<typeof HistoryTypeSchema>;
 
 export const HistorySourceSchema = z.enum(['screen', 'window', 'region', 'multi', 'unknown']);
 export type HistorySource = z.infer<typeof HistorySourceSchema>;
 
-export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4', 'fcap', 'gif'] as const;
+export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4', 'fcap', 'gif', 'flow'] as const;
 export const HistoryFormatSchema = z.enum(HISTORY_FORMATS);
 export type HistoryFormat = z.infer<typeof HistoryFormatSchema>;
 
@@ -45,6 +45,8 @@ export const HistoryItemViewSchema = z.object({
   editable: z.boolean(),
   /** `.fcap` recordings: where each source sits in the picture (read from the file's header). */
   layout: RecordingLayoutSchema.nullable().optional(),
+  /** Steps of a step guide (type `flow`); absent for everything else. */
+  stepCount: z.number().int().min(0).optional(),
 });
 export type HistoryItemView = z.infer<typeof HistoryItemViewSchema>;
 
@@ -81,8 +83,8 @@ export const ExportMp4ResponseSchema = z.union([
 ]);
 export const ExportCancelRequestSchema = z.strictObject({ jobId: z.string().min(1).max(64) });
 
-/** What the job is: the user's MP4 export (default), the compressed-storage re-encode or a `.fcap` extract. */
-const ExportKindSchema = z.enum(['export', 'compress', 'extract']).optional();
+/** What the job is: the user's MP4 export (default), the compressed-storage re-encode, a `.fcap` extract or a step-guide slideshow. */
+const ExportKindSchema = z.enum(['export', 'compress', 'extract', 'guide']).optional();
 
 export const ExportProgressEventSchema = z.object({
   kind: ExportKindSchema,

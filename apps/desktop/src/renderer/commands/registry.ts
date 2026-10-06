@@ -52,6 +52,8 @@ export interface CommandActions {
     target: Target | 'multi',
     allScreens?: boolean,
   ) => void;
+  /** Same as the Steps card of the Capture view: starts capturing a step guide. */
+  startSteps: () => void;
   stopRecording: () => void;
   togglePause: () => void;
   navigate: (view: 'capture' | 'history' | 'settings', section?: SettingsSectionId) => void;
@@ -158,6 +160,16 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
     keywords: ['video', 'screen recording', 'capture', 'several', 'screens and windows', 'fcap'],
     disabledReason: captureBlockedReason(env),
     run: () => actions.startCapture('record', 'multi'),
+  });
+  add({
+    id: 'steps.start',
+    title: 'Capture a step guide',
+    menuLabel: 'New step guide',
+    group: 'Capture',
+    keywords: ['steps', 'flow', 'guide', 'tutorial', 'how to', 'walkthrough', 'instructions'],
+    hint: { kind: 'global', action: 'stepsToggle' },
+    disabledReason: captureBlockedReason(env),
+    run: actions.startSteps,
   });
   add({
     id: 'file.openImage',
@@ -371,6 +383,8 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
       'rec.screen',
       null,
       'video.edit',
+      'steps.start',
+      null,
       'nav.history',
       'nav.settings',
       null,

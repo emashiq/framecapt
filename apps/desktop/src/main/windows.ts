@@ -129,11 +129,12 @@ export function securePreferences(): Electron.WebPreferences {
   };
 }
 
-export function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
+/** `search` (for example `?mode=steps`) goes after the role's hash; the role itself is unchanged. */
+export function loadRenderer(win: BrowserWindow, role: Role, search = ''): Promise<void> {
   const { devServerUrl } = getOriginConfig();
   const hash = ROLE_HASH[role];
   // Development: the Vite server. Otherwise the built renderer from the app:// scheme (not file://).
-  return win.loadURL(`${devServerUrl ?? APP_ENTRY_URL}#${hash}`);
+  return win.loadURL(`${devServerUrl ?? APP_ENTRY_URL}#${hash}${search}`);
 }
 
 /** The BrowserWindow `icon` option for this platform (empty where the exe carries the icon). */

@@ -42,6 +42,8 @@ export interface HistoryMedia {
   filePathOf(id: string): string | undefined;
   /** The picture or audio file `<sha256>.<ext>` of a video project (the item must be in history). */
   videoAssetPathOf?(historyId: string, name: string): string | undefined;
+  /** The PNG of step `index` of a guide in history; undefined for an unknown guide or step. */
+  flowStepPathOf?(id: string, index: number): string | undefined;
 }
 
 /**
@@ -71,9 +73,18 @@ const HISTORY_ROUTE = new RegExp(
 );
 
 /**
- * The file a `framecapt-media:` URL names, or undefined. Exactly four shapes exist and nothing
+ * `/<history id>/<step index>`, optionally followed by one `/<nonce>` (the same cache-busting
+ * segment). The index is one to three digits; main checks it against the guide's own step list.
+ */
+const FLOW_STEP_ROUTE = new RegExp(
+  '^/(' + HISTORY_ID_PATTERN.source.slice(1, -1) + ')/(\\d{1,3})(?:/[0-9a-z]{1,24})?$',
+);
+
+/**
+ * The file a `framecapt-media:` URL names, or undefined. Exactly five shapes exist and nothing
  * else resolves: `//<registry id>` (a recording of this run), `//thumb/<history id>` (a history
- * thumbnail) and `//file/<history id>` (the file of a history item), each history route with an
+ * thumbnail), `//file/<history id>` (the file of a history item) and
+ * `//flowstep/<history id>/<index>` (one step image of a step guide), each history route with an
  * optional cache-busting nonce segment, and `//vproject/<history id>/<sha256>.<ext>` (an asset of a
  * video project). No query, no other segments, no paths.
  */
@@ -88,6 +99,13 @@ export function resolveMediaUrl(
   if (url.hostname === 'vproject') {
     const match = VPROJECT_ROUTE.exec(url.pathname);
     return match ? history?.videoAssetPathOf?.(match[1] ?? '', match[2] ?? '') : undefined;
+  }
+  if (url.hostname === 'flowstep') {
+    const match = FLOW_STEP_ROUTE.exec(url.pathname);
+    if (!match?.[1] || !match[2] || !history?.flowStepPathOf) return undefined;
+    const file = history.flowStepPathOf(match[1], Number(match[2]));
+    // Step images are PNG, nothing else.
+    return file?.toLowerCase().endsWith('.png') ? file : undefined;
   }
   if (url.hostname === 'thumb' || url.hostname === 'file') {
     const id = HISTORY_ROUTE.exec(url.pathname)?.[1];

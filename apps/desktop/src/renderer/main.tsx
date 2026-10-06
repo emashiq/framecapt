@@ -9,8 +9,12 @@ import { CountdownView } from './views/CountdownView';
 import { CameraView } from './views/camera/CameraView';
 import { OverlayView } from './views/overlay/OverlayView';
 import { RecorderWorker } from './views/RecorderWorker';
+import { StepsPill } from './views/toolbar/StepsPill';
 import { ToolbarView } from './views/toolbar/ToolbarView';
 import type { Role } from '../shared/types';
+
+/** The toolbar window shows the step-guide controls when it was opened with `?mode=steps`. */
+const ToolbarEntry = window.location.hash.includes('mode=steps') ? StepsPill : ToolbarView;
 
 /**
  * Per-role root components; the main role renders the app.
@@ -18,7 +22,7 @@ import type { Role } from '../shared/types';
 const roleViews: Partial<Record<Role, ComponentType>> = {
   overlay: OverlayView,
   recorder: RecorderWorker,
-  toolbar: ToolbarView,
+  toolbar: ToolbarEntry,
   countdown: CountdownView,
   camera: CameraView,
 };

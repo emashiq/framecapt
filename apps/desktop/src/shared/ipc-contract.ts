@@ -106,6 +106,19 @@ import {
   StartRequestEventSchema,
   ToastEventSchema,
 } from './settings-ipc';
+import {
+  FlowExportRequestSchema,
+  FlowExportResponseSchema,
+  FlowGetRequestSchema,
+  FlowGetResponseSchema,
+  FlowOpenStepRequestSchema,
+  FlowReadStepResponseSchema,
+  FlowUpdateRequestSchema,
+  StepsDoneResponseSchema,
+  StepsFinishedEventSchema,
+  StepsSetAutoRequestSchema,
+  StepsSnapshotSchema,
+} from './flow-ipc';
 import { ROLES, type Role } from './types';
 
 const ALL_ROLES: readonly Role[] = ROLES;
@@ -556,6 +569,53 @@ export const ipcContract = {
     roles: ['main'],
   },
   'app:resolveQuit': { request: ResolveQuitRequestSchema, response: z.void(), roles: ['main'] },
+  // --- step guides: capturing (the pill and the main window) and the Flow view ---
+  'steps:start': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  'steps:getState': {
+    request: z.undefined(),
+    response: StepsSnapshotSchema,
+    roles: ['main', 'toolbar'],
+  },
+  /** A step now, at the pointer's current place. */
+  'steps:captureStep': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'steps:pause': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'steps:resume': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'steps:setAuto': {
+    request: StepsSetAutoRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  /** Saves the guide (a folder of step images and flow.json in the screenshots folder). */
+  'steps:done': {
+    request: z.undefined(),
+    response: StepsDoneResponseSchema,
+    roles: ['main', 'toolbar'],
+  },
+  /** Throws the steps away (the pill asks first). */
+  'steps:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'flow:get': { request: FlowGetRequestSchema, response: FlowGetResponseSchema, roles: ['main'] },
+  'flow:update': {
+    request: FlowUpdateRequestSchema,
+    response: FlowGetResponseSchema,
+    roles: ['main'],
+  },
+  /** Opens one step in the screenshot editor; Save writes over that step's image. */
+  'flow:openStepInEditor': {
+    request: FlowOpenStepRequestSchema,
+    response: OpenFromHistoryResponseSchema,
+    roles: ['main'],
+  },
+  /** One step's PNG bytes, for drawing the exports in the renderer. */
+  'flow:readStep': {
+    request: FlowOpenStepRequestSchema,
+    response: FlowReadStepResponseSchema,
+    roles: ['main'],
+  },
+  'flow:export': {
+    request: FlowExportRequestSchema,
+    response: FlowExportResponseSchema,
+    roles: ['main'],
+  },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;
@@ -601,6 +661,10 @@ export const ipcEvents = {
   'app:toast': ToastEventSchema,
   /** The tray menu asks the main window to show a view. */
   'app:navigate': NavigateEventSchema,
+  /** The authoritative step-capture state, to the main window and the Steps pill. */
+  'steps:state': StepsSnapshotSchema,
+  /** A guide was saved: the main window opens it. */
+  'steps:finished': StepsFinishedEventSchema,
   /** Main -> the hidden recorder window: what the engine should do. */
   'recorder:engineCommand': EngineCommandSchema,
 } as const satisfies Record<string, z.ZodType>;

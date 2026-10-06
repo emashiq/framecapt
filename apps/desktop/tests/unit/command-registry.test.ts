@@ -25,6 +25,7 @@ const env = (overrides: Partial<CommandEnv> = {}): CommandEnv => ({
 function actions(): CommandActions {
   return {
     startCapture: vi.fn(),
+    startSteps: vi.fn(),
     stopRecording: vi.fn(),
     togglePause: vi.fn(),
     navigate: vi.fn(),
@@ -172,6 +173,21 @@ describe('commands call the app actions', () => {
     expect(hintFor(find(commands, 'file.openImage'), DEFAULT_SETTINGS)).toEqual(['Ctrl', 'O']);
     find(commands, 'file.openImage').run();
     expect(calls.openImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('Capture a step guide is a command with the Steps shortcut, in the File menu, and starts the guide', () => {
+    const calls = actions();
+    const commands = buildCommands(env(), calls);
+    const command = find(commands, 'steps.start');
+    expect(command.hint).toEqual({ kind: 'global', action: 'stepsToggle' });
+    expect(idsOf(rankCommands(commands, 'step guide'))).toContain('steps.start');
+    expect(MENUS.find((menu) => menu.id === 'file')?.items).toContain('steps.start');
+    expect(hintFor(command, DEFAULT_SETTINGS)).toEqual(['Ctrl', 'Shift', '8']);
+    command.run();
+    expect(calls.startSteps).toHaveBeenCalledTimes(1);
+    // While a recording runs it is explained, not hidden.
+    const busy = find(buildCommands(env({ recorderStatus: 'recording' }), calls), 'steps.start');
+    expect(busy.disabledReason).not.toBeNull();
   });
 
   it('every menu entry is a known command', () => {

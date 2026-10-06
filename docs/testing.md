@@ -75,3 +75,7 @@ The hosted `windows-latest` runner has **one physical core (two threads), no GPU
 - Linux (`ubuntu-latest`): the network test samples sockets with `ss`. It found a real leak, fixed on all platforms: the session spellchecker downloaded a Hunspell dictionary from Google (`src/main/security.ts` `disableSpellChecker`, `tests/unit/spellchecker.test.ts`).
 
 ## Product media
+
+## Step guides
+
+Unit: `flow-detector`, `steps-controller` (states, limit, manual, pill, failures), `flow-format` (flow.json schema, folder names, atomic folder write, sessions, pointer geometry, ring), `flow-service` (save, edit, undo, orphan sweep, editor replace, History actions, exports with a fake encoder), `history-rescan-flow`, `media-routes-flow`, `guide-export` (HTML escaping, slideshow arguments), `settings-steps-shortcuts`, plus additions to `actions`, `tray`, `command-registry`, `ipc-contract` and `ipc-security`. `flow-slideshow-integration.test.ts` runs the real vendored ffmpeg (skipped before `npm run fetch:ffmpeg`): MP4 length = steps x 2.5 s for 1 to 8 steps, GIF frame counts. E2E: `tests/e2e/flow.spec.ts` (mock capture; start from the Capture view, steps by the shortcut action and the pill, Done, Flow view, caption, HTML and MP4 export, editor Save over a step, History filter and badge, mutual exclusion, Cancel).

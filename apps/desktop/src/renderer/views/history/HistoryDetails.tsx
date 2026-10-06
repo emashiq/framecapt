@@ -15,7 +15,7 @@ import { formatBytes, formatDuration } from '../../../shared/recording';
 import { Mp4Export } from '../../components/Mp4Export';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { fileUrl, newNonce } from '../../history/media-url';
+import { fileUrl, newNonce, thumbUrl } from '../../history/media-url';
 import { cn } from '../../lib/cn';
 import { revealDuration } from '../../lib/reveal-duration';
 import { formatExact, formatRelative } from '../../lib/time';
@@ -67,7 +67,8 @@ function Row({ label, children, testId }: { label: string; children: ReactNode; 
  */
 function Preview({ item }: { item: HistoryItemView }) {
   const [nonce] = useState(newNonce);
-  const src = fileUrl(item.id, nonce);
+  // A guide has no single file to show: its first step (the thumbnail) stands for it.
+  const src = item.type === 'flow' ? thumbUrl(item.id, nonce) : fileUrl(item.id, nonce);
   // A multi-source recording plays only here: tabs choose the whole picture or one source.
   if (item.format === 'fcap') {
     return item.layout ? (
@@ -97,7 +98,11 @@ function Preview({ item }: { item: HistoryItemView }) {
       <img
         data-testid="history-image"
         src={src}
-        alt={`${item.type === 'recording' ? 'Animation' : 'Screenshot'} ${item.fileName}`}
+        alt={
+          item.type === 'flow'
+            ? `Step guide ${item.fileName}`
+            : `${item.type === 'recording' ? 'Animation' : 'Screenshot'} ${item.fileName}`
+        }
         className="max-h-[min(58vh,520px)] w-full object-contain"
       />
     </div>
@@ -190,7 +195,9 @@ export function HistoryDetails({
           <Card padding="md" className="p-4">
             <dl className="divide-y divide-line">
               <Row label="Type">
-                {isVideo ? 'Recording' : 'Screenshot'} · {item.format.toUpperCase()}
+                {item.type === 'flow'
+                  ? `Step guide · ${item.stepCount ?? 0} ${item.stepCount === 1 ? 'step' : 'steps'}`
+                  : `${isVideo ? 'Recording' : 'Screenshot'} · ${item.format.toUpperCase()}`}
               </Row>
               <Row label="Created">
                 <span title={formatExact(item.createdAt)}>
@@ -265,7 +272,7 @@ export function HistoryDetails({
                     icon={<ExternalLink className="size-4" aria-hidden="true" />}
                     onClick={() => actions.open(item)}
                   >
-                    Open
+                    {item.type === 'flow' ? 'Open guide' : 'Open'}
                   </Button>
                 )}
                 {canEditItem(item) && onEdit ? (
@@ -293,7 +300,7 @@ export function HistoryDetails({
                     icon={<Copy className="size-4" aria-hidden="true" />}
                     onClick={() => actions.copy(item)}
                   >
-                    {isVideo ? 'Copy path' : 'Copy image'}
+                    {item.type === 'screenshot' ? 'Copy image' : 'Copy path'}
                   </Button>
                 </div>
                 {isVideo ? (

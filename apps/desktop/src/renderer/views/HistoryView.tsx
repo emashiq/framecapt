@@ -48,6 +48,7 @@ const FILTERS = [
   { value: 'all', label: 'All' },
   { value: 'screenshot', label: 'Screenshots' },
   { value: 'recording', label: 'Recordings' },
+  { value: 'flow', label: 'Guides' },
 ] as const;
 
 export interface HistoryViewProps {
@@ -58,6 +59,8 @@ export interface HistoryViewProps {
   onEditItem?: (id: string) => void;
   /** Opens a recording of history in the video editor. */
   onEditVideo?: (id: string) => void;
+  /** Opens a step guide in the Flow view. */
+  onOpenFlow?: (id: string) => void;
 }
 
 /**
@@ -71,6 +74,7 @@ export function HistoryView({
   onFocusConsumed,
   onEditItem,
   onEditVideo,
+  onOpenFlow,
 }: HistoryViewProps) {
   const [filter, setFilter] = useState<Filter>('all');
   const [queryInput, setQueryInput] = useState('');
@@ -146,7 +150,7 @@ export function HistoryView({
     setSelectedId(item.id);
   }, []);
   // A multi-source recording opens inside FrameCapt (its details view), never in another player.
-  const baseActions = useMemo(() => createItemActions(reload), [reload]);
+  const baseActions = useMemo(() => createItemActions(reload, onOpenFlow), [reload, onOpenFlow]);
   const actions = useMemo<ItemActions>(
     () => ({
       ...baseActions,

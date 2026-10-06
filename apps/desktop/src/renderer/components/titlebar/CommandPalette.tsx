@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Camera, CornerDownLeft, Search, Video } from 'lucide-react';
+import { CornerDownLeft, Search } from 'lucide-react';
+import { TypeIcon } from '../../history/type-icon';
 import { friendlyError } from '../../../shared/error-messages';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import type { Settings } from '../../../shared/settings';
@@ -284,7 +285,6 @@ function PaletteBody({
               const disabled = row.kind === 'command' && row.command.disabledReason !== null;
               const title = row.kind === 'command' ? row.command.title : row.item.fileName;
               const keys = row.kind === 'command' ? hintFor(row.command, settings) : null;
-              const Icon = row.kind === 'capture' && row.item.type === 'recording' ? Video : Camera;
               return (
                 <div
                   key={row.kind === 'command' ? row.command.id : row.item.id}
@@ -307,7 +307,11 @@ function PaletteBody({
                   onClick={(event) => activate(row, event.shiftKey)}
                 >
                   {row.kind === 'capture' ? (
-                    <Icon className="size-4 shrink-0 text-fg-subtle" aria-hidden="true" />
+                    <TypeIcon
+                      type={row.item.type}
+                      className="size-4 shrink-0 text-fg-subtle"
+                      aria-hidden="true"
+                    />
                   ) : null}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">

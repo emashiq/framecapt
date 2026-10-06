@@ -3,10 +3,14 @@ import { Camera, History, Keyboard, Settings, type LucideIcon } from 'lucide-rea
 import { cn } from '../lib/cn';
 import { TitleBar, type TitleBarProps } from './titlebar/TitleBar';
 
-/** `video-editor` is reached from History (Edit video); it has no entry in the sidebar. */
-export type ViewId = 'capture' | 'history' | 'settings' | 'video-editor';
+/** `video-editor` is reached from History (Edit video); `flow` is a saved step guide. Neither has a sidebar entry. */
+export type ViewId = 'capture' | 'history' | 'settings' | 'video-editor' | 'flow';
 
-const NAV_ITEMS: { id: Exclude<ViewId, 'video-editor'>; label: string; icon: LucideIcon }[] = [
+const NAV_ITEMS: {
+  id: Exclude<ViewId, 'video-editor' | 'flow'>;
+  label: string;
+  icon: LucideIcon;
+}[] = [
   { id: 'capture', label: 'Capture', icon: Camera },
   { id: 'history', label: 'History', icon: History },
   { id: 'settings', label: 'Settings', icon: Settings },
@@ -70,7 +74,7 @@ export function AppShell({
         >
           <nav aria-label="Primary" className={cn('flex flex-col gap-1', editor && 'items-center')}>
             {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
-              const active = id === (view === 'video-editor' ? 'history' : view);
+              const active = id === (view === 'video-editor' || view === 'flow' ? 'history' : view);
               return (
                 <button
                   key={id}

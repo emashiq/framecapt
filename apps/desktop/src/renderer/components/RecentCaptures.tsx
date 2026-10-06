@@ -1,4 +1,5 @@
-import { Camera, FileX2, Images, Video } from 'lucide-react';
+import { FileX2, Images } from 'lucide-react';
+import { TypeIcon } from '../history/type-icon';
 import type { HistoryItemView } from '../../shared/history-ipc';
 import { formatDuration } from '../../shared/recording';
 import { useHistory } from '../history/use-history';
@@ -18,7 +19,6 @@ export interface RecentCapturesProps {
 const RECENT_COUNT = 6;
 
 function Tile({ item, now, onOpen }: { item: HistoryItemView; now: number; onOpen: () => void }) {
-  const Icon = item.type === 'screenshot' ? Camera : Video;
   return (
     <li>
       <button
@@ -34,7 +34,7 @@ function Tile({ item, now, onOpen }: { item: HistoryItemView; now: number; onOpe
         <span className="relative block">
           <Thumb item={item} className="aspect-video w-full" />
           <span className="absolute top-1.5 left-1.5 flex size-5 items-center justify-center rounded-md bg-bg/85 text-fg-muted shadow-card backdrop-blur-sm">
-            <Icon className="size-3" aria-hidden="true" />
+            <TypeIcon type={item.type} className="size-3" aria-hidden="true" />
           </span>
           {item.durationMs !== null ? (
             <span className="absolute right-1.5 bottom-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums">

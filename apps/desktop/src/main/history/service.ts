@@ -13,6 +13,8 @@ import {
 import { detectImageFormat, validateImageBytes } from '../../shared/shots';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
+import { FLOW_FILE_NAME, isOnlyFlowFiles } from '../../shared/flow';
+import { readFlowFile } from '../flows/flow-store';
 import { thumbnailArgs, type MediaTools } from '../media/ffmpeg';
 import type { ProjectAsset, ProjectInput, ProjectStore } from '../projects/store';
 import type { VideoProjectStore } from '../video-projects/store';
@@ -107,6 +109,28 @@ export interface NewVideo {
   createdAt?: number;
   /** The frame rate the recording was made at (the video editor exports at it). */
   fps?: number;
+}
+
+/** A finished step guide: `path` is its `flow.json`. */
+export interface NewFlow {
+  path: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  stepCount: number;
+  /** PNG of the first step with the pointer ring, at most 480 px wide (made in main). */
+  thumbnail?: Uint8Array | undefined;
+  createdAt?: number;
+}
+
+/** What a guide edit changes in its entry. */
+export interface FlowChange {
+  width: number;
+  height: number;
+  sizeBytes: number;
+  stepCount: number;
+  /** A new first-step thumbnail; absent keeps the old one. */
+  thumbnail?: Uint8Array | undefined;
 }
 
 function formatOfVideoPath(file: string): 'webm' | 'mp4' | 'fcap' | 'gif' {
@@ -247,6 +271,8 @@ export class HistoryService {
   private async view(item: HistoryItem): Promise<HistoryItemView> {
     const stat = await fs.promises.stat(item.path).catch(() => null);
     const exists = stat?.isFile() ?? false;
+    // A guide is a folder: its size is the total of its files, kept with the entry.
+    const sizeBytes = exists && stat && item.type !== 'flow' ? stat.size : item.sizeBytes;
     return {
       id: item.id,
       type: item.type,
@@ -256,7 +282,7 @@ export class HistoryService {
       width: item.width,
       height: item.height,
       durationMs: item.durationMs,
-      sizeBytes: exists && stat ? stat.size : item.sizeBytes,
+      sizeBytes,
       format: item.format,
       hasThumb: item.thumbnail !== null,
       hasAudio: item.hasAudio,
@@ -265,6 +291,7 @@ export class HistoryService {
       exists,
       editable: item.type === 'screenshot' && item.projectId !== undefined,
       ...(item.format === 'fcap' && { layout: exists ? await fcapLayout(item.path) : null }),
+      ...(item.stepCount !== undefined && { stepCount: item.stepCount }),
     };
   }
 
@@ -326,6 +353,66 @@ export class HistoryService {
       ...(projectId && { projectId }),
     });
     return { id };
+  }
+
+  /** Adds a step guide (or refreshes the entry of the same `flow.json`). */
+  async addFlow(input: NewFlow): Promise<{ id: string }> {
+    await this.ready;
+    const existing = this.existingFor(input.path);
+    const id = existing?.id ?? randomUUID();
+    const thumbnail = await this.storeThumbnail(id, input.thumbnail, existing?.thumbnail ?? null);
+    await this.put({
+      id,
+      type: 'flow',
+      createdAt: input.createdAt ?? this.now(),
+      path: input.path,
+      width: input.width,
+      height: input.height,
+      durationMs: null,
+      sizeBytes: input.sizeBytes,
+      format: 'flow',
+      thumbnail,
+      hasAudio: null,
+      source: 'screen',
+      derivedFrom: null,
+      stepCount: input.stepCount,
+    });
+    return { id };
+  }
+
+  /** A guide was edited (steps reordered, deleted, a step replaced): the entry follows. */
+  async updateFlow(id: string, change: FlowChange): Promise<void> {
+    await this.ready;
+    const item = this.get(id);
+    if (!item || item.type !== 'flow') {
+      throw new IpcError('NOT_FOUND', 'That guide is not in history.');
+    }
+    const thumbnail = await this.storeThumbnail(id, change.thumbnail, item.thumbnail);
+    await this.store.update(id, {
+      width: change.width,
+      height: change.height,
+      sizeBytes: change.sizeBytes,
+      stepCount: change.stepCount,
+      thumbnail,
+    });
+    await this.collectThumbs();
+    this.changed();
+  }
+
+  /** Writes a thumbnail PNG under the item's name; keeps `previous` when there is none or it is not valid. */
+  private async storeThumbnail(
+    id: string,
+    bytes: Uint8Array | undefined,
+    previous: string | null,
+  ): Promise<string | null> {
+    if (!bytes || !validThumbnail(bytes)) return previous;
+    try {
+      await this.thumbs.write(thumbNameFor(id), bytes);
+      return thumbNameFor(id);
+    } catch (error) {
+      log.warn(`Could not store a thumbnail (${(error as Error).message})`);
+      return previous;
+    }
   }
 
   /**
@@ -565,8 +652,10 @@ export class HistoryService {
       () => false,
     );
     if (present) {
+      // A guide is a folder: all of it goes, but only a folder that holds nothing else.
+      const target = item.type === 'flow' ? await flowFolderToTrash(item.path) : item.path;
       try {
-        await this.deps.trashItem(item.path);
+        await this.deps.trashItem(target);
       } catch (error) {
         log.warn(`Could not move a file to the Recycle Bin (${(error as Error).message})`);
         throw new IpcError('INTERNAL', 'The file could not be moved to the Recycle Bin.');
@@ -630,6 +719,21 @@ export class HistoryService {
         );
       }
       await this.store.update(id, { path: resolved, sizeBytes: stat.size });
+    } else if (item.format === 'flow') {
+      if (path.basename(resolved).toLowerCase() !== FLOW_FILE_NAME) {
+        throw new IpcError('INVALID_PAYLOAD', 'Pick the flow.json file of the guide.');
+      }
+      const flow = await readFlowFile(resolved);
+      const first = flow?.steps[0];
+      if (!flow || !first) {
+        throw new IpcError('INVALID_PAYLOAD', 'That file is not a FrameCapt step guide.');
+      }
+      await this.store.update(id, {
+        path: resolved,
+        width: first.width,
+        height: first.height,
+        stepCount: flow.steps.length,
+      });
     } else {
       if (extension !== VIDEO_EXTENSION[item.format]) {
         throw new IpcError('INVALID_PAYLOAD', `Pick a ${item.format.toUpperCase()} video.`);
@@ -716,6 +820,19 @@ async function fcapLayout(file: string): Promise<NonNullable<HistoryItemView['la
   } catch {
     return null;
   }
+}
+
+/** The folder of a guide when it holds only `flow.json` and step images; otherwise it is left alone. */
+async function flowFolderToTrash(flowFile: string): Promise<string> {
+  const dir = path.dirname(flowFile);
+  const names = await fs.promises.readdir(dir).catch(() => [] as string[]);
+  if (path.basename(flowFile) !== FLOW_FILE_NAME || !isOnlyFlowFiles(names)) {
+    throw new IpcError(
+      'INVALID_PAYLOAD',
+      'That folder holds other files, so FrameCapt leaves it alone. Remove the guide from history, or delete the folder yourself.',
+    );
+  }
+  return dir;
 }
 
 async function readHead(file: string, bytes: number): Promise<Uint8Array> {

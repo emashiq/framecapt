@@ -37,6 +37,8 @@ export const HistoryItemSchema = z.object({
   projectId: HistoryIdSchema.optional(),
   /** The frame rate a recording was made at (absent for older items and for screenshots). */
   fps: z.number().min(1).max(240).optional(),
+  /** Steps of a step guide (`flow`); absent for everything else. */
+  stepCount: z.number().int().min(0).optional(),
 });
 export type HistoryItem = z.infer<typeof HistoryItemSchema>;
 

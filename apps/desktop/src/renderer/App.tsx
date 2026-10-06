@@ -13,6 +13,7 @@ import { useRecorderState, useRecorderToasts } from './recorder/use-recorder';
 import { CaptureView } from './views/CaptureView';
 import { RecordingResultView } from './views/RecordingResultView';
 import { EditorView, type EditorShot } from './views/editor/EditorView';
+import { FlowView } from './views/flow/FlowView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
 import { VideoEditorView } from './views/video-editor/VideoEditorView';
@@ -71,6 +72,8 @@ export function App() {
   const [dirty, setDirty] = useState(false);
   /** An item to open in History (picked in the Recent captures strip). */
   const [historyFocus, setHistoryFocus] = useState<string | null>(null);
+  /** The step guide the Flow view shows. */
+  const [flowId, setFlowId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingLeave | null>(null);
   const [quitAsk, setQuitAsk] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -280,6 +283,49 @@ export function App() {
     [requestLeave],
   );
 
+  /** Opens a saved step guide (after Done, or from History); an unsaved editor asks first. */
+  const openFlow = useCallback(
+    (id: string) => {
+      requestLeave(() => {
+        setFlowId(id);
+        setView('flow');
+      });
+    },
+    [requestLeave],
+  );
+
+  /** The Flow view's "Open in editor": one step of a guide, saved back over its own picture. */
+  const editFlowStep = useCallback(
+    (historyId: string, index: number) => {
+      requestLeave(() => {
+        void window.framecapt
+          .invoke('flow:openStepInEditor', { historyId, index })
+          .then((result) => {
+            if (!result.ok) {
+              notify.error(result.error);
+              return;
+            }
+            // A flattened picture of the step: Save writes it back over that step's image.
+            setShot({
+              session: result.data.session,
+              png: result.data.png,
+              edit: {
+                historyId,
+                format: 'png',
+                mode: 'flattened',
+                doc: null,
+                notice: null,
+                assets: [],
+              },
+            });
+            setDirty(false);
+            setView('capture');
+          });
+      });
+    },
+    [requestLeave],
+  );
+
   /**
    * A new editor session from a picture (Open image, a drop, a paste): an unsaved editor asks
    * first. The picture is not saved anywhere; it is only an editable copy.
@@ -323,10 +369,16 @@ export function App() {
   );
 
   // The tray menu asks for a view; a shortcut or the tray asks to start something here.
-  const latest = useRef({ navigate, startRequest, openImage, openPicture, view });
+  const latest = useRef({ navigate, startRequest, openImage, openPicture, openFlow, view });
   useEffect(() => {
-    latest.current = { navigate, startRequest, openImage, openPicture, view };
+    latest.current = { navigate, startRequest, openImage, openPicture, openFlow, view };
   });
+  // A step guide was saved (Done in the pill, or its shortcut): it opens here.
+  useEffect(
+    () =>
+      window.framecapt.on('steps:finished', ({ historyId }) => latest.current.openFlow(historyId)),
+    [],
+  );
   useEffect(
     () =>
       window.framecapt.on('app:navigate', (event: NavigateEvent) =>
@@ -415,6 +467,10 @@ export function App() {
         showKeyboardHelp: () => setHelpOpen(true),
         editVideo: editLatestVideo,
         openImage: () => void openImage(),
+        startSteps: () =>
+          void window.framecapt.invoke('steps:start').then((result) => {
+            if (!result.ok) notify.error(result.error);
+          }),
       },
       onOpenCapture: (id: string) => {
         setHistoryFocus(id);
@@ -434,7 +490,7 @@ export function App() {
         view={view}
         onNavigate={(next) => navigate(next)}
         editor={showEditor || showVideoEditor}
-        wide={view === 'history'}
+        wide={view === 'history' || view === 'flow'}
         onHelp={() => setHelpOpen(true)}
         titleBar={titleBar}
       >
@@ -479,6 +535,14 @@ export function App() {
             onFocusConsumed={() => setHistoryFocus(null)}
             onEditItem={editHistoryItem}
             onEditVideo={editVideo}
+            onOpenFlow={openFlow}
+          />
+        ) : view === 'flow' && flowId ? (
+          <FlowView
+            key={flowId}
+            historyId={flowId}
+            onBack={() => navigate('history')}
+            onEditStep={editFlowStep}
           />
         ) : view === 'settings' ? (
           <SettingsView section={settingsSection} onSectionChange={setSettingsSection} />

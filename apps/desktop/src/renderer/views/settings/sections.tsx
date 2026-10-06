@@ -531,7 +531,8 @@ interface ShortcutGroup {
 
 const SHORTCUT_GROUPS: ShortcutGroup[] = [
   { title: 'Screenshots', actions: SHORTCUT_ACTIONS.slice(0, 3) },
-  { title: 'Recording', actions: SHORTCUT_ACTIONS.slice(3) },
+  { title: 'Recording', actions: SHORTCUT_ACTIONS.slice(3, 9) },
+  { title: 'Step guides', actions: SHORTCUT_ACTIONS.slice(9) },
   { title: 'Main window', actions: COMMAND_ACTIONS },
   { title: 'Editor', actions: EDITOR_ACTIONS.filter((action) => !isCommandAction(action)) },
 ];
@@ -749,6 +750,10 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Stop and save the recording.';
     case 'pauseRecording':
       return 'Pause the recording, or resume it.';
+    case 'stepsToggle':
+      return 'Start capturing a step guide. Press again to finish and save it.';
+    case 'stepsCapture':
+      return 'Take a step right now, where the pointer is (while a step guide is being captured).';
   }
 }
 

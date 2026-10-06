@@ -93,7 +93,7 @@ describe('IPC: every channel is closed to roles the contract does not name', () 
       const { roles } = defOf(channel);
       if (roles.includes('overlay') || roles.includes('toolbar') || roles.includes('countdown')) {
         expect(channel, 'a UI-only window reaches a file or settings channel').toMatch(
-          /^(overlay|recorder|toolbar|app:reportError)/,
+          /^(overlay|recorder|toolbar|steps|app:reportError)/,
         );
       }
     }
@@ -168,6 +168,12 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   },
   'recorder:toggleMute': { source: 'mic' },
   'toolbar:resize': { width: 300 },
+  'steps:setAuto': { auto: true },
+  'flow:get': { historyId: UUID },
+  'flow:update': { historyId: UUID, title: 'T', steps: [{ file: 'step-01.png', caption: 'c' }] },
+  'flow:openStepInEditor': { historyId: UUID, index: 0 },
+  'flow:readStep': { historyId: UUID, index: 0 },
+  'flow:export': { historyId: UUID, kind: 'html', frames: [bytes(8)] },
   'recorder:engineEvent': { type: 'paused' },
   'session:appendChunk': { sessionId: 'abc', seq: 0, bytes: bytes(4) },
   'session:finish': { sessionId: 'abc', lastSeq: 0 },

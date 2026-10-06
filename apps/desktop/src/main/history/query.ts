@@ -21,7 +21,12 @@ export function searchText(item: Searchable): string {
     day: 'numeric',
     year: 'numeric',
   });
-  const kind = item.type === 'screenshot' ? 'screenshot image' : 'recording video';
+  const kind =
+    item.type === 'screenshot'
+      ? 'screenshot image'
+      : item.type === 'flow'
+        ? 'guide steps flow'
+        : 'recording video';
   return [path.basename(item.path), kind, item.format, item.source, iso, long]
     .join(' ')
     .toLowerCase();

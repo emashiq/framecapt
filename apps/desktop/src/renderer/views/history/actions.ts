@@ -31,9 +31,16 @@ export interface ItemActions {
  * The actions of a history item. All go through main by id. None of them deletes a file: that is
  * a separate, confirmed action (`deleteItemFile`).
  */
-export function createItemActions(reload: () => void): ItemActions {
+export function createItemActions(
+  reload: () => void,
+  /** A step guide opens in the Flow view (the app owns navigation). */
+  openFlow?: (id: string) => void,
+): ItemActions {
   return {
-    open: (item) => void run(window.framecapt.invoke('history:open', { id: item.id })),
+    open: (item) =>
+      item.type === 'flow'
+        ? openFlow?.(item.id)
+        : void run(window.framecapt.invoke('history:open', { id: item.id })),
     reveal: (item) => void run(window.framecapt.invoke('history:reveal', { id: item.id })),
     copy: (item) =>
       void (item.type === 'screenshot'

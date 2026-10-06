@@ -120,10 +120,10 @@ describe('shortcut sets', () => {
   it('the defaults are valid, canonical and unique', () => {
     expect(checkShortcuts(DEFAULT_SHORTCUTS)).toEqual({ ok: true });
     for (const action of SHORTCUT_ACTIONS) {
-      expect(checkAccelerator(DEFAULT_SHORTCUTS[action])).toEqual({
-        ok: true,
-        accelerator: DEFAULT_SHORTCUTS[action],
-      });
+      const key = DEFAULT_SHORTCUTS[action];
+      // "Capture a step" has no default: every comfortable combination is taken by another app.
+      if (key === null) continue;
+      expect(checkAccelerator(key)).toEqual({ ok: true, accelerator: key });
     }
     expect(DEFAULT_SHORTCUTS.screenshotRegion).toBe('Ctrl+Shift+3');
     // PrintScreen is the Snipping Tool's: never a default.

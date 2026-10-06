@@ -418,6 +418,7 @@ test.describe('shortcuts', () => {
         'Ctrl+Shift+5',
         'Ctrl+Shift+6',
         'Ctrl+Shift+7',
+        'Ctrl+Shift+8',
         'Ctrl+Shift+9',
       ].sort(),
     );
@@ -452,7 +453,7 @@ test.describe('shortcuts', () => {
       .poll(() => hooks(app, (h) => [...h.heldShortcuts()].includes('Ctrl+Alt+Q')))
       .toBe(true);
     expect(await hooks(app, (h) => [...h.heldShortcuts()].includes('Ctrl+Shift+7'))).toBe(false);
-    expect(await hooks(app, (h) => h.heldShortcuts().size)).toBe(9);
+    expect(await hooks(app, (h) => h.heldShortcuts().size)).toBe(10);
 
     await goTo(page, 'Capture');
     await expect(page.getByTestId('hint-recordRegion')).toContainText('Q');

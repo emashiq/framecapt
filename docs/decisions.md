@@ -303,3 +303,14 @@ Every e2e/native run used to rewrite the committed screenshots and JSON of earli
 - **Frame rate.** The recorder stores the frame rate it was asked for on the history item (`fps`); `video:open` uses it, else the file's `r_frame_rate` when it is within 10..120 fps (a MediaRecorder file often reports the 1000 fps timebase, which is rejected), else 30. The graph's `fps` filter then keeps 60 fps recordings at 60 (limit 60).
 - **Limits.** 200 items, of them 40 text/image overlays (each is an input and a decoder) and 16 audio clips; text 500 characters; clips 2 hours; project 512 KB.
 - **Not done.** Waveforms and thumbnails; speed changes, transitions; ducking; keyframed motion or per-letter animation of text; text that grows its box by itself; more than 100 % volume in the PREVIEW (the browser cannot boost; the export does); an audio clip's own pan or effects.
+
+## ADR-045: Step guides detect "pointer at rest" by polling, without global input hooks (2026-10-07)
+
+- **Decision.** A guide step is taken when the pointer comes to rest on something. Main polls `screen.getCursorScreenPoint()` every 100 ms while a guide is being captured and feeds a pure detector (moved more than 24 DIP since the last step or first sample, then within 6 DIP for 700 ms, steps at least 1.5 s apart, none while paused). Nothing runs while idle.
+- **Why not a global mouse/keyboard hook.** A system-wide hook (a native module or a low-level Windows hook) would see every click and key in every app: a keylogger-shaped capability, a native dependency and an antivirus and code-signing concern, for a feature that only needs the pointer's position. Polling the position needs no permission, no native code and sees no keystroke or click. The cost: no click-driven steps (a click that does not move the pointer is not noticed; "Capture step" and its shortcut cover that) and a 100 ms resolution, which is finer than the 700 ms rest.
+- **Consequences.** The pointer resting on FrameCapt's own pill is ignored (`isOverPill`); a manual step from the pill's button uses the last place outside the pill. The detector is a pure module with unit tests.
+
+## ADR-046: Slideshow encoding settings were measured, not assumed (2026-10-07)
+
+- **Decision.** The MP4 and GIF slideshows read the numbered step pictures as an image sequence at 0.4 fps (2.5 s each), MP4 with `-r 30`, GIF with `-r 10` and a palette per picture.
+- **Why.** With the pinned ffmpeg 9.0.2 the concat demuxer with `duration` lines gave a wrong total length that depended on the number of slides, an `fps=10` filter made the GIF stop after a few slides, and a shared palette (single pass or two passes) stalled or failed. These were found by a real-ffmpeg integration test (`tests/unit/flow-slideshow-integration.test.ts`: one to eight steps, same size and mixed) and the settings above are the ones that passed for every count. A newer ffmpeg should re-run that test before the arguments are changed.

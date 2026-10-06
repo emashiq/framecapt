@@ -18,6 +18,12 @@ function setup(status: RecorderStatus = 'idle', extra: Partial<ActionDeps> = {})
     settings: () => DEFAULT_SETTINGS,
     recorder,
     screenshotBusy: () => false,
+    steps: {
+      active: false,
+      start: vi.fn(() => Promise.resolve()),
+      done: vi.fn(() => Promise.resolve({ discarded: true })),
+      captureStep: vi.fn(() => Promise.resolve()),
+    },
     startScreenshot: vi.fn(() => Promise.resolve()),
     editor: () => ({ open: false, dirty: false }),
     askMain: vi.fn(),
@@ -232,5 +238,67 @@ describe('stop and pause', () => {
     idle.run('pauseRecording');
     expect(idle.recorder.pause).not.toHaveBeenCalled();
     expect(idle.recorder.resume).not.toHaveBeenCalled();
+  });
+});
+
+describe('step guide actions', () => {
+  it('the toggle starts a guide, and finishes it when one is running', () => {
+    const { run, deps } = setup();
+    run('stepsToggle');
+    expect(deps.steps.start).toHaveBeenCalledTimes(1);
+    const live = setup('idle', {
+      steps: { ...setup().deps.steps, active: true, done: vi.fn(() => Promise.resolve({})) },
+    });
+    live.run('stepsToggle');
+    expect(live.deps.steps.done).toHaveBeenCalledTimes(1);
+    expect(live.deps.steps.start).not.toHaveBeenCalled();
+  });
+
+  it('does not start while a recording or a screenshot runs', () => {
+    const recording = setup('recording');
+    recording.run('stepsToggle');
+    expect(recording.deps.steps.start).not.toHaveBeenCalled();
+    expect(recording.deps.toast).toHaveBeenCalledWith({
+      level: 'info',
+      message: 'A capture is already in progress.',
+    });
+    const shot = setup('idle', { screenshotBusy: () => true });
+    shot.run('stepsToggle');
+    expect(shot.deps.steps.start).not.toHaveBeenCalled();
+  });
+
+  it('screenshots and recordings are refused while a guide is captured', () => {
+    const base = setup().deps.steps;
+    const { run, deps } = setup('idle', { steps: { ...base, active: true } });
+    run('screenshotRegion');
+    run('recordScreen');
+    expect(deps.startScreenshot).not.toHaveBeenCalled();
+    expect(deps.askMain).not.toHaveBeenCalled();
+    expect(deps.toast).toHaveBeenCalledTimes(2);
+  });
+
+  it('the capture-step shortcut takes a step only while a guide runs', () => {
+    const idle = setup();
+    idle.run('stepsCapture');
+    expect(idle.deps.steps.captureStep).not.toHaveBeenCalled();
+    expect(idle.deps.toast).toHaveBeenCalledWith({
+      level: 'info',
+      message: 'Start capturing steps first.',
+    });
+    const base = setup().deps.steps;
+    const live = setup('idle', { steps: { ...base, active: true } });
+    live.run('stepsCapture');
+    expect(live.deps.steps.captureStep).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed start is told, not thrown', async () => {
+    const base = setup().deps.steps;
+    const failing = setup('idle', {
+      steps: { ...base, start: vi.fn(() => Promise.reject(new IpcError('BUSY', 'Nope.'))) },
+    });
+    failing.run('stepsToggle');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(failing.deps.toast).toHaveBeenCalledWith(expect.objectContaining({ level: 'error' }));
   });
 });

@@ -8,6 +8,7 @@ import {
   Keyboard,
   Layers,
   Lightbulb,
+  ListOrdered,
   Loader2,
   Monitor,
   ScanLine,
@@ -213,6 +214,42 @@ export interface CaptureViewProps {
   onOpenSettings: (section?: SettingsSectionId) => void;
 }
 
+/**
+ * The step guide card: a different kind of capture. Start hides the window and shows a small
+ * pill; every time the pointer comes to rest on something, a screenshot with the pointer
+ * highlighted is added to the guide.
+ */
+function StepsCard({ onStart, busy }: { onStart: () => void; busy: boolean }) {
+  return (
+    <Card padding="md" className="mt-5 flex flex-wrap items-center gap-4" data-testid="mode-steps">
+      <div
+        className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-fg"
+        aria-hidden="true"
+      >
+        <ListOrdered className="size-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-semibold text-fg">Steps</h2>
+        <p className="text-sm text-fg-muted">Capture a step-by-step guide.</p>
+        <p className="mt-1 text-[13px] text-fg-subtle" data-testid="steps-hint">
+          Move the mouse to an item and pause: FrameCapt takes a screenshot with the pointer
+          highlighted. Press Done to save the guide.
+        </p>
+      </div>
+      <ShortcutHint action="stepsToggle" />
+      <Button
+        variant="secondary"
+        icon={<ListOrdered className="size-4 text-fg-subtle" aria-hidden="true" />}
+        disabled={busy}
+        onClick={onStart}
+        data-testid="steps-start"
+      >
+        Start
+      </Button>
+    </Card>
+  );
+}
+
 /** An existing picture instead of a capture: open a file, drop one on the window or paste it. */
 function OpenImageRow({ onOpen }: { onOpen: () => void }) {
   const { editorShortcuts } = useSettings();
@@ -296,6 +333,11 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
       notify.error(result.error);
       trigger?.focus();
     }
+  }
+
+  async function startSteps(): Promise<void> {
+    const result = await window.framecapt.invoke('steps:start');
+    if (!result.ok) notify.error(result.error);
   }
 
   /** Records 2 to 4 screens and/or windows together into one `.fcap` (the first is the primary). */
@@ -536,6 +578,8 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
           }
         />
       </div>
+
+      <StepsCard onStart={() => void startSteps()} busy={anythingBusy} />
 
       <OpenImageRow onOpen={onOpenImage} />
 

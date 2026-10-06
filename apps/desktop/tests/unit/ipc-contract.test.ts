@@ -32,6 +32,11 @@ describe('ipc contract', () => {
       'export:cancel',
       'export:capabilities',
       'export:mp4',
+      'flow:export',
+      'flow:get',
+      'flow:openStepInEditor',
+      'flow:readStep',
+      'flow:update',
       'history:cancelBulk',
       'history:clearMissing',
       'history:consumeNotice',
@@ -96,6 +101,14 @@ describe('ipc contract', () => {
       'shot:openImage',
       'shot:quickSave',
       'shot:saveOver',
+      'steps:cancel',
+      'steps:captureStep',
+      'steps:done',
+      'steps:getState',
+      'steps:pause',
+      'steps:resume',
+      'steps:setAuto',
+      'steps:start',
       'toolbar:resize',
       'video:addImage',
       'video:export',
@@ -128,6 +141,8 @@ describe('ipc contract', () => {
       'settings:changed',
       'shortcuts:changed',
       'shot:ready',
+      'steps:finished',
+      'steps:state',
       'video:exportDone',
       'video:exportFailed',
       'video:exportProgress',
@@ -145,6 +160,12 @@ describe('ipc contract', () => {
       // The recorder window's chunk and engine channels belong to it alone.
       if (channel.startsWith('session:') || channel === 'recorder:engineEvent') {
         expect(roles).toEqual(['recorder']);
+      }
+      // Step guides: the Flow view is the main window's; the pill (toolbar role) only steers the capture.
+      if (channel.startsWith('flow:')) expect(roles).toEqual(['main']);
+      if (channel.startsWith('steps:')) {
+        expect(roles.every((role) => role === 'main' || role === 'toolbar')).toBe(true);
+        expect(roles).toContain('main');
       }
       // History and export take history ids from the main window only (never paths).
       if (

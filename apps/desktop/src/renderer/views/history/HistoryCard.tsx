@@ -1,7 +1,6 @@
 import type { MouseEvent } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
-  Camera,
   Copy,
   ExternalLink,
   FileX2,
@@ -14,13 +13,13 @@ import {
   Pencil,
   Save,
   Trash2,
-  Video,
 } from 'lucide-react';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { formatBytes, formatDuration } from '../../../shared/recording';
 import { useExportState } from '../../history/export-store';
 import { cn } from '../../lib/cn';
 import { formatExact, formatRelative } from '../../lib/time';
+import { TypeIcon } from '../../history/type-icon';
 import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/IconButton';
 import { canEditItem, editLabel, type ItemActions } from './actions';
@@ -59,15 +58,22 @@ export const menuItemClass =
   'data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent-fg data-[disabled]:opacity-45';
 
 /** Which kind of file the card is: a quiet badge on the thumbnail. */
-export function TypeBadge({ item }: { item: Pick<HistoryItemView, 'type' | 'format'> }) {
-  const Icon = item.type === 'screenshot' ? Camera : Video;
+export function TypeBadge({
+  item,
+}: {
+  item: Pick<HistoryItemView, 'type' | 'format' | 'stepCount'>;
+}) {
+  const text =
+    item.type === 'flow'
+      ? `${item.stepCount ?? 0} ${item.stepCount === 1 ? 'step' : 'steps'}`
+      : item.format;
   return (
     <span
       data-testid="history-type"
       className="inline-flex items-center gap-1 rounded-md bg-bg/85 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-fg-muted uppercase shadow-card backdrop-blur-sm"
     >
-      <Icon className="size-3" aria-hidden="true" />
-      {item.format}
+      <TypeIcon type={item.type} className="size-3" aria-hidden="true" />
+      {text}
     </span>
   );
 }
@@ -119,7 +125,8 @@ export function HistoryCard({
   const converting = exportState?.status === 'running' || exportState?.status === 'starting';
   const missing = !item.exists;
   const subtitle = [dimensionsText(item), formatBytes(item.sizeBytes)].filter(Boolean).join(' · ');
-  const kind = item.type === 'screenshot' ? 'screenshot' : 'recording';
+  const kind =
+    item.type === 'screenshot' ? 'screenshot' : item.type === 'flow' ? 'step guide' : 'recording';
   // The type badge already says ".png"; the name shows the part that tells captures apart.
   const stem = item.fileName.replace(/[.][^.]+$/, '');
   const openMenu = (event: MouseEvent<HTMLElement>): void => {
@@ -147,11 +154,11 @@ export function HistoryCard({
         data-missing={missing || undefined}
         tabIndex={tabStop ? 0 : -1}
         aria-label={`${item.fileName}, ${kind}, ${formatRelative(item.createdAt, now)}${missing ? ', file missing' : ''}${selected ? ', selected' : ''}`}
-        draggable={onDragOut !== null && !missing}
+        draggable={onDragOut !== null && !missing && item.type !== 'flow'}
         onDragStart={(event) => {
           // The OS drag is started by main (it knows the file); the browser drag is not used.
           event.preventDefault();
-          if (onDragOut && !missing) onDragOut(item);
+          if (onDragOut && !missing && item.type !== 'flow') onDragOut(item);
         }}
         onClick={(event) => {
           if (event.ctrlKey || event.metaKey || event.shiftKey) {

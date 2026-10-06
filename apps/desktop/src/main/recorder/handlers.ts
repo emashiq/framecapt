@@ -14,6 +14,8 @@ export function registerRecorderHandlers(
   controller: RecorderController,
   sessions: SessionService,
   media: MediaRegistry,
+  /** The Steps pill shares the toolbar window role: its width requests come here too. */
+  onStepsToolbarResize?: (width: number) => void,
 ): void {
   handle('recorder:start', { roles: ['main'] }, async (request) => {
     const { sessionId } = await controller.start(request);
@@ -30,9 +32,10 @@ export function registerRecorderHandlers(
   handle('recorder:toggleMute', { roles: ['main', 'toolbar'] }, (request) =>
     controller.toggleMute(request.source),
   );
-  handle('toolbar:resize', { roles: ['toolbar'] }, (request) =>
-    controller.resizeToolbar(request.width),
-  );
+  handle('toolbar:resize', { roles: ['toolbar'] }, (request) => {
+    controller.resizeToolbar(request.width);
+    onStepsToolbarResize?.(request.width);
+  });
   handle('recorder:toggleCamera', { roles: ['toolbar'] }, () => controller.toggleCamera());
   handle('camera:getStyle', { roles: ['camera'] }, () => controller.cameraStyle());
   handle('camera:setStyle', { roles: ['camera'] }, (request) => controller.setCameraStyle(request));

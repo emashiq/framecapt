@@ -196,7 +196,11 @@ describe('reservedCheck', () => {
 
   it('leaves the defaults and ordinary combinations alone', () => {
     for (const platform of ['win32', 'linux']) {
-      for (const accelerator of [...Object.values(DEFAULT_SHORTCUTS), 'Ctrl+Alt+Q', 'F9']) {
+      for (const accelerator of [
+        ...Object.values(DEFAULT_SHORTCUTS).filter((key) => key !== null),
+        'Ctrl+Alt+Q',
+        'F9',
+      ]) {
         expect(reservedCheck(accelerator, platform), `${accelerator} on ${platform}`).toBeNull();
       }
     }

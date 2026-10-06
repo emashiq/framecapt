@@ -27,7 +27,7 @@ export interface TitleBarProps {
   /** What the app itself does for a command: the same functions as its buttons (see App.tsx). */
   actions: Pick<
     CommandActions,
-    'startCapture' | 'navigate' | 'showKeyboardHelp' | 'editVideo' | 'openImage'
+    'startCapture' | 'navigate' | 'showKeyboardHelp' | 'editVideo' | 'openImage' | 'startSteps'
   >;
   /** Opens a saved capture in History. */
   onOpenCapture: (id: string) => void;

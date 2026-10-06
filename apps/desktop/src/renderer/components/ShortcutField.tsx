@@ -22,7 +22,7 @@ export interface ShortcutFieldProps {
   /** `global` (registered with the OS) or `app` (the editor's own keys). */
   scope?: ShortcutScope;
   /** What "restore the default" puts back. */
-  defaultAccelerator: string;
+  defaultAccelerator: string | null;
   /** `process.platform`, for the heads-up about keys the OS may own (global shortcuts only). */
   platform?: string;
   /** What is saved (null = turned off). */
