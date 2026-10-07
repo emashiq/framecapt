@@ -255,6 +255,13 @@ export function registerShotHandlers(
   // Quick save: the same save with no dialog, into the screenshots folder under a free name.
   handle('shot:quickSave', { roles: ['main'] }, async (request) => {
     const saved = await exportShot(request, async () => {
+      // "Keep original and save new": a free "<name> (edited)" next to the item it was opened from.
+      const source = request.beside ? history.get(links.get(request.sessionId) ?? '') : undefined;
+      if (source) {
+        const base = path.basename(source.path, path.extname(source.path));
+        const extension = request.format === 'jpeg' ? 'jpg' : 'png';
+        return freeFileName(path.dirname(source.path), `${base} (edited).${extension}`);
+      }
       const folder = settings.screenshotsDir();
       await fs.promises.mkdir(folder, { recursive: true });
       return freeFileName(folder, defaultShotFileName(new Date(), request.format));

@@ -274,7 +274,6 @@ function EditorWorkspace({
     shot.edit ? { historyId: shot.edit.historyId, format: shot.edit.format } : null,
   );
   const [confirmOver, setConfirmOver] = useState(false);
-  const overwriteOk = useRef(false);
   /** The document as of the last save or copy; null until the first one. */
   const [savedDoc, setSavedDoc] = useState<typeof doc | null>(() =>
     shot.savedPath || shot.edit || shot.imported ? history.present : null,
@@ -671,7 +670,7 @@ function EditorWorkspace({
    * `quick` there is no dialog: main saves into the screenshots folder under a free name.
    */
   const save = useCallback(
-    async (format: ImageFormat, quick = false): Promise<boolean> => {
+    async (format: ImageFormat, quick = false, beside = false): Promise<boolean> => {
       if (busy) return false;
       stageRef.current?.commitText();
       const exporting = doc;
@@ -680,7 +679,12 @@ function EditorWorkspace({
       setBusy(format);
       try {
         const prepared = await prepareExport(exporting, format);
-        const request = { sessionId: shot.session.id, format, ...prepared };
+        const request = {
+          sessionId: shot.session.id,
+          format,
+          ...prepared,
+          ...(beside && { beside: true }),
+        };
         const result = quick
           ? await window.framecapt.invoke('shot:quickSave', request)
           : await window.framecapt.invoke('shot:export', request);
@@ -767,7 +771,6 @@ function EditorWorkspace({
     return done;
   }, [busy, reedit, doc, shot.session.id, announce, prepareExport]);
 
-  /** The first overwrite of a session asks: the previous version of the image is not kept. */
   /** Saves the edits (first writing unsaved ones over the item) as a `.fcimage` project file. */
   const saveProjectFile = useCallback(async () => {
     if (!reedit) return;
@@ -779,11 +782,10 @@ function EditorWorkspace({
     else if ('path' in response.data) notify.success('Project file saved');
   }, [reedit, dirty, saveOver]);
 
+  /** Save of a screenshot from history asks: keep the original and save a new file, or replace it. */
   const requestSaveOver = useCallback(() => {
-    if (!reedit) return;
-    if (overwriteOk.current) void saveOver();
-    else setConfirmOver(true);
-  }, [reedit, saveOver]);
+    if (reedit) setConfirmOver(true);
+  }, [reedit]);
 
   // The Save key: a fresh capture saves like always; a screenshot from History saves its changes.
   const saveKey = useCallback(() => {
@@ -1131,14 +1133,20 @@ function EditorWorkspace({
       />
       <AlertConfirm
         open={confirmOver}
-        title="Replace the saved screenshot?"
-        description="Your changes will replace the image in History and its file. The previous version is not kept."
-        cancelLabel="Keep editing"
-        confirmLabel="Replace"
+        title="Save your changes"
+        description="Keep the original and save the edited picture as a new file next to it, or replace the original. Both are saved in the same folder."
+        cancelLabel="Cancel"
+        confirmLabel="Replace original"
+        extra={{
+          label: 'Keep original & save new',
+          onClick: () => {
+            setConfirmOver(false);
+            if (reedit) void save(reedit.format, true, true);
+          },
+        }}
         onCancel={() => setConfirmOver(false)}
         onConfirm={() => {
           setConfirmOver(false);
-          overwriteOk.current = true;
           void saveOver();
         }}
       />

@@ -82,6 +82,8 @@ export const ShotExportRequestSchema = z.strictObject({
   thumbnail: bytes(MAX_THUMBNAIL_BYTES).optional(),
   /** The editable state to keep next to the image (ignored when Settings turn editable originals off). */
   project: ShotProjectPayloadSchema.optional(),
+  /** Quick save of a screenshot opened from history: next to that item's file, not in the folder. */
+  beside: z.boolean().optional(),
 });
 export const ShotExportResponseSchema = z.union([
   z.strictObject({ path: z.string(), historyId: z.string().optional() }),
