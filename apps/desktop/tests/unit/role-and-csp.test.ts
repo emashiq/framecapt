@@ -9,7 +9,8 @@ describe('roleFromHash', () => {
     expect(roleFromHash('#/recorder')).toBe('recorder');
     expect(roleFromHash('#/countdown')).toBe('countdown');
     expect(roleFromHash('#/camera')).toBe('camera');
-    expect(roleFromHash('#/editor')).toBe('editor');
+    // The Editor window is gone (ADR-050): its hash is not a role.
+    expect(roleFromHash('#/editor')).toBe('main');
     expect(roleFromHash('#/overlay?display=2')).toBe('overlay');
   });
 

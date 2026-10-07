@@ -154,7 +154,7 @@ export function buildTrayTemplate(
     },
     { type: 'separator' },
     { id: 'open', label: 'Open FrameCapt', click: handlers.open },
-    { id: 'history', label: 'History', click: () => handlers.openView('history') },
+    { id: 'history', label: 'Library', click: () => handlers.openView('history') },
     { id: 'settings', label: 'Settings', click: () => handlers.openView('settings') },
     { type: 'separator' },
     { id: 'quit', label: 'Quit FrameCapt', click: handlers.quit },

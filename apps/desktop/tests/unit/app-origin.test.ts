@@ -105,10 +105,10 @@ describe('isPermissionAllowed', () => {
     ).toBe(false);
   });
 
-  it('fullscreen (the video player) is for the main and Editor windows only, and only for the app origin', () => {
+  it('fullscreen (the video player) is for the main window only, and only for the app origin', () => {
     for (const role of ROLES) {
       expect(isPermissionAllowed('fullscreen', url, prod, undefined, role, 'request'), role).toBe(
-        role === 'main' || role === 'editor',
+        role === 'main',
       );
     }
     expect(isPermissionAllowed('fullscreen', url, prod)).toBe(false);

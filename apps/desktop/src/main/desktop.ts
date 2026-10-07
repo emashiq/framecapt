@@ -92,15 +92,6 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
   };
 
-  /** Settings and shortcut states are shown by the main window and the Editor window. */
-  const toWindows = <E extends 'settings:changed' | 'shortcuts:changed'>(
-    event: E,
-    payload: Parameters<typeof sendEvent<E>>[2],
-  ): void => {
-    for (const contents of webContentsWithRoles(['main', 'editor']))
-      sendEvent(contents, event, payload);
-  };
-
   const actions = createActions({
     settings: () => store.get(),
     recorder: {
@@ -152,7 +143,7 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     },
     log,
   });
-  shortcuts.onStatus((states) => toWindows('shortcuts:changed', states));
+  shortcuts.onStatus((states) => toMain('shortcuts:changed', states));
   const states = shortcuts.apply(store.get().shortcuts);
   if (hasProblems(states)) {
     log.warn('Some shortcuts could not be registered; see Settings > Shortcuts');
@@ -259,7 +250,7 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
       lastShortcuts = serialized;
       shortcuts.apply(next.shortcuts);
     }
-    toWindows('settings:changed', { settings: next, effective: settings.dirs() });
+    toMain('settings:changed', { settings: next, effective: settings.dirs() });
   });
 
   registerSettingsHandlers(settings, shortcuts);

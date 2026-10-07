@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { FlowFileSchema, MAX_CAPTION_LENGTH, MAX_FLOW_STEPS, MAX_TITLE_LENGTH } from './flow';
 import { HistoryIdSchema } from './history-ipc';
 
-// --- capturing steps (the pill, the shortcuts, the Capture view) ------------------------------
+// --- capturing steps (the pill, the shortcuts, Home) ------------------------------
 
 export const STEPS_STATES = ['idle', 'active', 'paused', 'saving'] as const;
 

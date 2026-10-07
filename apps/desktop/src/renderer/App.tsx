@@ -1,51 +1,89 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { Toaster } from 'sonner';
-import type { EditorOpenRequest, EditorState } from '../shared/editor-ipc';
+import type { EditorOpenRequest } from '../shared/editor-ipc';
+import type { HistoryItemView } from '../shared/history-ipc';
 import type { NavigateEvent, SettingsSectionId, StartRequestEvent } from '../shared/settings-ipc';
-import { AppShell, type ViewId } from './components/AppShell';
+import { matchEditorAction } from '../shared/shortcuts';
+import { AppShell } from './components/AppShell';
 import { KeyboardHelp } from './components/KeyboardHelp';
 import { LiveRegion } from './components/LiveRegion';
+import { Rail, type SectionId } from './components/Rail';
 import { RecorderChoiceDialog } from './components/RecorderChoiceDialog';
 import { AlertConfirm } from './components/ui/AlertConfirm';
 import { TooltipProvider } from './components/ui/Tooltip';
+import { importPicture, pictureIn } from './editor/import-image';
+import { listenToBulk } from './history/bulk-store';
+import { listenToExports } from './history/export-store';
+import { cn } from './lib/cn';
 import { isTyping } from './lib/is-typing';
 import { requestLaunch } from './lib/launch-bus';
 import { notify } from './lib/notify';
+import { ALL_SELECTION, type FolderSelection } from './library/tree';
+import { toggleLibrarySidebar } from './library/view-prefs';
 import { useRecorderState, useRecorderToasts } from './recorder/use-recorder';
-import { CaptureView } from './views/CaptureView';
-import { RecordingResultView } from './views/RecordingResultView';
-import { FlowView } from './views/flow/FlowView';
-import { HistoryView } from './views/HistoryView';
-import { SettingsView } from './views/SettingsView';
-import { listenToBulk } from './history/bulk-store';
-import { listenToExports } from './history/export-store';
-import { importPicture, pictureIn } from './editor/import-image';
-import { matchEditorAction } from '../shared/shortcuts';
 import { getSettings, startSettingsSync } from './settings/store';
+import { useEditorTabs } from './tabs/EditorTabs';
+import { TabStrip } from './tabs/TabStrip';
+import { HOME_ID } from './tabs/tabs';
+import { HomeView } from './views/HomeView';
+import { LibraryView } from './views/LibraryView';
+import { RecordingResultView } from './views/RecordingResultView';
+import { SettingsView } from './views/SettingsView';
+import { canEditItem } from './views/history/actions';
+
+/** What the pinned tab shows: Guides is the Library filtered to step guides. */
+const SECTION_LABEL: Record<SectionId, string> = {
+  home: 'Home',
+  library: 'Library',
+  guides: 'Guides',
+  settings: 'Settings',
+};
+
+type PinnedView = 'home' | 'library' | 'settings';
+const GUIDES: FolderSelection = { kind: 'type', type: 'flow' };
 
 /**
- * Main window UI. Navigation is plain state: Capture, History, Settings and a saved step guide do
- * not need a router. Screenshots and videos are edited in the Editor window (editor-window/): this
- * window only asks main to open them there (`editor:open`).
+ * Main window UI. The pinned Home tab shows one section at a time (Home, Library, Guides,
+ * Settings: the icon rail picks it; plain state, no router) and every screenshot, video or step
+ * guide being edited is a tab beside it (tabs/EditorTabs.tsx). Windows ask main to open an item
+ * (`editor:open`); main answers with the tab to open.
  */
 export function App() {
-  const [view, setView] = useState<ViewId>('capture');
+  const [view, setView] = useState<PinnedView>('home');
+  const [libraryScope, setLibraryScope] = useState<FolderSelection>(ALL_SELECTION);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId | undefined>(undefined);
-  /** An item to open in History (picked in the Recent captures strip). */
+  /** An item to open in the Library (picked in Recent captures or the command center). */
   const [historyFocus, setHistoryFocus] = useState<string | null>(null);
-  /** The step guide the Flow view shows. */
-  const [flowId, setFlowId] = useState<string | null>(null);
   const [quitAsk, setQuitAsk] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  /** What the Editor window holds: its button shows the tab count. */
-  const [editor, setEditor] = useState<EditorState>({ tabs: 0, dirty: false });
-  const viewRef = useRef<ViewId>('capture');
   const recorder = useRecorderState();
   useRecorderToasts(recorder);
+  const editor = useEditorTabs();
+  const { state, dispatch, openTab } = editor;
 
+  const section: SectionId =
+    view === 'library' && libraryScope.kind === 'type' && libraryScope.type === 'flow'
+      ? 'guides'
+      : view;
+  const homeActive = state.activeId === HOME_ID;
+  const homeRef = useRef<HTMLElement>(null);
+  const homeShowing = useRef({ active: true, section });
   useEffect(() => {
-    viewRef.current = view;
-  }, [view]);
+    homeShowing.current = { active: homeActive, section };
+  }, [homeActive, section]);
+
+  // A video playing in the Library's details stops when the pinned tab is not showing.
+  useEffect(() => {
+    if (!homeActive) homeRef.current?.querySelectorAll('video').forEach((video) => video.pause());
+  }, [homeActive]);
 
   // The settings (and the theme) load once; main pushes every later change.
   useEffect(() => startSettingsSync(), []);
@@ -68,19 +106,6 @@ export function App() {
     });
   }, []);
 
-  // The Editor window's tab count (its button is shown while it has tabs).
-  useEffect(() => {
-    let live = true;
-    const off = window.framecapt.on('editor:stateChanged', setEditor);
-    void window.framecapt.invoke('editor:getState').then((response) => {
-      if (live && response.ok) setEditor(response.data);
-    });
-    return () => {
-      live = false;
-      off();
-    };
-  }, []);
-
   // Quit (tray, menu) while a recording runs: stop and save it first, or keep recording.
   useEffect(() => window.framecapt.on('app:confirmQuit', () => setQuitAsk(true)), []);
 
@@ -94,20 +119,63 @@ export function App() {
     [],
   );
 
-  const navigate = useCallback((next: ViewId, section?: SettingsSectionId) => {
-    setView(next);
-    if (next === 'settings') setSettingsSection(section);
-  }, []);
+  // The pinned tab's icon and label follow the section it shows.
+  useEffect(() => {
+    dispatch({ type: 'section', kind: section, title: SECTION_LABEL[section] });
+  }, [section, dispatch]);
 
-  /** Opens something as a tab of the Editor window (made on first use, brought to the front). */
+  // After switching to the pinned tab or its section, focus lands in the content.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    if (homeActive) homeRef.current?.focus({ preventScroll: true });
+  }, [homeActive, section]);
+
+  /** Shows a section in the pinned tab (and the pinned tab itself). */
+  const navigate = useCallback(
+    (next: SectionId, settings?: SettingsSectionId) => {
+      dispatch({ type: 'activate', id: HOME_ID });
+      if (next === 'guides') {
+        setView('library');
+        setLibraryScope(GUIDES);
+        return;
+      }
+      setView(next);
+      if (next === 'settings') setSettingsSection(settings);
+      // Library from Guides shows everything again.
+      if (next === 'library') {
+        setLibraryScope((scope) =>
+          scope.kind === 'type' && scope.type === 'flow' ? ALL_SELECTION : scope,
+        );
+      }
+    },
+    [dispatch],
+  );
+
+  /** Asks main to open an item as a tab (it resolves what the item is and names the tab). */
   const openInEditor = useCallback((request: EditorOpenRequest) => {
     void window.framecapt.invoke('editor:open', request).then((response) => {
       if (!response.ok) notify.error(response.error);
     });
   }, []);
 
-  /** History's Edit video action, and "Edit the latest recording". */
-  const editVideo = useCallback(
+  /** An item of history: a screenshot, an editable recording or a guide opens as a tab. */
+  const openItem = useCallback(
+    (item: HistoryItemView) => {
+      if (item.exists && (canEditItem(item) || item.type === 'flow')) {
+        openInEditor({ kind: 'history', historyId: item.id });
+        return;
+      }
+      setHistoryFocus(item.id);
+      navigate('library');
+    },
+    [openInEditor, navigate],
+  );
+
+  const openHistoryId = useCallback(
     (id: string) => openInEditor({ kind: 'history', historyId: id }),
     [openInEditor],
   );
@@ -121,27 +189,11 @@ export function App() {
           notify.error(response.error);
           return;
         }
-        const latest = response.data.items.find(
-          (item) =>
-            item.exists &&
-            (item.format === 'webm' || item.format === 'mp4' || item.format === 'fcap'),
-        );
-        if (latest) editVideo(latest.id);
+        const latest = response.data.items.find((item) => item.exists && canEditItem(item));
+        if (latest) openHistoryId(latest.id);
         else notify.info('There is no recording to edit yet. Record something first.');
       });
-  }, [editVideo]);
-
-  /** Opens a saved step guide (after Done, or from History). */
-  const openFlow = useCallback((id: string) => {
-    setFlowId(id);
-    setView('flow');
-  }, []);
-
-  /** The Flow view's "Open in editor": one step of a guide, saved back over its own picture. */
-  const editFlowStep = useCallback(
-    (historyId: string, index: number) => openInEditor({ kind: 'step', historyId, index }),
-    [openInEditor],
-  );
+  }, [openHistoryId]);
 
   /**
    * A new editor tab from a picture (Open image, a drop, a paste). The picture is not saved
@@ -154,10 +206,10 @@ export function App() {
           notify.error(result.error);
           return;
         }
-        openInEditor({ kind: 'session', sessionId: result.session.id, imported: true });
+        void openTab({ kind: 'session', sessionId: result.session.id, imported: true });
       });
     },
-    [openInEditor],
+    [openTab],
   );
 
   /** File > Open image: the Open dialog first. */
@@ -168,29 +220,37 @@ export function App() {
   }, [openPicture]);
 
   /**
-   * Starts a screenshot or recording through the Capture view's own handlers (its buttons, with the
-   * window picker for "window"): a tray or shortcut action, and the menus and command center.
+   * Starts a screenshot or recording through Home's own handlers (its buttons, with the window
+   * picker for "window"): a tray or shortcut action, and the menus and command center.
    */
-  const startRequest = useCallback((request: StartRequestEvent) => {
-    setView('capture');
-    requestLaunch(request);
-  }, []);
+  const startRequest = useCallback(
+    (request: StartRequestEvent) => {
+      navigate('home');
+      requestLaunch(request);
+    },
+    [navigate],
+  );
 
   // The tray menu asks for a view; a shortcut or the tray asks to start something here.
-  const latest = useRef({ navigate, startRequest, openImage, openPicture, openFlow });
+  const latest = useRef({ navigate, startRequest, openImage, openPicture, openHistoryId });
   useEffect(() => {
-    latest.current = { navigate, startRequest, openImage, openPicture, openFlow };
+    latest.current = { navigate, startRequest, openImage, openPicture, openHistoryId };
   });
-  // A step guide was saved (Done in the pill, or its shortcut): it opens here.
+  // A step guide was saved (Done in the pill, or its shortcut): it opens as a tab.
   useEffect(
     () =>
-      window.framecapt.on('steps:finished', ({ historyId }) => latest.current.openFlow(historyId)),
+      window.framecapt.on('steps:finished', ({ historyId }) =>
+        latest.current.openHistoryId(historyId),
+      ),
     [],
   );
   useEffect(
     () =>
       window.framecapt.on('app:navigate', (event: NavigateEvent) =>
-        latest.current.navigate(event.view, event.section),
+        latest.current.navigate(
+          event.view === 'capture' ? 'home' : event.view === 'history' ? 'library' : 'settings',
+          event.section,
+        ),
       ),
     [],
   );
@@ -200,22 +260,38 @@ export function App() {
     [],
   );
 
-  // Open image: its key (Settings, Shortcuts; Ctrl+O by default) works in the whole main window.
+  // Open image (Settings, Shortcuts; Ctrl+O by default) and Ctrl+B (the Library's folder sidebar)
+  // work in the whole main window.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.repeat || event.defaultPrevented) return;
-      if (matchEditorAction(event, getSettings().editorShortcuts) !== 'openImage') return;
       // A dialog (help, a confirmation, the command center) owns the keyboard while it is open.
       if (document.querySelector('dialog[open]')) return;
-      event.preventDefault();
-      void latest.current.openImage();
+      if (matchEditorAction(event, getSettings().editorShortcuts) === 'openImage') {
+        event.preventDefault();
+        void latest.current.openImage();
+        return;
+      }
+      const shown = homeShowing.current;
+      if (
+        shown.active &&
+        shown.section !== 'home' &&
+        shown.section !== 'settings' &&
+        event.ctrlKey &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'b'
+      ) {
+        event.preventDefault();
+        toggleLibrarySidebar();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // A picture dropped on the window or pasted on the Capture view opens in the Editor window.
-  // Dropping a file anywhere must never navigate the window, so every file drag is claimed here.
+  // A picture dropped on Home or pasted on it opens as a tab. Dropping a file anywhere
+  // must never navigate the window, so every file drag is claimed here.
   useEffect(() => {
     const hasFiles = (event: DragEvent): boolean =>
       event.dataTransfer?.types.includes('Files') === true;
@@ -224,13 +300,17 @@ export function App() {
     };
     const onDrop = (event: DragEvent): void => {
       if (!hasFiles(event)) return;
+      // An editor's canvas takes a picture dropped on it (an image layer); only Home opens a new tab.
+      const takenByCanvas = event.defaultPrevented;
       event.preventDefault();
       const picture = pictureIn(event.dataTransfer?.files);
-      if (picture) latest.current.openPicture(picture);
+      if (picture && !takenByCanvas && homeShowing.current.active)
+        latest.current.openPicture(picture);
     };
     // The DOM paste event carries the clipboard's files: no clipboard permission is involved.
     const onPaste = (event: ClipboardEvent): void => {
-      if (event.defaultPrevented || viewRef.current !== 'capture') return;
+      const shown = homeShowing.current;
+      if (event.defaultPrevented || !shown.active || shown.section !== 'home') return;
       if (isTyping(event.target)) return;
       const picture = pictureIn(event.clipboardData?.files);
       if (!picture) return;
@@ -248,10 +328,15 @@ export function App() {
   }, []);
 
   // `?` or F1 opens the keyboard help (not while typing, not over a dialog).
+  const askingRef = useRef(false);
+  useEffect(() => {
+    askingRef.current = editor.asking;
+  }, [editor.asking]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || isTyping(event.target)) return;
       if (event.ctrlKey || event.altKey || event.metaKey) return;
+      if (askingRef.current || document.querySelector('dialog[open]')) return;
       if (event.key === '?' || event.key === 'F1') {
         event.preventDefault();
         setHelpOpen(true);
@@ -269,7 +354,11 @@ export function App() {
           target: StartRequestEvent['target'],
           allScreens?: boolean,
         ) => startRequest({ kind, target, ...(allScreens && { allScreens }) }),
-        navigate: (next: ViewId, section?: SettingsSectionId) => navigate(next, section),
+        navigate: (next: SectionId, settings?: SettingsSectionId) => navigate(next, settings),
+        toggleLibrarySidebar: () => {
+          navigate('library');
+          toggleLibrarySidebar();
+        },
         showKeyboardHelp: () => setHelpOpen(true),
         editVideo: editLatestVideo,
         openImage: () => void openImage(),
@@ -280,62 +369,92 @@ export function App() {
       },
       onOpenCapture: (id: string) => {
         setHistoryFocus(id);
-        navigate('history');
+        navigate('library');
       },
-      editorTabs: editor.tabs,
-      onShowEditor: () =>
-        void window.framecapt.invoke('editor:show').then((result) => {
-          if (!result.ok) notify.error(result.error);
-        }),
     }),
-    [startRequest, navigate, editLatestVideo, openImage, editor.tabs],
+    [startRequest, navigate, editLatestVideo, openImage],
   );
 
-  const showRecording = view === 'capture' && recorder.status === 'completed';
+  const showRecording = view === 'home' && recorder.status === 'completed';
+  const recording = recorder.status === 'recording' || recorder.status === 'paused';
+
+  /** The section the pinned tab shows. */
+  const homeContent =
+    showRecording && recorder.result ? (
+      <Scroller key="result">
+        <RecordingResultView
+          snapshot={recorder}
+          result={recorder.result}
+          onNewRecording={() => void window.framecapt.invoke('recorder:reset')}
+          onOpenHistory={() => navigate('library')}
+        />
+      </Scroller>
+    ) : view === 'home' ? (
+      <Scroller key="home">
+        <HomeView
+          onOpenImage={() => void openImage()}
+          onOpenItem={openItem}
+          onOpenLibrary={() => navigate('library')}
+          onOpenSettings={(next) => navigate('settings', next)}
+        />
+      </Scroller>
+    ) : view === 'library' ? (
+      <LibraryView
+        active={homeActive}
+        scope={libraryScope}
+        onScopeChange={setLibraryScope}
+        focusId={historyFocus}
+        onFocusConsumed={() => setHistoryFocus(null)}
+        onEditItem={openHistoryId}
+        onEditVideo={openHistoryId}
+        onOpenFlow={openHistoryId}
+      />
+    ) : (
+      <Scroller key="settings">
+        <SettingsView section={settingsSection} onSectionChange={setSettingsSection} />
+      </Scroller>
+    );
 
   return (
     <TooltipProvider>
       <AppShell
-        view={view}
-        onNavigate={(next) => navigate(next)}
-        wide={view === 'history' || view === 'flow'}
-        onHelp={() => setHelpOpen(true)}
         titleBar={titleBar}
+        rail={
+          <Rail
+            section={homeActive ? section : null}
+            onNavigate={(next) => navigate(next)}
+            onHelp={() => setHelpOpen(true)}
+            recording={recording}
+          />
+        }
+        strip={
+          <TabStrip
+            tabs={state.tabs}
+            activeId={state.activeId}
+            onActivate={(id) => dispatch({ type: 'activate', id })}
+            onClose={editor.requestClose}
+            onMove={(id, toIndex) => dispatch({ type: 'move', id, toIndex })}
+          />
+        }
       >
-        {showRecording && recorder.result ? (
-          <RecordingResultView
-            snapshot={recorder}
-            result={recorder.result}
-            onNewRecording={() => void window.framecapt.invoke('recorder:reset')}
-            onOpenHistory={() => navigate('history')}
-          />
-        ) : view === 'capture' ? (
-          <CaptureView
-            onOpenImage={() => void openImage()}
-            onOpenHistory={(id) => {
-              setHistoryFocus(id ?? null);
-              navigate('history');
-            }}
-            onOpenSettings={(section) => navigate('settings', section)}
-          />
-        ) : view === 'history' ? (
-          <HistoryView
-            focusId={historyFocus}
-            onFocusConsumed={() => setHistoryFocus(null)}
-            onEditItem={(id) => openInEditor({ kind: 'history', historyId: id })}
-            onEditVideo={editVideo}
-            onOpenFlow={openFlow}
-          />
-        ) : view === 'flow' && flowId ? (
-          <FlowView
-            key={flowId}
-            historyId={flowId}
-            onBack={() => navigate('history')}
-            onEditStep={editFlowStep}
-          />
-        ) : view === 'settings' ? (
-          <SettingsView section={settingsSection} onSectionChange={setSettingsSection} />
-        ) : null}
+        {state.tabs.map((tab) => {
+          const active = tab.id === state.activeId;
+          return (
+            <section
+              key={tab.id}
+              ref={tab.pinned ? homeRef : undefined}
+              tabIndex={tab.pinned ? -1 : undefined}
+              aria-label={tab.title}
+              data-testid={tab.pinned ? 'home-panel' : 'editor-panel'}
+              data-kind={tab.pinned ? undefined : tab.kind}
+              data-active={active}
+              inert={!active}
+              className={cn('absolute inset-0 outline-none', !active && 'invisible')}
+            >
+              {tab.pinned ? homeContent : editor.panel(tab, active, helpOpen)}
+            </section>
+          );
+        })}
       </AppShell>
       <AlertConfirm
         open={quitAsk}
@@ -352,17 +471,18 @@ export function App() {
           void window.framecapt.invoke('app:resolveQuit', { stop: false });
         }}
       />
+      {editor.dialogs}
       <RecorderChoiceDialog
         snapshot={recorder}
         onAnswer={(answer) => void window.framecapt.invoke('recorder:resolveChoice', { answer })}
       />
       <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <LiveRegion />
-      {/* Bottom left, over the sidebar: nothing the user has to press is there, whereas the
+      {/* Bottom left, clear of the rail: nothing the user has to press is there, whereas the
           right side holds the primary actions of every view (New recording, Export, Save). */}
       <Toaster
         position="bottom-left"
-        offset={12}
+        offset={{ left: 68, bottom: 12 }}
         style={{ '--width': '216px' } as CSSProperties}
         theme="system"
         toastOptions={{
@@ -377,5 +497,14 @@ export function App() {
         }}
       />
     </TooltipProvider>
+  );
+}
+
+/** A section that scrolls on its own, in a centred column. */
+function Scroller({ children }: { children: ReactNode }) {
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="view-in mx-auto max-w-5xl px-8 py-7">{children}</div>
+    </div>
   );
 }

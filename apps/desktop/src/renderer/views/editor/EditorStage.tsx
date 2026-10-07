@@ -630,7 +630,7 @@ export function EditorStage(props: EditorStageProps) {
       target instanceof HTMLElement && !!target.closest('input, textarea, select, [role="menu"]');
     const down = (event: KeyboardEvent): void => {
       if (event.code !== 'Space' || typing(event.target)) return;
-      // A hidden tab (the Editor window keeps them mounted, inert) must not take the key.
+      // A hidden tab (the tab strip keeps them mounted, inert) must not take the key.
       if (containerRef.current?.closest('[inert]')) return;
       if (event.target instanceof HTMLElement && event.target.closest('button')) return;
       event.preventDefault();

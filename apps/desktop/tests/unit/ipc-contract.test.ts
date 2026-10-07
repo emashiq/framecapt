@@ -25,14 +25,12 @@ describe('ipc contract', () => {
       'capture:startScreenshot',
       'diagnostics:revealFolder',
       'diagnostics:saveRecording',
-      'editor:getState',
       'editor:historyImage',
       'editor:open',
       'editor:pickImage',
       'editor:ready',
       'editor:resolveClose',
       'editor:setState',
-      'editor:show',
       'export:cancel',
       'export:capabilities',
       'export:mp4',
@@ -141,7 +139,6 @@ describe('ipc contract', () => {
       'capture:flowEnded',
       'editor:confirmClose',
       'editor:openTab',
-      'editor:stateChanged',
       'export:done',
       'export:failed',
       'export:progress',
@@ -176,47 +173,28 @@ describe('ipc contract', () => {
       if (channel.startsWith('session:') || channel === 'recorder:engineEvent') {
         expect(roles).toEqual(['recorder']);
       }
-      // Step guides: the Flow view is the main window's (it asks the Editor window to open a step,
-      // which then loads it); the pill (toolbar role) only steers the capture.
-      if (channel.startsWith('flow:')) {
-        expect(roles).toEqual(channel === 'flow:openStepInEditor' ? ['editor'] : ['main']);
-      }
+      // Step guides: the Flow tab is the main window's; the pill (toolbar role) only steers the capture.
+      if (channel.startsWith('flow:')) expect(roles).toEqual(['main']);
       if (channel.startsWith('steps:')) {
         expect(roles.every((role) => role === 'main' || role === 'toolbar')).toBe(true);
         expect(roles).toContain('main');
       }
-      // History, export, screenshots and the editor take ids from the main and Editor windows only
-      // (never paths); the video editor's channels are the Editor window's alone.
-      if (channel.startsWith('video:')) expect(roles).toEqual(['editor']);
+      // History, export, screenshots, the editors and settings take ids from the main window only
+      // (never paths); the toolbar only sizes itself.
       if (
         channel.startsWith('history:') ||
         channel.startsWith('library:') ||
         channel.startsWith('export:') ||
         channel.startsWith('shot:') ||
         channel.startsWith('editor:') ||
-        channel === 'shell:showItemInFolder'
-      ) {
-        expect(roles.every((role) => role === 'main' || role === 'editor')).toBe(true);
-      }
-      // The rest of History is the main window's; the editors read the list (the image picker)
-      // and reveal or undo a quick save.
-      if (channel.startsWith('history:') && channel !== 'history:list') {
-        expect(roles).toEqual(
-          channel === 'history:reveal' || channel === 'history:deleteFile'
-            ? ['main', 'editor']
-            : ['main'],
-        );
-      }
-      // Settings, shortcuts and quitting are the main window's; the Editor window only reads the
-      // settings and shortcut states and changes a setting (a one-time notice); the toolbar only sizes itself.
-      if (
+        channel.startsWith('video:') ||
         channel.startsWith('settings:') ||
         channel.startsWith('shortcuts:') ||
+        channel === 'shell:showItemInFolder' ||
         channel === 'app:requestQuit' ||
         channel === 'app:resolveQuit'
       ) {
-        const editorToo = ['settings:get', 'settings:update', 'shortcuts:status'].includes(channel);
-        expect(roles).toEqual(editorToo ? ['main', 'editor'] : ['main']);
+        expect(roles).toEqual(['main']);
       }
       if (channel === 'toolbar:resize') expect(roles).toEqual(['toolbar']);
     }

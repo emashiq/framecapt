@@ -56,7 +56,7 @@ The title bar has a menu bar (**File**, **View**, **Help**) and a search box in 
 | Command center: commands only                | `Ctrl+Shift+P` |
 | Open an image to edit                        | `Ctrl+O`       |
 
-In the command center: type to search, `Up` / `Down` choose, `Enter` runs the highlighted command (a saved capture opens in History), `Shift+Enter` on a saved capture shows it in its folder, `Esc` closes it. A command that cannot run now (signed out, Viewer role, a recording in progress) is listed with the reason and `Enter` does nothing. The menu bar works with the arrow keys (`Down` or `Enter` opens a menu, `Left` / `Right` move between menus, `Esc` closes and returns to the menu button); each item shows its live shortcut. There is no `Alt` access key for the menus.
+In the command center: type to search, `Up` / `Down` choose, `Enter` runs the highlighted command (a saved capture opens in the Library), `Shift+Enter` on a saved capture shows it in its folder, `Esc` closes it. A command that cannot run now (signed out, Viewer role, a recording in progress) is listed with the reason and `Enter` does nothing. The menu bar works with the arrow keys (`Down` or `Enter` opens a menu, `Left` / `Right` move between menus, `Esc` closes and returns to the menu button); each item shows its live shortcut. There is no `Alt` access key for the menus.
 
 ## Editor shortcuts (customizable)
 
@@ -124,9 +124,9 @@ Focus returns to the main window (and the button you used) when the overlay clos
 
 `?` or `F1` opens the help. `Tab` / `Shift+Tab` move through the controls (the first stop is "Skip to content"). Dialogs trap focus and give it back. In the editor (defaults; see [Editor shortcuts](#editor-shortcuts-customizable) to change them): `V C A R T X` and the newer tool keys (`O L P H B N D S M E I`) pick tools, `Ctrl+D` duplicates, `Ctrl+]` / `Ctrl+[` reorder, `Ctrl+S` saves (in your chosen format), `Ctrl+C` copies, `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo, `Ctrl+=` / `Ctrl+-` / `Ctrl+0` / `Ctrl+1` zoom, arrow keys move the selected mark, `Delete` removes it. History: arrows move, `Enter` opens, `Delete` removes from history (with Undo).
 
-## History (the grid)
+## Library (the grid and the list)
 
-These work inside History and are not configurable. Arrow keys, `Home` and `End` move between cards; a plain click or `Enter` still opens the card.
+These work inside the Library and are not configurable. Arrow keys, `Home` and `End` move between cards (rows, in the list view); a plain click or `Enter` still opens the card.
 
 | Action                                    | Key                                                               |
 | ----------------------------------------- | ----------------------------------------------------------------- |
@@ -137,22 +137,35 @@ These work inside History and are not configurable. Arrow keys, `Home` and `End`
 | Open the card's menu                      | Right-click, `Shift+F10` or the Menu key                          |
 | Remove the card (or all selected) entries | `Delete` (several: after a confirmation, with Undo)               |
 
-## Editor window and tabs
+### Library sidebar
 
-These work inside the Editor window and are not configurable (the editors' own keys are below and under [Editor shortcuts](#editor-shortcuts-customizable)). `Ctrl+1` is the screenshot editor's "actual size", so the tab numbers use `Alt`.
+| Action                                  | Key                                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
+| Show or hide the sidebar                | `Ctrl+B` (also View > Toggle library sidebar)                                |
+| Move in the tree                        | `Up` / `Down`; `Right` opens a folder, `Left` closes it or goes to the parent |
+| Select the folder or smart item         | `Enter` or `Space`                                                          |
+| Rename the folder                       | `F2`                                                                         |
+| Delete the (empty) folder               | `Delete`                                                                     |
+| The folder's menu                       | `Shift+F10` or the Menu key                                                  |
+| Resize the sidebar (200 to 360 px)      | focus its edge, then `Left` / `Right` (`Shift`: 48 px), `Home`, `End`; double-click resets |
+
+## Tabs and the icon rail
+
+These work in the main window and are not configurable (the editors' own keys are below and under [Editor shortcuts](#editor-shortcuts-customizable)). `Ctrl+1` is the screenshot editor's "actual size", so the tab numbers use `Alt`. The Home tab is tab 1 and can never be closed.
 
 | Action                                      | Key                                              |
 | ------------------------------------------- | ------------------------------------------------ |
 | Next tab / previous tab                     | `Ctrl+Tab` / `Ctrl+Shift+Tab` (wraps around)     |
-| Go to the 1st to 8th tab                    | `Alt+1` to `Alt+8`                               |
+| Go to the 1st (Home) to 8th tab             | `Alt+1` to `Alt+8`                               |
 | Go to the last tab                          | `Alt+9`                                          |
 | Close the tab (asks if it has unsaved work) | `Ctrl+W`, or a middle click on the tab           |
 | Reorder the tabs                            | Drag a tab                                       |
-| Open image (a new tab)                      | `Ctrl+O` (customizable, like in the main window) |
+| Open image (a new tab)                      | `Ctrl+O` (customizable)                          |
+| Move between the rail's icons               | `Up` / `Down` (also `Left` / `Right`), `Home`, `End` |
 
 ## Video editor
 
-These work inside a video tab of the Editor window (History > a recording > **Edit video**) and are not configurable. They are ignored while you type in a field, and `Space` does not fire while a button has the keyboard.
+These work inside a video tab (Library > a recording > **Edit video**) and are not configurable. They are ignored while you type in a field, and `Space` does not fire while a button has the keyboard.
 
 | Action                                                                      | Key                                                                  |
 | --------------------------------------------------------------------------- | -------------------------------------------------------------------- |

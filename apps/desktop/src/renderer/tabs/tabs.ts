@@ -1,8 +1,13 @@
 /**
- * The tab model of the Editor window: which items are open, which one shows, and which hold
- * unsaved work. Pure (no React, no Electron), so the rules are unit tested; EditorApp.tsx drives it.
+ * The tab model of the main window: the pinned Home tab (never closes) and one tab per edited
+ * item, which one shows, and which hold unsaved work. Pure (no React, no Electron), so the rules
+ * are unit tested; App.tsx drives it.
  */
-export type TabKind = 'shot' | 'video';
+
+/** The pinned tab shows a section (its kind follows it); the others are edited items. */
+export type TabKind = 'home' | 'library' | 'guides' | 'settings' | 'shot' | 'video' | 'flow';
+
+export const HOME_ID = 'home';
 
 export interface Tab<D = unknown> {
   /** Unique for the life of the tab. */
@@ -11,6 +16,8 @@ export interface Tab<D = unknown> {
   key: string;
   kind: TabKind;
   title: string;
+  /** The Home tab: always first, always there, cannot be closed or moved. */
+  pinned?: boolean;
   /** Unsaved work (screenshots only: a video saves itself). */
   dirty: boolean;
   /** What the tab renders (the screenshot's session, the recording's history id). */
@@ -19,7 +26,7 @@ export interface Tab<D = unknown> {
 
 export interface TabsState<D = unknown> {
   tabs: Tab<D>[];
-  activeId: string | null;
+  activeId: string;
 }
 
 export type TabsAction<D = unknown> =
@@ -29,12 +36,22 @@ export type TabsAction<D = unknown> =
   | { type: 'move'; id: string; toIndex: number }
   | { type: 'dirty'; id: string; dirty: boolean }
   | { type: 'title'; id: string; title: string }
+  /** The section the pinned tab shows (its icon and label follow it). */
+  | { type: 'section'; kind: TabKind; title: string }
   /** Ctrl+Tab (1) and Ctrl+Shift+Tab (-1): wraps around. */
   | { type: 'step'; delta: 1 | -1 }
   /** Alt+1..8 (0-based index); `last` is Alt+9, which always means the last tab. */
   | { type: 'index'; index: number | 'last' };
 
-export const emptyTabs: TabsState<never> = { tabs: [], activeId: null };
+/** The state a window starts with: Home, shown. */
+export function homeTabs<D>(data: D): TabsState<D> {
+  return {
+    tabs: [
+      { id: HOME_ID, key: HOME_ID, kind: 'home', title: 'Home', pinned: true, dirty: false, data },
+    ],
+    activeId: HOME_ID,
+  };
+}
 
 export function findByKey<D>(state: TabsState<D>, key: string): Tab<D> | undefined {
   return state.tabs.find((tab) => tab.key === key);
@@ -59,17 +76,20 @@ export function tabsReducer<D>(state: TabsState<D>, action: TabsAction<D>): Tabs
         : state;
     case 'close': {
       const index = state.tabs.findIndex((tab) => tab.id === action.id);
-      if (index < 0) return state;
+      if (index < 0 || state.tabs[index]?.pinned) return state;
       const tabs = state.tabs.filter((tab) => tab.id !== action.id);
       if (state.activeId !== action.id) return { ...state, tabs };
-      // The tab that slides into the closed one's place, else the one before it.
+      // The tab that slides into the closed one's place, else the one before it (Home at worst).
       const next = tabs[index] ?? tabs[index - 1];
-      return { tabs, activeId: next?.id ?? null };
+      return { tabs, activeId: next?.id ?? HOME_ID };
     }
     case 'move': {
       const from = state.tabs.findIndex((tab) => tab.id === action.id);
-      const to = Math.max(0, Math.min(state.tabs.length - 1, action.toIndex));
-      if (from < 0 || from === to) return state;
+      if (from < 0 || state.tabs[from]?.pinned) return state;
+      // Nothing goes before a pinned tab.
+      const first = state.tabs.filter((tab) => tab.pinned).length;
+      const to = Math.max(first, Math.min(state.tabs.length - 1, action.toIndex));
+      if (from === to) return state;
       const tabs = [...state.tabs];
       const [moved] = tabs.splice(from, 1);
       if (moved) tabs.splice(to, 0, moved);
@@ -82,6 +102,12 @@ export function tabsReducer<D>(state: TabsState<D>, action: TabsAction<D>): Tabs
     case 'title':
       return update(state, action.id, (tab) =>
         tab.title === action.title ? tab : { ...tab, title: action.title },
+      );
+    case 'section':
+      return update(state, HOME_ID, (tab) =>
+        tab.kind === action.kind && tab.title === action.title
+          ? tab
+          : { ...tab, kind: action.kind, title: action.title },
       );
     case 'step': {
       const { tabs } = state;

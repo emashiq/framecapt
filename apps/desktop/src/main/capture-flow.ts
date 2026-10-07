@@ -51,7 +51,7 @@ export interface CaptureFlowDeps {
     height: number;
     png: Buffer;
   }) => Promise<{ savedPath?: string }>;
-  /** Opens the finished capture as a tab of the Editor window (after the main window is restored). */
+  /** Opens the finished capture as a tab of the main window (after it is restored). */
   openEditor?: (event: EditorOpenTabEvent) => void;
 }
 

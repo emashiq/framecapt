@@ -132,11 +132,11 @@ test.afterAll(async () => {
   if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
 });
 
-test('the Record card offers All screens and Multiple…', async () => {
+test('the Record tiles offer All screens and Multiple…', async () => {
   const record = page.getByTestId('mode-record');
   await expect(record.getByTestId('record-all-screens')).toBeVisible();
   await expect(record.getByTestId('record-multi')).toBeVisible();
-  await expect(record.getByTestId('record-multi')).toHaveText('Multiple…');
+  await expect(record.getByTestId('record-multi')).toContainText('Multiple…');
 });
 
 test('the multi picker: screens and windows, order badges, a limit of 4, keyboard, a button that counts', async () => {
@@ -494,7 +494,7 @@ test('Edit video: the .fcap opens in the video editor, Source crops to one windo
 test('All screens records both displays at their places on the virtual desktop', async () => {
   await page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Capture' })
+    .getByRole('button', { name: 'Home' })
     .click();
   // The finished recording is still shown on the Capture tab: start a new one.
   await page.getByTestId('result-new').click();

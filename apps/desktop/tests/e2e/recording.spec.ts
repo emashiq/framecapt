@@ -256,6 +256,8 @@ test.describe('one display', () => {
     const beganAt = Date.now();
     await startScreen();
     await expect(page.getByTestId('flow-status')).not.toBeEmpty();
+    // The rail says a recording runs: a dot on Home.
+    await expect(page.getByTestId('rail-recording-dot')).toBeAttached();
 
     const toolbar = await toolbarPage();
     await expect(toolbar.getByTestId('toolbar')).toHaveAttribute('data-status', 'recording');
@@ -288,6 +290,7 @@ test.describe('one display', () => {
 
     // The toolbar is gone, the main window is back, the state is completed.
     await expect.poll(() => pagesOf('#/toolbar').length).toBe(0);
+    await expect(page.getByTestId('rail-recording-dot')).toHaveCount(0);
     expect(await mainIsMinimized()).toBe(false);
     const done = await state();
     expect(done.status).toBe('completed');
@@ -393,7 +396,7 @@ test.describe('one display', () => {
     // The recording carries on; the main window never came back and no editor was opened.
     expect((await state()).status).toBe('recording');
     expect(await mainIsMinimized()).toBe(true);
-    expect(hasEditorPage(app)).toBe(false);
+    expect(await hasEditorPage(app)).toBe(false);
 
     // A shortcut-style screen screenshot behaves the same (a window one is refused).
     await app.evaluate(() => {

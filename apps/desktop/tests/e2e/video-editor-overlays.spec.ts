@@ -124,7 +124,7 @@ test.afterAll(async () => {
 test('a text box and an audio clip are added from the tool bar', async () => {
   await main
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'History' })
+    .getByRole('button', { name: 'Library' })
     .click();
   await main.getByTestId('history-item').first().locator('[data-card-main]').click();
   await main.getByTestId('details-edit').click();

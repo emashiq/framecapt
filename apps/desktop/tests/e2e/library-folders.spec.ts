@@ -75,7 +75,7 @@ test.beforeAll(async () => {
   page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   await expect(page.getByTestId('shot-region')).toBeVisible();
-  await nav('History');
+  await nav('Library');
   await expect(page.getByTestId('history-item')).toHaveCount(4);
 });
 
@@ -84,7 +84,7 @@ test.afterAll(async () => {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const nav = (name: 'Capture' | 'History' | 'Settings') =>
+const nav = (name: 'Home' | 'Library' | 'Settings') =>
   page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 const row = (folder: string) => page.locator(`[data-testid="folder-row"][data-path="${folder}"]`);
 const card = (index: number) => page.locator(`[data-card-main][data-id="${ids[index]}"]`);
@@ -116,7 +116,7 @@ test('creates a folder and a subfolder as real folders in both capture folders',
   expect(exists(videos, 'Clients', 'Acme')).toBe(true);
 
   // The new folder is selected and empty.
-  await expect(page.getByText('Nothing in this folder yet')).toBeVisible();
+  await expect(page.getByText('This folder is empty')).toBeVisible();
   await allRow().click();
   await expect(page.getByTestId('history-item')).toHaveCount(4);
 });
@@ -162,9 +162,11 @@ test('Move to… in the card menu opens a folder picker and moves the file', asy
   // A folder shows its own captures; "include subfolders" adds what is below it.
   await row('Clients').click();
   await expect(page.getByTestId('history-item')).toHaveCount(4);
-  await page.getByTestId('folder-include-sub').uncheck();
+  await page.getByTestId('library-more').click();
+  await page.getByTestId('folder-include-sub').click(); // off
   await expect(page.getByTestId('history-item')).toHaveCount(2);
-  await page.getByTestId('folder-include-sub').check();
+  await page.getByTestId('library-more').click();
+  await page.getByTestId('folder-include-sub').click(); // on again
 });
 
 test('renaming a folder renames it on disk and History keeps pointing at the files', async () => {
@@ -216,7 +218,12 @@ test('the folder tree is an accessible tree with arrow-key navigation', async ()
   const tree = page.getByRole('tree', { name: 'Capture folders' });
   await expect(tree).toBeVisible();
   await expect(row('Customers')).toHaveAttribute('aria-expanded', 'true');
+  // The smart items (All captures, Recent, Screenshots, Recordings, Guides) come first, then the folders.
   await allRow().focus();
+  for (const key of ['recent', 'type:screenshot', 'type:recording', 'type:flow']) {
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator(`[data-testid="folder-row"][data-path=":${key}"]`)).toBeFocused();
+  }
   await page.keyboard.press('ArrowDown');
   await expect(row('Customers')).toBeFocused();
   await page.keyboard.press('ArrowLeft');
@@ -265,7 +272,7 @@ test('a save location sends the next screenshot into that folder', async () => {
   await page.getByTestId('folder-menu-set-save').click();
   await expect(row('Customers/Acme').getByTestId('folder-save-badge')).toBeVisible();
 
-  await nav('Capture');
+  await nav('Home');
   await expect(page.getByTestId('saving-to-folder')).toHaveText('Customers / Acme');
   const target = path.join(shots, 'Customers', 'Acme');
   const saved = (): string[] =>
@@ -285,10 +292,10 @@ test('a save location sends the next screenshot into that folder', async () => {
   await expectEditorClosed(app);
 
   // Clearing the save location puts new captures back in the main folder.
-  await nav('History');
+  await nav('Library');
   await row('Customers/Acme').click({ button: 'right' });
   await page.getByTestId('folder-menu-clear-save').click();
   await expect(row('Customers/Acme').getByTestId('folder-save-badge')).toHaveCount(0);
-  await nav('Capture');
+  await nav('Home');
   await expect(page.getByTestId('saving-to-folder')).toHaveText('Main capture folders');
 });

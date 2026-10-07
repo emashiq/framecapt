@@ -151,7 +151,7 @@ async function tool(page: Page, name: ToolName): Promise<void> {
 const annotationCount = async (page: Page): Promise<number> =>
   Number(await canvasOf(page).getAttribute('data-annotations'));
 
-/** Takes a screenshot in the main window; it opens as a tab of the Editor window, which is returned. */
+/** Takes a screenshot in the main window; it opens as a tab of the main window, which is returned. */
 async function openShot(main: Page, app: ElectronApplication): Promise<Page> {
   await main.getByTestId('shot-screen').click();
   const editor = await editorPage(app);
@@ -162,11 +162,11 @@ async function openShot(main: Page, app: ElectronApplication): Promise<Page> {
   return editor;
 }
 
-async function go(page: Page, name: 'Capture' | 'History' | 'Settings'): Promise<void> {
+async function go(page: Page, name: 'Home' | 'Library' | 'Settings'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 }
 
-/** Closes the only tab (Done), answering "Don't save" if it asks; the Editor window closes with it. */
+/** Closes the only tab (Done), answering "Don't save" if it asks; Home is shown again. */
 async function leaveEditor(editor: Page, app: ElectronApplication): Promise<void> {
   await editor.getByTestId('editor-done').click();
   await editor
@@ -215,8 +215,8 @@ async function editFromHistory(
   app: ElectronApplication,
   fileName: string,
 ): Promise<Page> {
-  await go(main, 'Capture');
-  await go(main, 'History');
+  await go(main, 'Home');
+  await go(main, 'Library');
   const card = main.getByTestId('history-item').filter({ hasText: fileName.replace(/\.png$/, '') });
   await card.first().getByRole('button').first().click();
   await expect(main.getByTestId('history-details')).toBeVisible();
@@ -356,8 +356,8 @@ test('delete editable data: the image stays, the project folder is gone, and Edi
   if (!session) throw new Error('first test did not run');
   const { page, app } = session;
   // The main window stays where it was (History keeps the open details): start from its list.
-  await go(page, 'Capture');
-  await go(page, 'History');
+  await go(page, 'Home');
+  await go(page, 'Library');
   const card = page.getByTestId('history-item').filter({ hasText: 're-edit original' });
   await card.first().getByRole('button').first().click();
   await page.getByTestId('history-delete-project').click();
@@ -388,7 +388,7 @@ test('a new tool can be rebound and the editor follows (and the old key stops wo
     }),
   );
   expect(updated.ok).toBe(true);
-  await go(mainWin, 'Capture');
+  await go(mainWin, 'Home');
   const page = await openShot(mainWin, app);
   await canvasOf(page).click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('j');
@@ -446,7 +446,7 @@ test('select several marks, arrange them, frame the export and crop to a shape',
   const session = main;
   if (!session) throw new Error('first test did not run');
   const { page: mainWin, app } = session;
-  await go(mainWin, 'Capture');
+  await go(mainWin, 'Home');
   const page = await openShot(mainWin, app);
   await tool(page, 'rect');
   await drag(page, { x: 300, y: 300 }, { x: 500, y: 400 });
@@ -591,7 +591,7 @@ test.describe('an item saved before editable projects existed', () => {
       }),
     );
     expect(off.ok).toBe(true);
-    await go(mainWin, 'Capture');
+    await go(mainWin, 'Home');
     const page = await openShot(mainWin, app);
     await tool(page, 'rect');
     await drag(page, { x: 100, y: 100 }, { x: 600, y: 400 });
@@ -638,17 +638,9 @@ test.describe('opening from History by id', () => {
 
   test('an unknown id is NOT_FOUND and a path-like id is refused', async () => {
     session = await launch(() => undefined);
-    const { page: mainWin, app } = session;
-    // Opening from History is the Editor window's channel: the main window is refused outright.
-    const refused = await mainWin.evaluate(() =>
-      window.framecapt.invoke('shot:openFromHistory', {
-        historyId: '0f0e0d0c-0b0a-4908-8706-050403020100',
-      }),
-    );
-    expect(refused).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
-    const page = await openShot(mainWin, app);
+    const { page: mainWin } = session;
     const call = (historyId: string) =>
-      page.evaluate(
+      mainWin.evaluate(
         (id) => window.framecapt.invoke('shot:openFromHistory', { historyId: id }),
         historyId,
       );
@@ -658,6 +650,5 @@ test.describe('opening from History by id', () => {
     const traversal = await call('../../history');
     expect(traversal.ok).toBe(false);
     if (!traversal.ok) expect(traversal.error.code).toBe('INVALID_PAYLOAD');
-    await leaveEditor(page, app);
   });
 });

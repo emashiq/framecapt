@@ -61,13 +61,14 @@ test('Find existing captures adds a file from the output folder, once', async ()
 
   await page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'History' })
+    .getByRole('button', { name: 'Library' })
     .click();
   await expect(page.getByText('Your captures will appear here')).toBeVisible();
   await page.getByTestId('history-empty-find').click();
   await expect(page.getByText('Added 1 capture')).toBeVisible();
   await expect(page.getByTestId('history-item')).toHaveCount(1);
 
+  await page.getByTestId('library-more').click();
   await page.getByTestId('history-find-existing').click();
   await expect(page.getByText('No new captures found')).toBeVisible();
   await expect(page.getByTestId('history-item')).toHaveCount(1);
@@ -84,6 +85,7 @@ test('Find existing captures also adds an animated GIF as a recording', async ()
   );
   expect(made.status, String(made.stderr)).toBe(0);
 
+  await page.getByTestId('library-more').click();
   await page.getByTestId('history-find-existing').click();
   await expect(page.getByText('Added 1 capture')).toBeVisible();
   const card = page.getByTestId('history-item').filter({ hasText: 'gif' });

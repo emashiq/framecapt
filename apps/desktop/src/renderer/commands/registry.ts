@@ -44,23 +44,28 @@ export interface CommandEnv {
 
 export type Target = 'screen' | 'window' | 'region';
 
+/** The sections the pinned Home tab can show. */
+export type NavTarget = 'home' | 'library' | 'guides' | 'settings';
+
 /** The things a command can do: each one is an existing function of the app. */
 export interface CommandActions {
-  /** Same as the Screenshot and Record buttons of the Capture view (and the tray). */
+  /** Same as the Screenshot and Record buttons of Home (and the tray). */
   startCapture: (
     kind: 'screenshot' | 'record',
     target: Target | 'multi',
     allScreens?: boolean,
   ) => void;
-  /** Same as the Steps card of the Capture view: starts capturing a step guide. */
+  /** Same as the Steps button of Home: starts capturing a step guide. */
   startSteps: () => void;
   stopRecording: () => void;
   togglePause: () => void;
-  navigate: (view: 'capture' | 'history' | 'settings', section?: SettingsSectionId) => void;
+  navigate: (view: NavTarget, section?: SettingsSectionId) => void;
+  /** Shows or hides the Library's folder sidebar (it opens the Library first). */
+  toggleLibrarySidebar: () => void;
   showKeyboardHelp: () => void;
   /** Opens the latest recording in the video editor (or says there is none). */
   editVideo: () => void;
-  /** Same as the Open image button of the Capture view (a picture file opens in the editor). */
+  /** Same as the Open image button of Home (a picture file opens in the editor). */
   openImage: () => void;
   toggleTheme: () => void;
   quit: () => void;
@@ -209,20 +214,28 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
   });
 
   add({
-    id: 'nav.capture',
-    title: 'Open Capture',
-    menuLabel: 'Capture',
+    id: 'nav.home',
+    title: 'Open Home',
+    menuLabel: 'Home',
     group: 'Navigate',
-    keywords: ['home', 'new'],
-    run: () => actions.navigate('capture'),
+    keywords: ['capture', 'new', 'dashboard', 'start'],
+    run: () => actions.navigate('home'),
   });
   add({
-    id: 'nav.history',
-    title: 'Open History',
-    menuLabel: 'History',
+    id: 'nav.library',
+    title: 'Open Library',
+    menuLabel: 'Library',
     group: 'Navigate',
-    keywords: ['captures', 'library', 'saved', 'recordings', 'screenshots'],
-    run: () => actions.navigate('history'),
+    keywords: ['history', 'captures', 'folders', 'saved', 'recordings', 'screenshots'],
+    run: () => actions.navigate('library'),
+  });
+  add({
+    id: 'nav.guides',
+    title: 'Open Guides',
+    menuLabel: 'Guides',
+    group: 'Navigate',
+    keywords: ['steps', 'step guides', 'flows', 'tutorials', 'library'],
+    run: () => actions.navigate('guides'),
   });
   add({
     id: 'nav.settings',
@@ -241,6 +254,14 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.navigate('settings', id),
     });
   }
+  add({
+    id: 'view.toggleSidebar',
+    title: 'Toggle library sidebar',
+    group: 'Navigate',
+    keywords: ['folders', 'panel', 'hide', 'show'],
+    hint: { kind: 'fixed', keys: ['Ctrl', 'B'] },
+    run: actions.toggleLibrarySidebar,
+  });
   add({
     id: 'view.toggleTheme',
     title: 'Toggle light or dark theme',
@@ -385,7 +406,7 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
       'video.edit',
       'steps.start',
       null,
-      'nav.history',
+      'nav.library',
       'nav.settings',
       null,
       'app.quit',
@@ -395,10 +416,12 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
     id: 'view',
     label: 'View',
     items: [
-      'nav.capture',
-      'nav.history',
+      'nav.home',
+      'nav.library',
+      'nav.guides',
       'nav.settings',
       null,
+      'view.toggleSidebar',
       'view.commandCenter',
       'view.toggleTheme',
     ],

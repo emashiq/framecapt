@@ -121,7 +121,7 @@ export const EditorShortcutSettingsSchema = z.object(
 export const NoticeSettingsSchema = z.object({
   trayHintShown: z.boolean(),
   homeTipDismissed: z.boolean(),
-  /** The first-run card on the Capture view (shortcuts, tray). */
+  /** The first-run card on Home (shortcuts, tray). */
   onboardingDismissed: z.boolean(),
   /** The editor's one-time note that an editable original keeps the pixels under redactions. */
   editableNoticeShown: z.boolean(),

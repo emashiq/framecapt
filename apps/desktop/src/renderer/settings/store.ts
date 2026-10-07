@@ -149,12 +149,8 @@ async function migrateLegacyRecordOptions(): Promise<void> {
   }
 }
 
-/**
- * Loads the settings and follows main's changes. Call once from the window root; returns the
- * cleanup. Only the main window (`primary`) migrates old browser-storage options and reports a
- * damaged settings file; the Editor window just follows.
- */
-export function startSettingsSync(primary = true): () => void {
+/** Loads the settings and follows main's changes. Call once from the app root; returns the cleanup. */
+export function startSettingsSync(): () => void {
   let live = true;
   const offs = [
     window.framecapt.on('settings:changed', (next) => setState(next)),
@@ -167,7 +163,7 @@ export function startSettingsSync(primary = true): () => void {
     if (!live) return;
     if (!response.ok) return failed(response.error);
     setState(response.data);
-    if (primary) await migrateLegacyRecordOptions();
+    await migrateLegacyRecordOptions();
   });
   void window.framecapt.invoke('shortcuts:status').then((response) => {
     if (live && response.ok) {
@@ -175,22 +171,20 @@ export function startSettingsSync(primary = true): () => void {
       emit();
     }
   });
-  if (primary) {
-    void window.framecapt.invoke('settings:consumeNotice').then((response) => {
-      if (live && response.ok && response.data.reset) {
-        toast('Settings were reset because the file was damaged. Your captures were not touched.', {
-          duration: 10_000,
-        });
-      }
-    });
-  }
+  void window.framecapt.invoke('settings:consumeNotice').then((response) => {
+    if (live && response.ok && response.data.reset) {
+      toast('Settings were reset because the file was damaged. Your captures were not touched.', {
+        duration: 10_000,
+      });
+    }
+  });
   return () => {
     live = false;
     offs.forEach((off) => off());
   };
 }
 
-/** How many shortcuts that are set could not be registered (the warning on the home view). */
+/** How many shortcuts that are set could not be registered (the warning on Home). */
 export function problemCount(states: ShortcutStates | null): number {
   if (!states) return 0;
   return SHORTCUT_ACTIONS.filter(

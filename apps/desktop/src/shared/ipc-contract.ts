@@ -237,106 +237,94 @@ export const ipcContract = {
   'shot:get': {
     request: ShotGetRequestSchema,
     response: ShotGetResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   'shot:export': {
     request: ShotExportRequestSchema,
     response: ShotExportResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** Quick save: writes the export payload to the screenshots folder under a free name, no dialog. */
   'shot:quickSave': {
     request: ShotExportRequestSchema,
     response: ShotQuickSaveResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** Saves over the history item the editor was opened from (atomic; no dialog). */
   'shot:saveOver': {
     request: ShotSaveOverRequestSchema,
     response: ShotSaveOverResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** Opens an owned screenshot of history in a new editor session (project or flattened copy). */
   'shot:openFromHistory': {
     request: OpenFromHistoryRequestSchema,
     response: OpenFromHistoryResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** File > Open image: a main-process dialog; returns the picked picture's validated bytes. */
   'shot:openImage': {
     request: z.undefined(),
     response: PickImageResponseSchema,
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   /** Starts an editor session from a PNG the renderer made from a picture (opened, dropped, pasted). */
   'shot:importImage': {
     request: ShotImportRequestSchema,
     response: ShotImportResponseSchema,
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   /** Insert image > From file: the same dialog, for an image layer inside the open editor. */
   'editor:pickImage': {
     request: z.undefined(),
     response: PickImageResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** Insert image > From History: the picture of an owned screenshot, as PNG. */
   'editor:historyImage': {
     request: HistoryImageRequestSchema,
     response: HistoryImageResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   'shot:copy': {
     request: ShotCopyRequestSchema,
     response: z.void(),
-    roles: ['editor'],
+    roles: ['main'],
   },
   'shot:discard': {
     request: ShotGetRequestSchema,
     response: z.void(),
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
-  // --- the Editor window: one window, one tab per open screenshot or video ---
-  /** Opens (or focuses) a tab of the Editor window, creating the window on first use. */
+  // --- editor tabs of the main window: one tab per open screenshot, video or step guide ---
+  /** Opens (or focuses) a tab in the main window (shown first if it was hidden). */
   'editor:open': {
     request: EditorOpenRequestSchema,
     response: z.void(),
     roles: ['main'],
   },
-  /** The Editor window's renderer is listening: main sends the tabs that were requested before. */
+  /** The main window's renderer is listening: main sends the tabs that were requested before. */
   'editor:ready': {
     request: z.undefined(),
     response: z.void(),
-    roles: ['editor'],
+    roles: ['main'],
   },
-  /** The Editor window reports its tab count and whether closing would lose work. */
+  /** The main window reports whether closing would lose work (an unsaved tab). */
   'editor:setState': {
     request: EditorStateSchema,
     response: z.void(),
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** The answer to `editor:confirmClose`. */
   'editor:resolveClose': {
     request: EditorResolveCloseRequestSchema,
     response: z.void(),
-    roles: ['editor'],
-  },
-  /** Brings the Editor window to the front (the main window's "Editor" button). */
-  'editor:show': {
-    request: z.undefined(),
-    response: z.void(),
-    roles: ['main'],
-  },
-  /** The tab count of the Editor window, for the main window's button. */
-  'editor:getState': {
-    request: z.undefined(),
-    response: EditorStateSchema,
     roles: ['main'],
   },
   'shell:showItemInFolder': {
     request: ShowItemInFolderRequestSchema,
     response: z.void(),
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   'overlay:getInit': {
     request: z.undefined(),
@@ -470,7 +458,7 @@ export const ipcContract = {
   'history:list': {
     request: HistoryListRequestSchema,
     response: HistoryListResponseSchema,
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   /** True once after a damaged history file was set aside at startup (the UI then says so). */
   'history:consumeNotice': {
@@ -482,7 +470,7 @@ export const ipcContract = {
   'history:reveal': {
     request: HistoryIdRequestSchema,
     response: z.void(),
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   'history:copyImage': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
   'history:copyPath': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
@@ -496,7 +484,7 @@ export const ipcContract = {
   'history:deleteFile': {
     request: HistoryIdRequestSchema,
     response: z.void(),
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   /** Opens a file dialog in main to point a missing entry at its moved file. */
   'history:relink': {
@@ -595,43 +583,43 @@ export const ipcContract = {
   'export:cancel': {
     request: ExportCancelRequestSchema,
     response: z.void(),
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   // --- video editor: the saved project (a recipe, the video is never changed) and its export ---
   'video:open': {
     request: VideoOpenRequestSchema,
     response: VideoOpenResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
-  'video:save': { request: VideoSaveRequestSchema, response: z.void(), roles: ['editor'] },
+  'video:save': { request: VideoSaveRequestSchema, response: z.void(), roles: ['main'] },
   /** Stores a picture (PNG bytes) as an asset of the project and returns its id (its SHA-256). */
   'video:addImage': {
     request: VideoAddImageRequestSchema,
     response: VideoAddImageResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** An Open dialog in main for an audio file; the file is copied into the project's assets. */
   'video:pickAudio': {
     request: VideoPickAudioRequestSchema,
     response: VideoPickAudioResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** Renders the edit into a new file next to the source (a queued job; cancel with export:cancel). */
   'video:export': {
     request: VideoExportRequestSchema,
     response: VideoExportResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   // --- settings, shortcuts and the app lifecycle (phase 08) ---
   'settings:get': {
     request: z.undefined(),
     response: SettingsStateSchema,
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   'settings:update': {
     request: SettingsUpdateRequestSchema,
     response: SettingsStateSchema,
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   'settings:reset': {
     request: SettingsResetRequestSchema,
@@ -663,7 +651,7 @@ export const ipcContract = {
   'shortcuts:status': {
     request: z.undefined(),
     response: ShortcutStatesSchema,
-    roles: ['main', 'editor'],
+    roles: ['main'],
   },
   'shortcuts:validate': {
     request: ShortcutValidateRequestSchema,
@@ -711,7 +699,7 @@ export const ipcContract = {
   'flow:openStepInEditor': {
     request: FlowOpenStepRequestSchema,
     response: OpenFromHistoryResponseSchema,
-    roles: ['editor'],
+    roles: ['main'],
   },
   /** One step's PNG bytes, for drawing the exports in the renderer. */
   'flow:readStep': {
@@ -735,12 +723,10 @@ export type IpcResponse<C extends IpcChannel> = z.output<IpcContract[C]['respons
 /** Main -> renderer events. The preload only allows subscribing to these. */
 export const ipcEvents = {
   'app:themeChanged': z.object({ dark: z.boolean() }),
-  /** Open (or focus) this tab in the Editor window. */
+  /** Open (or focus) this tab in the main window. */
   'editor:openTab': EditorOpenTabEventSchema,
-  /** The Editor window's tab count or unsaved state changed (to the main window's button). */
-  'editor:stateChanged': EditorStateSchema,
   'capture:flowEnded': FlowEndedEventSchema,
-  /** The Editor window was asked to close (or the app to quit) while tabs have unsaved work. */
+  /** The main window was asked to close (or the app to quit) while tabs have unsaved work. */
   'editor:confirmClose': z.object({}),
   'overlay:clearSelection': z.object({}),
   'worker:grabFrames': GrabFramesEventSchema,

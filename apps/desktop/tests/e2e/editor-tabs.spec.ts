@@ -1,9 +1,9 @@
 /**
- * The Editor window and its tabs, end to end (E2E build). Two screenshots and one video are opened
- * from History: one window, three tabs. Opening an item again focuses its tab; every tab keeps its
- * own state; a hidden video pauses; closing a tab with unsaved work asks (Save, Don't save,
- * Cancel); closing the window with unsaved tabs asks once and names them; the main window shows
- * how many tabs are open.
+ * The editor tabs of the main window, end to end (E2E build). Two screenshots and one video are
+ * opened from the Library: three tabs beside the pinned Home tab. Opening an item again focuses
+ * its tab; every tab keeps its own state; a hidden video pauses; closing a tab with unsaved work
+ * asks (Save, Don't save, Cancel); closing the window or quitting with unsaved tabs asks once and
+ * names them; Home is never closed.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,7 +17,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
-import { activePanel, editorPage, expectEditorClosed, hasEditorPage, tabs } from './editor-window';
+import { activePanel, editorPage, expectEditorClosed, tabs } from './editor-window';
 import { makeWebm, mockScreenshotPng, newId, seedHistory } from './history-fixtures';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -25,6 +25,7 @@ const projectRoot = path.resolve(__dirname, '..', '..');
 let dir: string;
 let app: ElectronApplication;
 let main: Page;
+/** The editors are tabs of the main window: the same page. */
 let editor: Page;
 
 test.describe.configure({ mode: 'serial' });
@@ -96,11 +97,11 @@ test.afterAll(async () => {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/** Opens the history item called `name` in the Editor window (its Edit action in the details). */
+/** Opens the history item called `name` as a tab (its Edit action in the details). */
 async function editFromHistory(name: string): Promise<void> {
   const nav = main.getByRole('navigation', { name: 'Primary' });
-  await nav.getByRole('button', { name: 'Capture', exact: true }).click();
-  await nav.getByRole('button', { name: 'History' }).click();
+  await nav.getByRole('button', { name: 'Home', exact: true }).click();
+  await nav.getByRole('button', { name: 'Library' }).click();
   await main
     .getByTestId('history-item')
     .filter({ hasText: name })
@@ -125,7 +126,7 @@ async function drawRect(page: Page): Promise<void> {
 const annotations = (page: Page) =>
   activePanel(page).getByTestId('editor-canvas').getAttribute('data-annotations');
 
-test('two screenshots and a video from History are three tabs of one window', async () => {
+test('two screenshots and a video from the Library are three tabs beside Home', async () => {
   await editFromHistory('alpha');
   editor = await editorPage(app);
   await expect(tabs(editor)).toHaveCount(1);
@@ -134,26 +135,29 @@ test('two screenshots and a video from History are three tabs of one window', as
   await editFromHistory('clip');
   await expect(tabs(editor)).toHaveCount(3);
 
-  // One window only, three tabs in the order opened; the newest shows.
-  expect(app.windows().filter((w) => w.url().includes('#/editor'))).toHaveLength(1);
+  // One window, Home first and pinned, then the three tabs in the order opened; the newest shows.
+  expect(app.windows().filter((w) => w.url().includes('#/editor'))).toHaveLength(0);
+  expect(editor).toBe(main);
   expect(await titles()).toEqual(['alpha.png', 'beta.png', 'clip.webm']);
+  await expect(main.getByTestId('home-tab')).toBeVisible();
+  await expect(main.getByTestId('home-tab').getByTestId('tab-close')).toHaveCount(0);
   await expect(tabs(editor).nth(0)).toHaveAttribute('data-kind', 'shot');
   await expect(tabs(editor).nth(2)).toHaveAttribute('data-kind', 'video');
   await expect(tabs(editor).nth(2)).toHaveAttribute('data-active', 'true');
   await expect(activePanel(editor).getByTestId('video-editor')).toBeVisible();
 
-  // The main window says how many are open, and brings the window back to the front.
-  await expect(main.getByTestId('open-editor-count')).toHaveText('3');
-  await main.getByTestId('open-editor-button').click();
-  const win = await app.browserWindow(editor);
-  await expect.poll(() => win.evaluate((w) => w.isFocused())).toBe(true);
+  // Home is one click away and the editors are still open behind it.
+  await main.getByTestId('home-tab').click();
+  await expect(main.getByTestId('home-panel')).toHaveAttribute('data-active', 'true');
+  await expect(tabs(editor)).toHaveCount(3);
+  await tabs(editor).nth(2).getByRole('button').first().click();
+  await expect(tabs(editor).nth(2)).toHaveAttribute('data-active', 'true');
 });
 
 test('opening an item that is open focuses its tab instead of adding one', async () => {
   await editFromHistory('alpha');
   await expect(tabs(editor).nth(0)).toHaveAttribute('data-active', 'true');
   await expect(tabs(editor)).toHaveCount(3);
-  await expect(main.getByTestId('open-editor-count')).toHaveText('3');
 });
 
 test('switching: click, Ctrl+Tab, Alt+number; each tab keeps its own state', async () => {
@@ -173,17 +177,26 @@ test('switching: click, Ctrl+Tab, Alt+number; each tab keeps its own state', asy
 
   await editor.keyboard.press('Control+Tab');
   await expect(tabs(editor).nth(2)).toHaveAttribute('data-active', 'true');
+  // Past the last tab comes Home (it is part of the cycle), then alpha again.
+  await editor.keyboard.press('Control+Tab');
+  await expect(main.getByTestId('home-panel')).toHaveAttribute('data-active', 'true');
   await editor.keyboard.press('Control+Tab');
   await expect(tabs(editor).nth(0)).toHaveAttribute('data-active', 'true');
   await editor.keyboard.press('Control+Shift+Tab');
+  await expect(main.getByTestId('home-panel')).toHaveAttribute('data-active', 'true');
+  await editor.keyboard.press('Control+Shift+Tab');
   await expect(tabs(editor).nth(2)).toHaveAttribute('data-active', 'true');
-  await editor.keyboard.press('Alt+1');
+  await editor.keyboard.press('Alt+2');
   await expect(tabs(editor).nth(0)).toHaveAttribute('data-active', 'true');
   await expect.poll(() => annotations(editor)).toBe('1'); // alpha's own mark is still there
   await editor.keyboard.press('Alt+9');
   await expect(tabs(editor).nth(2)).toHaveAttribute('data-active', 'true');
-  await editor.keyboard.press('Alt+2');
+  await editor.keyboard.press('Alt+3');
   await expect(tabs(editor).nth(1)).toHaveAttribute('data-active', 'true');
+  // Alt+1 is Home.
+  await editor.keyboard.press('Alt+1');
+  await expect(main.getByTestId('home-panel')).toHaveAttribute('data-active', 'true');
+  await editor.keyboard.press('Alt+3');
 });
 
 test('the tab strip and the open editors have no serious accessibility violations in either theme', async () => {
@@ -233,7 +246,7 @@ test('a video that is not showing is paused; undo history is per tab', async () 
   );
   expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(false);
   // Away from it: the video stops by itself.
-  await editor.keyboard.press('Alt+1');
+  await editor.keyboard.press('Alt+2');
   await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   // Space on alpha does not reach the hidden video.
   await editor.keyboard.press('Space');
@@ -255,7 +268,6 @@ test('closing a clean tab is silent: ×, a middle click and Ctrl+W', async () =>
   await tabs(editor).filter({ hasText: 'alpha.png' }).getByTestId('tab-close').click();
   await expect(tabs(editor)).toHaveCount(2);
   expect(await titles()).toEqual(['clip.webm', 'beta.png']);
-  await expect(main.getByTestId('open-editor-count')).toHaveText('2');
 
   // A middle click closes too (the video: nothing is unsaved in a video).
   await tabs(editor).filter({ hasText: 'clip.webm' }).click({ button: 'middle' });
@@ -299,50 +311,39 @@ test("closing a tab with unsaved work asks: Cancel keeps it, Don't save closes i
   expect(await titles()).toEqual(['alpha.png']);
 });
 
-test('closing the Editor window with unsaved tabs asks once and names them; Discard closes it', async () => {
-  // Alpha is the only tab: make it dirty, add the video next to it.
-  await drawRect(editor);
-  await editFromHistory('clip');
-  await expect(tabs(editor)).toHaveCount(2);
-  await expect(main.getByTestId('open-editor-count')).toHaveText('2');
-
-  const win = await app.browserWindow(editor);
-  await win.evaluate((w) => w.close());
-  const dialog = editor.getByRole('alertdialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('alpha.png');
-  expect(await win.evaluate((w) => w.isDestroyed())).toBe(false);
-  await editor.getByRole('button', { name: 'Keep editing' }).click();
-  await expect(dialog).toBeHidden();
-  await expect(tabs(editor)).toHaveCount(2);
-
-  const closed = editor.waitForEvent('close');
-  await win.evaluate((w) => w.close());
-  await expect(dialog).toBeVisible();
-  await editor
-    .getByTestId('confirm-yes')
-    .click()
-    .catch(() => undefined); // the window closes under the click
-  await closed;
+test('Home never closes: Ctrl+W and the middle click leave it', async () => {
+  await main.getByTestId('home-tab').click();
+  await expect(main.getByTestId('home-panel')).toHaveAttribute('data-active', 'true');
+  await main.keyboard.press('Control+w');
+  await main.getByTestId('home-tab').click({ button: 'middle' });
+  await expect(main.getByTestId('home-tab')).toBeVisible();
+  await expect(main.getByTestId('home-panel')).toHaveAttribute('data-active', 'true');
+  await expect(tabs(editor)).toHaveCount(1);
+  // Closing the last tab with the keyboard lands on Home too.
+  await tabs(editor).first().getByRole('button').first().click();
+  await expect(tabs(editor).first()).toHaveAttribute('data-active', 'true');
+  await tabs(editor).first().getByTestId('tab-close').click();
   await expectEditorClosed(app);
-  // The main window is untouched and its button is gone with the tabs.
-  expect(main.isClosed()).toBe(false);
-  await expect(main.getByTestId('open-editor-button')).toHaveCount(0);
-  // The unsaved screenshot's session went with the window.
-  await expect
-    .poll(() => {
-      const shots = path.join(dir, 'shots');
-      return fs.existsSync(shots) ? fs.readdirSync(shots).length : 0;
-    })
-    .toBe(0);
+  await expect(main.getByTestId('home-panel')).toHaveAttribute('data-active', 'true');
 });
 
-test('the Editor window is made again on the next open, and closes with its last tab', async () => {
-  expect(hasEditorPage(app)).toBe(false);
-  await editFromHistory('beta');
-  editor = await editorPage(app);
-  await expect(tabs(editor)).toHaveCount(1);
-  await tabs(editor).getByTestId('tab-close').click();
+test('many tabs scroll with chevrons and a fade, and the shown tab stays in view', async () => {
+  for (const name of ['alpha', 'beta', 'clip']) await editFromHistory(name);
+  await expect(tabs(editor)).toHaveCount(3);
+  // Everything fits: no chevrons.
+  await expect(main.getByTestId('tabs-scroll-right')).toHaveCount(0);
+  // A narrow strip (as with many tabs): the list scrolls, chevrons appear on the side that has more.
+  await main.addStyleTag({ content: '[data-testid="editor-tabs"] { max-width: 220px; }' });
+  await expect(main.getByTestId('tabs-scroll-right')).toBeVisible();
+  await main.getByTestId('tabs-scroll-right').click();
+  await expect(main.getByTestId('tabs-scroll-left')).toBeVisible();
+  await expect
+    .poll(() => main.getByTestId('editor-tabs').evaluate((el) => el.scrollLeft))
+    .toBeGreaterThan(0);
+  // The shown tab is scrolled into view when it changes.
+  await main.keyboard.press('Alt+2');
+  await expect(tabs(editor).first()).toBeInViewport();
+  for (let n = 0; n < 3; n += 1) await tabs(editor).first().getByTestId('tab-close').click();
   await expectEditorClosed(app);
 });
 
@@ -368,6 +369,7 @@ test('quitting the app (tray, menu) asks about unsaved tabs first; Keep editing 
   // The app is still there, with the window and its work.
   expect(main.isClosed()).toBe(false);
   await expect(tabs(editor)).toHaveCount(1);
+  await expect(tabs(editor).first()).toHaveAttribute('data-dirty', 'true');
 
   // Quit again and discard: every window goes and the app ends.
   const ended = app.waitForEvent('close');

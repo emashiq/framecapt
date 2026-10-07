@@ -148,13 +148,13 @@ async function drag(
   await page.mouse.up();
 }
 
-/** Takes a screenshot in the main window; it opens as a tab of the Editor window, which is returned. */
+/** Takes a screenshot in the main window; it opens as a tab of the main window, which is returned. */
 async function openShot(main: Page, app: ElectronApplication): Promise<Page> {
   // The main window stays where it was (History after an Edit): go back to the Capture view.
   if (!(await main.getByTestId('shot-screen').isVisible())) {
     await main
       .getByRole('navigation', { name: 'Primary' })
-      .getByRole('button', { name: 'Capture', exact: true })
+      .getByRole('button', { name: 'Home', exact: true })
       .click();
   }
   await main.getByTestId('shot-screen').click();
@@ -166,7 +166,7 @@ async function openShot(main: Page, app: ElectronApplication): Promise<Page> {
   return editor;
 }
 
-/** Closes the only tab (Done), answering "Don't save" if it asks; the Editor window closes with it. */
+/** Closes the only tab (Done), answering "Don't save" if it asks; Home is shown again. */
 async function leaveEditor(editor: Page, app: ElectronApplication): Promise<void> {
   await editor.getByTestId('editor-done').click();
   await editor
@@ -276,7 +276,7 @@ test('Open image opens a picture in the editor without saving anything', async (
   expect(set.ok).toBe(true);
 
   await stubOpenDialog(app, writePicture(dir, 'photo.png', picture(640, 360, '#00aa44')));
-  await expect(page.getByTestId('open-image-card')).toBeVisible();
+  await expect(page.getByTestId('open-image')).toBeVisible();
   await page.getByTestId('open-image').click();
   const editor = await editorPage(app);
   await expect(editor.getByTestId('editor-view')).toBeVisible();
@@ -324,7 +324,7 @@ test('Ctrl+O, a dropped file and a pasted picture open the editor; a file that i
   await stubOpenDialog(app, writePicture(dir, 'fake.png', Buffer.from('MZ not a picture at all')));
   await page.getByTestId('open-image').click();
   await expect(page.getByText(/not a PNG, JPEG, WebP, GIF or BMP/)).toBeVisible();
-  expect(hasEditorPage(app)).toBe(false);
+  expect(await hasEditorPage(app)).toBe(false);
 });
 
 test('opening a picture while a screenshot has edits adds a tab and keeps the edits', async () => {
@@ -419,8 +419,8 @@ test('Insert image from a file: centered, selected, undoable, and in the exporte
 test('the saved screenshot opens again with its image layer, and editing it keeps the picture', async () => {
   const { app, page: mainWin, dir } = session as Session;
   const nav = mainWin.getByRole('navigation', { name: 'Primary' });
-  await nav.getByRole('button', { name: 'Capture', exact: true }).click();
-  await nav.getByRole('button', { name: 'History' }).click();
+  await nav.getByRole('button', { name: 'Home', exact: true }).click();
+  await nav.getByRole('button', { name: 'Library' }).click();
   await mainWin.getByTestId('history-item').first().getByRole('button').first().click();
   await mainWin.getByTestId('details-edit').click();
   const page = await editorPage(app);

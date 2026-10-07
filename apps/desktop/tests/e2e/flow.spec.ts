@@ -16,7 +16,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
-import { editorPage, expectEditorClosed } from './editor-window';
+import { editorPage, tabs } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 
@@ -91,10 +91,11 @@ test.afterAll(async () => {
 
 test.describe.configure({ mode: 'serial' });
 
-test('the Capture view offers Steps, with how it works and its shortcut', async () => {
+test('Home offers Steps, with how it works and its shortcut', async () => {
   await expect(page.getByTestId('mode-steps')).toBeVisible();
   await expect(page.getByTestId('steps-hint')).toContainText('pause');
-  await expect(page.getByTestId('hint-stepsToggle')).toBeVisible();
+  // The shortcut shows under the tile on hover and focus.
+  await expect(page.getByTestId('hint-stepsToggle')).toContainText('Ctrl+Shift+8');
   await expect(page.getByTestId('steps-start')).toBeEnabled();
   // The tray offers it too.
   const menu = await hooks((h) => h.trayMenu());
@@ -104,7 +105,7 @@ test('the Capture view offers Steps, with how it works and its shortcut', async 
   });
 });
 
-test('start, two steps, Done: a guide in History and the Flow view', async () => {
+test('start, two steps, Done: a guide in the Library and a tab for it', async () => {
   await page.getByTestId('steps-start').click();
   const pill = await pillPage();
   await expect(pill.getByTestId('steps-count')).toHaveText('0 steps');
@@ -201,11 +202,12 @@ test('Open in editor on one step: Save changes writes over that step alone, the 
   const secondBefore = fs.readFileSync(second);
 
   await page.getByTestId('flow-step-edit').first().click();
-  // The step opens as a tab of the Editor window.
+  // The step opens as a tab of its own, next to the guide's.
   const editor = await editorPage(app);
   await expect(editor.getByTestId('editor-view')).toBeVisible({ timeout: 20_000 });
   await expect(editor.getByTestId('editor-save')).toHaveText(/Save changes/);
-  await expect(editor.getByTestId('tab-title')).toContainText('(step 1)');
+  await expect(tabs(editor)).toHaveCount(2);
+  await expect(tabs(editor).last().getByTestId('tab-title')).toContainText('(step 1)');
   await editor.getByTestId('tool-rect').click();
   const box = await editor.getByTestId('editor-canvas').boundingBox();
   if (!box) throw new Error('the editor canvas has no box');
@@ -225,13 +227,13 @@ test('Open in editor on one step: Save changes writes over that step alone, the 
     'step-02.png',
   ]);
 
-  // Back out of the editor: History still has the one guide and nothing else.
+  // Back out of the editor: the guide's tab is left, and the Library still has the one guide and nothing else.
   await editor.getByTestId('editor-done').click();
-  await expectEditorClosed(app);
+  await expect(tabs(editor)).toHaveCount(1);
   const listed = await page.evaluate(() => window.framecapt.invoke('history:list', {}));
   if (!listed.ok) throw new Error('history:list failed');
   expect(listed.data.items.map((item) => item.type)).toEqual(['flow']);
-  await nav('History');
+  await nav('Library');
   await page.getByTestId('history-open').click();
   await expect(page.getByTestId('flow-view')).toBeVisible();
   await expect(page.getByTestId('flow-step')).toHaveCount(2);
@@ -254,17 +256,17 @@ test('reorder, delete and undo from the Flow view', async () => {
 });
 
 test('History lists the guide with its steps, opens it in the Flow view and filters to Guides', async () => {
-  await nav('History');
+  await nav('Library');
   await expect(page.getByTestId('history-item')).toHaveCount(1);
   await expect(page.getByTestId('history-type')).toContainText('2 steps');
-  await page.getByTestId('history-filter').getByRole('radio', { name: 'Guides' }).click();
+  await page.locator('[data-testid="folder-row"][data-path=":type:flow"]').click();
   await expect(page.getByTestId('history-item')).toHaveCount(1);
   await page.getByTestId('history-open').click();
   await expect(page.getByTestId('flow-view')).toBeVisible();
   await expect(page.getByTestId('flow-title')).toHaveValue('Set up the thing');
   // Back to History: the guide's page offers Open and Show in folder.
   await page.getByTestId('flow-back').click();
-  await page.getByTestId('history-filter').getByRole('radio', { name: 'All' }).click();
+  await page.locator('[data-testid="folder-row"][data-path=":all"]').click();
   await page.locator('[data-card-main]').first().click();
   await expect(page.getByTestId('history-details')).toBeVisible();
   await expect(page.getByTestId('details-open')).toHaveText('Open guide');
@@ -274,7 +276,7 @@ test('History lists the guide with its steps, opens it in the Flow view and filt
 
 test('while a guide is captured nothing else starts; Cancel asks and discards everything', async () => {
   const before = guideFolders().length;
-  await nav('Capture');
+  await nav('Home');
   await page.getByTestId('steps-start').click();
   const pill = await pillPage();
   await hooks((h) => h.runAction('stepsCapture'));

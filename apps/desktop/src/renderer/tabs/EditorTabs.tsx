@@ -5,40 +5,39 @@ import {
   useReducer,
   useRef,
   useState,
-  type CSSProperties,
+  type Dispatch,
+  type ReactNode,
 } from 'react';
-import { Toaster } from 'sonner';
 import { EDITOR_TAB_WARN, type EditorOpenTabEvent } from '../../shared/editor-ipc';
-import { matchEditorAction } from '../../shared/shortcuts';
-import { KeyboardHelp } from '../components/KeyboardHelp';
-import { LiveRegion } from '../components/LiveRegion';
 import { AlertConfirm } from '../components/ui/AlertConfirm';
-import { TooltipProvider } from '../components/ui/Tooltip';
-import { importPicture } from '../editor/import-image';
 import { openFromHistory } from '../editor/reedit';
 import {
   cancelVideoExport,
   listenToVideoExports,
   useExportingVideos,
 } from '../history/video-export-store';
-import { isTyping } from '../lib/is-typing';
 import { notify } from '../lib/notify';
 import { shortPath } from '../lib/short-path';
-import { getSettings, startSettingsSync } from '../settings/store';
 import { EditorView, type EditorShot } from '../views/editor/EditorView';
+import { FlowView } from '../views/flow/FlowView';
 import { VideoEditorView } from '../views/video-editor/VideoEditorView';
-import { TabStrip } from './TabStrip';
 import {
   dirtyTabs,
-  emptyTabs,
   findByKey,
+  homeTabs,
   tabIndexForDigit,
   tabsReducer,
   type Tab,
+  type TabsAction,
   type TabsState,
 } from './tabs';
 
-type TabData = { kind: 'shot'; shot: EditorShot } | { kind: 'video'; historyId: string };
+/** What a tab renders. The pinned Home tab has no data of its own: App draws its section. */
+export type TabData =
+  | { kind: 'home' }
+  | { kind: 'shot'; shot: EditorShot }
+  | { kind: 'video'; historyId: string }
+  | { kind: 'flow'; historyId: string };
 
 /** What the window is asking the user right now (one question at a time). */
 type Ask =
@@ -47,7 +46,7 @@ type Ask =
   | { kind: 'video-leave'; id: string }
   | { kind: 'window' };
 
-/** What the open tabs report back to the window: how to save, how to write pending changes. */
+/** What the open tabs report back: how to save, how to write pending changes. */
 interface TabHost {
   setDirty: (id: string, dirty: boolean) => void;
   setSave: (id: string, save: (() => Promise<boolean>) | null) => void;
@@ -56,7 +55,14 @@ interface TabHost {
 }
 
 const reducer = tabsReducer<TabData>;
-const initial: TabsState<TabData> = emptyTabs;
+const HOME_DATA: TabData = { kind: 'home' };
+
+interface PanelProps {
+  tab: Tab<TabData>;
+  active: boolean;
+  blocked: boolean;
+  host: TabHost;
+}
 
 function ShotTab({ tab, shot, active, blocked, host }: PanelProps & { shot: EditorShot }) {
   const { id } = tab;
@@ -94,13 +100,6 @@ function VideoTab({ tab, historyId, active, blocked, host }: PanelProps & { hist
       registerFlush={registerFlush}
     />
   );
-}
-
-interface PanelProps {
-  tab: Tab<TabData>;
-  active: boolean;
-  blocked: boolean;
-  host: TabHost;
 }
 
 /** The shot of a session (a capture, an opened picture): fetched from main, which owns the original. */
@@ -141,16 +140,32 @@ async function loadStep(event: Extract<EditorOpenTabEvent, { kind: 'step' }>) {
 const discardSession = (sessionId: string): void =>
   void window.framecapt.invoke('shot:discard', { sessionId });
 
+export interface EditorTabs {
+  state: TabsState<TabData>;
+  dispatch: Dispatch<TabsAction<TabData>>;
+  /** Opens (or focuses) a tab for what main resolved (`editor:openTab`). */
+  openTab: (event: EditorOpenTabEvent) => Promise<void>;
+  requestClose: (id: string) => void;
+  /** A question is open: the keyboard belongs to it. */
+  asking: boolean;
+  /** The body of a tab that is an edited item (the pinned tab is drawn by the app). */
+  panel: (tab: Tab<TabData>, active: boolean, blockedByApp: boolean) => ReactNode;
+  /** The confirmation dialogs (save changes, cancel export, quit with unsaved tabs). */
+  dialogs: ReactNode;
+  /** Whether any tab holds unsaved work or an export runs (main asks before quitting). */
+  needsAsk: boolean;
+}
+
 /**
- * The Editor window: a tab strip over one panel per open item. Every tab stays mounted so its
- * undo history, selection, zoom and playhead survive a switch; hidden ones are `inert` and
- * invisible (not `display: none`, so a canvas keeps its size) and a hidden video is paused.
- * Closing an unsaved screenshot, or the window with unsaved tabs, asks first.
+ * The tabs of the main window: the pinned Home tab and one tab per edited item. Every item tab
+ * stays mounted so its undo history, selection, zoom and playhead survive a switch; hidden ones
+ * are `inert` and invisible (the app draws them that way: not `display: none`, so a canvas keeps
+ * its size) and a hidden video is paused. Closing an unsaved screenshot, or quitting with unsaved
+ * tabs, asks first; Ctrl+Tab, Ctrl+W and Alt+1..9 work on the strip.
  */
-export function EditorApp() {
-  const [state, dispatch] = useReducer(reducer, initial);
+export function useEditorTabs(): EditorTabs {
+  const [state, dispatch] = useReducer(reducer, HOME_DATA, homeTabs<TabData>);
   const [ask, setAsk] = useState<Ask | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
   const exporting = useExportingVideos();
   const stateRef = useRef(state);
   const askRef = useRef<Ask | null>(null);
@@ -164,8 +179,6 @@ export function EditorApp() {
   useEffect(() => {
     exportingRef.current = exporting;
   }, [exporting]);
-
-  useEffect(() => startSettingsSync(false), []);
   useEffect(() => listenToVideoExports(), []);
 
   const question = useCallback((next: Ask | null) => {
@@ -177,7 +190,7 @@ export function EditorApp() {
 
   const closeTab = useCallback((id: string) => {
     const tab = stateRef.current.tabs.find((candidate) => candidate.id === id);
-    if (!tab) return;
+    if (!tab || tab.pinned) return;
     if (tab.data.kind === 'shot') discardSession(tab.data.shot.session.id);
     saves.current.delete(id);
     flushes.current.delete(id);
@@ -187,14 +200,20 @@ export function EditorApp() {
   const requestClose = useCallback(
     (id: string) => {
       const tab = stateRef.current.tabs.find((candidate) => candidate.id === id);
-      if (!tab) return;
+      if (!tab || tab.pinned) return;
       dispatch({ type: 'activate', id });
-      if (tab.data.kind === 'shot') {
+      const { data } = tab;
+      if (data.kind === 'shot') {
         if (tab.dirty) question({ kind: 'save', id });
         else closeTab(id);
         return;
       }
-      if (exportingRef.current.includes(tab.data.historyId)) {
+      if (data.kind === 'flow') {
+        closeTab(id);
+        return;
+      }
+      if (data.kind !== 'video') return;
+      if (exportingRef.current.includes(data.historyId)) {
         question({ kind: 'export', id });
         return;
       }
@@ -227,11 +246,13 @@ export function EditorApp() {
     }),
     [],
   );
+
   // --- opening -------------------------------------------------------------------------------
 
   const open = useCallback((key: string, kind: Tab['kind'], title: string, data: TabData) => {
     dispatch({ type: 'open', tab: { id: crypto.randomUUID(), key, kind, title, data } });
-    if (stateRef.current.tabs.length + 1 === EDITOR_TAB_WARN) {
+    // The strip counts Home too: this is the number of open items after this one.
+    if (stateRef.current.tabs.length === EDITOR_TAB_WARN) {
       notify.info(
         `${EDITOR_TAB_WARN} items are open. Close the ones you are done with to keep the editor quick.`,
       );
@@ -263,6 +284,11 @@ export function EditorApp() {
         const key = `video:${event.historyId}`;
         if (!known(key)) {
           open(key, 'video', event.title, { kind: 'video', historyId: event.historyId });
+        }
+      } else if (event.kind === 'flow') {
+        const key = `flow:${event.historyId}`;
+        if (!known(key)) {
+          open(key, 'flow', event.title, { kind: 'flow', historyId: event.historyId });
         }
       } else if (event.kind === 'shot') {
         const key = `shot:${event.historyId}`;
@@ -308,30 +334,13 @@ export function EditorApp() {
     return off;
   }, [openTab]);
 
-  /** Ctrl+O: the Open dialog, then the picture is a tab of its own. */
-  const openImage = useCallback(async () => {
-    const response = await window.framecapt.invoke('shot:openImage');
-    if (!response.ok) {
-      notify.error(response.error);
-      return;
-    }
-    if (!('bytes' in response.data)) return;
-    const result = await importPicture(window.framecapt, new Blob([response.data.bytes]));
-    if (!result.ok) notify.error(result.error);
-    else await openTab({ kind: 'session', sessionId: result.session.id, imported: true });
-  }, [openTab]);
-
   // --- what main knows ---------------------------------------------------------------------
 
   const unsaved = dirtyTabs(state);
   const needsAsk = unsaved.length > 0 || exporting.length > 0;
-  const everOpened = useRef(false);
   useEffect(() => {
-    if (state.tabs.length > 0) everOpened.current = true;
-    // Before the first tab there is nothing to report (and reporting zero would close the window).
-    else if (!everOpened.current) return;
-    void window.framecapt.invoke('editor:setState', { tabs: state.tabs.length, dirty: needsAsk });
-  }, [state.tabs.length, needsAsk]);
+    void window.framecapt.invoke('editor:setState', { dirty: needsAsk });
+  }, [needsAsk]);
 
   // Main asks before the window closes (or the app quits) with unsaved tabs.
   useEffect(
@@ -351,9 +360,10 @@ export function EditorApp() {
         return;
       }
       if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'w') {
+        // Never the window's own "close": it closes the tab, and never the pinned Home tab.
         event.preventDefault();
         const id = stateRef.current.activeId;
-        if (!locked && id) requestCloseRef.current(id);
+        if (!locked) requestCloseRef.current(id);
         return;
       }
       if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
@@ -361,46 +371,11 @@ export function EditorApp() {
         if (index === null) return;
         event.preventDefault();
         if (!locked) dispatch({ type: 'index', index });
-        return;
-      }
-      if (matchEditorAction(event, getSettings().editorShortcuts) === 'openImage') {
-        event.preventDefault();
-        if (!locked) void openImage();
       }
     };
     // Capture phase: the editors' own handlers must not see these keys first.
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [openImage]);
-
-  // `?` or F1 opens the keyboard help (not while typing, not over a dialog).
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.defaultPrevented || isTyping(event.target)) return;
-      if (event.ctrlKey || event.altKey || event.metaKey) return;
-      if (askRef.current !== null || document.querySelector('dialog[open]')) return;
-      if (event.key === '?' || event.key === 'F1') {
-        event.preventDefault();
-        setHelpOpen(true);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  // A file dropped outside a canvas must never navigate the window (a canvas takes its own drop).
-  useEffect(() => {
-    const hasFiles = (event: DragEvent): boolean =>
-      event.dataTransfer?.types.includes('Files') === true;
-    const claim = (event: DragEvent): void => {
-      if (hasFiles(event)) event.preventDefault();
-    };
-    window.addEventListener('dragover', claim);
-    window.addEventListener('drop', claim);
-    return () => {
-      window.removeEventListener('dragover', claim);
-      window.removeEventListener('drop', claim);
-    };
   }, []);
 
   // --- the questions -----------------------------------------------------------------------
@@ -432,61 +407,49 @@ export function EditorApp() {
       void window.framecapt.invoke('editor:resolveClose', { discard });
     });
 
-  const blockedByDialog = ask !== null || helpOpen;
   const askTitle = ask && ask.kind !== 'window' ? titleOf(ask.id) : '';
   const unsavedNames = unsaved.map((tab) => tab.title).join(', ');
 
-  return (
-    <TooltipProvider>
-      <div className="flex h-full flex-col bg-bg">
-        <TabStrip
-          tabs={state.tabs}
-          activeId={state.activeId}
-          onActivate={(id) => dispatch({ type: 'activate', id })}
-          onClose={requestClose}
-          onMove={(id, toIndex) => dispatch({ type: 'move', id, toIndex })}
+  const panel = (tab: Tab<TabData>, active: boolean, blockedByApp: boolean): ReactNode => {
+    const blocked = blockedByApp || ask !== null || !active;
+    const { data } = tab;
+    if (data.kind === 'shot') {
+      return <ShotTab tab={tab} shot={data.shot} active={active} blocked={blocked} host={host} />;
+    }
+    if (data.kind === 'video') {
+      return (
+        <VideoTab
+          tab={tab}
+          historyId={data.historyId}
+          active={active}
+          blocked={blocked}
+          host={host}
         />
-        <main id="main-content" className="relative min-h-0 flex-1 bg-bg">
-          {state.tabs.map((tab) => {
-            const active = tab.id === state.activeId;
-            const blocked = blockedByDialog || !active;
-            return (
-              <section
-                key={tab.id}
-                aria-label={tab.title}
-                data-testid="editor-panel"
-                data-kind={tab.kind}
-                data-active={active}
-                inert={!active}
-                className={active ? 'absolute inset-0' : 'invisible absolute inset-0'}
-              >
-                {tab.data.kind === 'shot' ? (
-                  <ShotTab
-                    tab={tab}
-                    shot={tab.data.shot}
-                    active={active}
-                    blocked={blocked}
-                    host={host}
-                  />
-                ) : (
-                  <VideoTab
-                    tab={tab}
-                    historyId={tab.data.historyId}
-                    active={active}
-                    blocked={blocked}
-                    host={host}
-                  />
-                )}
-              </section>
-            );
-          })}
-          {state.tabs.length === 0 ? (
-            <p className="p-8 text-sm text-fg-muted" data-testid="editor-empty">
-              Opening…
-            </p>
-          ) : null}
-        </main>
-      </div>
+      );
+    }
+    if (data.kind === 'flow') {
+      return (
+        <div className="mx-auto max-w-4xl px-8 py-6">
+          <FlowView
+            historyId={data.historyId}
+            onBack={() => dispatch({ type: 'activate', id: 'home' })}
+            onEditStep={(historyId, index) =>
+              void openTab({
+                kind: 'step',
+                historyId,
+                index,
+                title: `${tab.title} (step ${index + 1})`,
+              })
+            }
+          />
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const dialogs = (
+    <>
       <AlertConfirm
         open={ask?.kind === 'save'}
         title={`Save changes to ${askTitle}?`}
@@ -528,7 +491,7 @@ export function EditorApp() {
       />
       <AlertConfirm
         open={ask?.kind === 'window'}
-        title="Close the editor?"
+        title="Close FrameCapt?"
         description={
           unsaved.length > 0
             ? `These have unsaved changes: ${unsavedNames}. Closing discards them.${exporting.length > 0 ? ' Exports in progress are cancelled.' : ''}`
@@ -539,24 +502,17 @@ export function EditorApp() {
         onConfirm={() => windowAnswer(true)}
         onCancel={() => windowAnswer(false)}
       />
-      <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
-      <LiveRegion />
-      <Toaster
-        position="bottom-left"
-        offset={12}
-        style={{ '--width': '216px' } as CSSProperties}
-        theme="system"
-        toastOptions={{
-          style: {
-            background: 'var(--surface)',
-            color: 'var(--fg)',
-            border: '1px solid var(--line)',
-            borderRadius: '12px',
-            boxShadow: 'var(--shadow-raised)',
-            fontFamily: 'var(--font-sans)',
-          },
-        }}
-      />
-    </TooltipProvider>
+    </>
   );
+
+  return {
+    state,
+    dispatch,
+    openTab,
+    requestClose,
+    asking: ask !== null,
+    panel,
+    dialogs,
+    needsAsk,
+  };
 }

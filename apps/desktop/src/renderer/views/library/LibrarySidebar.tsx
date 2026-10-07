@@ -7,22 +7,28 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent,
   type ReactNode,
 } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   ArrowUpToLine,
   ChevronRight,
+  Clock,
   Folder,
   FolderInput,
   FolderOpen,
   FolderPlus,
+  Image as ImageIcon,
   Library,
+  ListOrdered,
   MapPin,
-  PanelLeftClose,
-  PanelLeftOpen,
   Pencil,
+  Pin,
+  PanelLeftClose,
   Trash2,
+  Video,
+  type LucideIcon,
 } from 'lucide-react';
 import {
   folderNameProblem,
@@ -31,8 +37,8 @@ import {
   type LibraryTree,
 } from '../../../shared/library';
 import { AlertConfirm } from '../../components/ui/AlertConfirm';
-import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/IconButton';
+import { Tooltip } from '../../components/ui/Tooltip';
 import { cn } from '../../lib/cn';
 import {
   createFolder,
@@ -52,34 +58,65 @@ import {
   type FolderNode,
   type FolderSelection,
 } from '../../library/tree';
-import { menuItemClass } from './HistoryCard';
+import {
+  SIDEBAR_DEFAULT,
+  SIDEBAR_MAX,
+  SIDEBAR_MIN,
+  setLibraryPrefs,
+} from '../../library/view-prefs';
+import { menuItemClass } from '../history/HistoryCard';
 
-const COLLAPSED_KEY = 'framecapt.folderPane.collapsed';
-
-function readCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem(COLLAPSED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-function writeCollapsed(value: boolean): void {
-  try {
-    window.localStorage.setItem(COLLAPSED_KEY, value ? '1' : '0');
-  } catch {
-    /* storage is only a convenience */
-  }
+/** How many captures each smart item has (muted, right-aligned). */
+export interface SmartCounts {
+  all: number;
+  recent: number;
+  screenshot: number;
+  recording: number;
+  flow: number;
 }
 
-export interface FolderPaneProps {
+export interface LibrarySidebarProps {
   tree: LibraryTree | null;
+  counts: SmartCounts;
   selection: FolderSelection;
   onSelect: (selection: FolderSelection) => void;
-  includeSubfolders: boolean;
-  onIncludeSubfolders: (value: boolean) => void;
+  /** Width in px (200..360). */
+  width: number;
   /** Called after items were moved by a drop (the list reloads itself). */
   onMoved?: () => void;
 }
+
+const SMART_ITEMS: {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  selection: FolderSelection;
+  count: keyof SmartCounts;
+}[] = [
+  { key: 'all', label: 'All captures', icon: Library, selection: { kind: 'all' }, count: 'all' },
+  { key: 'recent', label: 'Recent', icon: Clock, selection: { kind: 'recent' }, count: 'recent' },
+  {
+    key: 'type:screenshot',
+    label: 'Screenshots',
+    icon: ImageIcon,
+    selection: { kind: 'type', type: 'screenshot' },
+    count: 'screenshot',
+  },
+  {
+    key: 'type:recording',
+    label: 'Recordings',
+    icon: Video,
+    selection: { kind: 'type', type: 'recording' },
+    count: 'recording',
+  },
+  {
+    key: 'type:flow',
+    label: 'Guides',
+    icon: ListOrdered,
+    selection: { kind: 'type', type: 'flow' },
+    count: 'flow',
+  },
+];
 
 interface MenuTarget {
   /** null = the root ("All captures"). */
@@ -88,30 +125,47 @@ interface MenuTarget {
   y: number;
 }
 
-/** Which folders were open, kept while the app runs so leaving History and coming back looks the same. */
+/** Which folders were open, kept while the app runs so hiding the sidebar and coming back looks the same. */
 let rememberedExpanded: ReadonlySet<string> = new Set();
 
 const keyOf = (folder: string): string => `f:${folder}`;
 const ALL_KEY = 'all';
 const OTHER_KEY = 'other';
+const SMART_KEYS = SMART_ITEMS.map((item) => item.key);
+
+/** The key of the row a selection highlights (folders are resolved by the caller). */
+function smartKey(selection: FolderSelection): string | null {
+  switch (selection.kind) {
+    case 'all':
+      return ALL_KEY;
+    case 'recent':
+      return 'recent';
+    case 'type':
+      return `type:${selection.type}`;
+    case 'other':
+      return OTHER_KEY;
+    case 'folder':
+      return null;
+  }
+}
 
 const sameName = (a: string | null, b: string | null): boolean =>
   a !== null && b !== null && a.toLowerCase() === b.toLowerCase();
 
 /**
- * The folder pane of History: "All captures", the tree of real folders (with counts), and "Other
- * locations". An ARIA tree with the usual keys (arrows, Enter, F2 rename, Delete), drop targets for
- * history cards and a context menu per folder. Every change goes through the library channels.
+ * The Library's sidebar: the smart items (All captures, Recent, Screenshots, Recordings, Guides),
+ * the tree of real folders (with counts) and "Other locations". An ARIA tree with the usual keys
+ * (arrows, Enter, F2 rename, Delete), drop targets for captures and a context menu per folder.
+ * Every change goes through the library channels. The width is dragged at its right edge.
  */
-export function FolderPane({
+export function LibrarySidebar({
   tree,
+  counts,
   selection,
   onSelect,
-  includeSubfolders,
-  onIncludeSubfolders,
+  width,
   onMoved,
-}: FolderPaneProps) {
-  const [collapsedPane, setCollapsedPane] = useState(readCollapsed);
+}: LibrarySidebarProps) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => rememberedExpanded);
   useEffect(() => {
     rememberedExpanded = expanded;
@@ -151,7 +205,7 @@ export function FolderPane({
 
   const keys = useMemo(
     () => [
-      ALL_KEY,
+      ...SMART_KEYS,
       ...rows.map((node) => keyOf(node.path)),
       ...((tree?.otherCount ?? 0) > 0 ? [OTHER_KEY] : []),
     ],
@@ -166,14 +220,7 @@ export function FolderPane({
     selection.kind === 'folder'
       ? rows.find((node) => sameName(node.path, selection.path))
       : undefined;
-  const selectedKey =
-    selection.kind === 'all'
-      ? ALL_KEY
-      : selection.kind === 'other'
-        ? OTHER_KEY
-        : selectedNode
-          ? keyOf(selectedNode.path)
-          : '';
+  const selectedKey = smartKey(selection) ?? (selectedNode ? keyOf(selectedNode.path) : '');
   const tabKey = keys.includes(focusKey) ? focusKey : ALL_KEY;
 
   const startCreate = (parent: string | null): void => {
@@ -278,9 +325,12 @@ export function FolderPane({
       case 'Enter':
       case ' ':
         event.preventDefault();
-        if (key === ALL_KEY) onSelect({ kind: 'all' });
-        else if (key === OTHER_KEY) onSelect({ kind: 'other' });
+        if (key === OTHER_KEY) onSelect({ kind: 'other' });
         else if (node) onSelect({ kind: 'folder', path: node.path });
+        else {
+          const smart = SMART_ITEMS.find((item) => item.key === key);
+          if (smart) onSelect(smart.selection);
+        }
         return;
       case 'F2':
         if (node) {
@@ -298,37 +348,15 @@ export function FolderPane({
         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
           event.preventDefault();
           const rect = target.getBoundingClientRect();
+          if (key !== ALL_KEY && !node) return;
           setMenu({
-            folder: key === ALL_KEY ? null : (node?.path ?? null),
+            folder: node?.path ?? null,
             x: rect.left + 24,
             y: rect.bottom - 8,
           });
         }
     }
   };
-
-  if (collapsedPane) {
-    return (
-      <div className="shrink-0 pt-1" data-testid="folder-pane-collapsed">
-        <IconButton
-          size="sm"
-          variant="secondary"
-          aria-label="Show folders"
-          data-testid="folder-pane-expand"
-          icon={<PanelLeftOpen className="size-4" />}
-          onClick={() => {
-            setCollapsedPane(false);
-            writeCollapsed(false);
-          }}
-        />
-      </div>
-    );
-  }
-
-  const total =
-    (tree?.rootCount ?? 0) +
-    (tree?.otherCount ?? 0) +
-    (tree?.folders.reduce((sum, info) => sum + info.count, 0) ?? 0);
 
   const siblingsOf = (node: FolderNode): { size: number; position: number } => {
     const parent = node.path.includes('/') ? node.path.slice(0, node.path.lastIndexOf('/')) : null;
@@ -349,34 +377,61 @@ export function FolderPane({
     </li>
   );
 
+  /** Drags the right edge: the sidebar's width, 200 to 360 px. */
+  const startResize = (event: PointerEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = width;
+    const move = (next: globalThis.PointerEvent): void =>
+      setLibraryPrefs({ sidebarWidth: startWidth + next.clientX - startX });
+    const stop = (): void => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', stop);
+      handle.removeEventListener('pointercancel', stop);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', stop);
+    handle.addEventListener('pointercancel', stop);
+  };
+  const onResizeKey = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const step = event.shiftKey ? 48 : 16;
+    if (event.key === 'ArrowLeft') setLibraryPrefs({ sidebarWidth: width - step });
+    else if (event.key === 'ArrowRight') setLibraryPrefs({ sidebarWidth: width + step });
+    else if (event.key === 'Home') setLibraryPrefs({ sidebarWidth: SIDEBAR_MIN });
+    else if (event.key === 'End') setLibraryPrefs({ sidebarWidth: SIDEBAR_MAX });
+    else return;
+    event.preventDefault();
+  };
+
   return (
     <nav
-      aria-label="Folders"
+      aria-label="Library"
       data-testid="folder-pane"
-      className="sticky top-0 flex max-h-[calc(100vh-7rem)] w-60 shrink-0 flex-col self-start"
+      style={{ width }}
+      className="relative flex shrink-0 flex-col border-r border-line bg-pane"
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-[13px] font-semibold tracking-wide text-fg-muted uppercase">Folders</h2>
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            data-testid="folder-new"
-            icon={<FolderPlus className="size-4" aria-hidden="true" />}
-            onClick={() => startCreate(selection.kind === 'folder' ? selection.path : null)}
-          >
-            New folder
-          </Button>
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2 pr-2 pl-4">
+        <h2 className="text-[13px] font-semibold text-fg">Library</h2>
+        <div className="flex items-center gap-0.5">
           <IconButton
             size="sm"
             variant="ghost"
-            aria-label="Hide folders"
+            aria-label="New folder"
+            data-testid="folder-new"
+            className="size-7"
+            icon={<FolderPlus className="size-4" />}
+            onClick={() => startCreate(selection.kind === 'folder' ? selection.path : null)}
+          />
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label="Hide sidebar (Ctrl+B)"
             data-testid="folder-pane-collapse"
+            className="size-7"
             icon={<PanelLeftClose className="size-4" />}
-            onClick={() => {
-              setCollapsedPane(true);
-              writeCollapsed(true);
-            }}
+            onClick={() => setLibraryPrefs({ sidebarCollapsed: true })}
           />
         </div>
       </div>
@@ -386,24 +441,45 @@ export function FolderPane({
         aria-label="Capture folders"
         data-testid="folder-tree"
         onKeyDown={onTreeKeyDown}
-        className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-card"
+        className="min-h-0 flex-1 overflow-y-auto px-2 pb-3"
       >
-        <Row
-          rowKey={ALL_KEY}
-          level={1}
-          label="All captures"
-          icon={<Library className="size-4 shrink-0 text-fg-subtle" aria-hidden="true" />}
-          count={total}
-          selected={selectedKey === ALL_KEY}
-          dropping={dragOver === ALL_KEY}
-          tabStop={tabKey === ALL_KEY}
-          title="All captures. Drop items here to move them out of their folder."
-          onFocus={() => setFocusKey(ALL_KEY)}
-          onClick={() => onSelect({ kind: 'all' })}
-          onContextMenu={(event) => openMenuFor(null, event)}
-          {...dropProps(ALL_KEY, null)}
-        />
+        {SMART_ITEMS.map((item) => (
+          <Row
+            key={item.key}
+            rowKey={item.key}
+            level={1}
+            label={item.label}
+            icon={<item.icon className="size-4 shrink-0 text-fg-subtle" aria-hidden="true" />}
+            count={counts[item.count]}
+            selected={selectedKey === item.key}
+            dropping={dragOver === item.key}
+            tabStop={tabKey === item.key}
+            title={
+              item.key === ALL_KEY
+                ? 'All captures. Drop items here to move them out of their folder.'
+                : item.label
+            }
+            onFocus={() => setFocusKey(item.key)}
+            onClick={() => onSelect(item.selection)}
+            {...(item.key === ALL_KEY
+              ? {
+                  onContextMenu: (event: MouseEvent<HTMLElement>) => openMenuFor(null, event),
+                  ...dropProps(ALL_KEY, null),
+                }
+              : {})}
+          />
+        ))}
+        <li role="presentation" className="px-2 pt-4 pb-1">
+          <span className="text-[11px] font-semibold tracking-wider text-fg-subtle uppercase">
+            Folders
+          </span>
+        </li>
         {creating?.parent === null ? renderCreateRow(null, 0) : null}
+        {rows.length === 0 && creating === null ? (
+          <li role="presentation" className="px-2 py-1 text-xs text-fg-subtle">
+            No folders yet. Use + to make one.
+          </li>
+        ) : null}
         {rows.map((node) => {
           const key = keyOf(node.path);
           const open = expanded.has(node.path);
@@ -462,18 +538,20 @@ export function FolderPane({
           />
         ) : null}
       </ul>
-      {selection.kind === 'folder' ? (
-        <label className="mt-2 flex items-center gap-2 px-1 text-[13px] text-fg-muted">
-          <input
-            type="checkbox"
-            data-testid="folder-include-sub"
-            checked={includeSubfolders}
-            onChange={(event) => onIncludeSubfolders(event.target.checked)}
-            className="size-4 cursor-pointer accent-[var(--color-accent-solid)]"
-          />
-          Include subfolders
-        </label>
-      ) : null}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the sidebar"
+        aria-valuemin={SIDEBAR_MIN}
+        aria-valuemax={SIDEBAR_MAX}
+        aria-valuenow={width}
+        tabIndex={0}
+        data-testid="sidebar-resize"
+        onPointerDown={startResize}
+        onKeyDown={onResizeKey}
+        onDoubleClick={() => setLibraryPrefs({ sidebarWidth: SIDEBAR_DEFAULT })}
+        className="absolute inset-y-0 -right-[3px] z-10 w-1.5 cursor-col-resize touch-none transition-colors duration-150 hover:bg-accent-solid/30 focus-visible:bg-accent-solid/50"
+      />
 
       <DropdownMenu.Root
         modal={false}
@@ -598,15 +676,15 @@ function Row(props: RowProps) {
       onDragOver={props.onDragOver}
       onDragLeave={props.onDragLeave}
       onDrop={props.onDrop}
-      style={{ paddingLeft: 6 + (level - 1) * 16 }}
+      style={{ paddingLeft: 4 + (level - 1) * 16 }}
       className={cn(
-        'group/row flex cursor-pointer items-center gap-1.5 rounded-lg py-1.5 pr-2 text-sm outline-none',
-        'focus-visible:ring-2 focus-visible:ring-accent-solid/60',
-        selected ? 'bg-accent-soft text-accent-fg' : 'text-fg hover:bg-surface-3',
-        props.dropping && 'bg-accent-soft ring-2 ring-accent-solid',
+        'group/row flex h-7 cursor-pointer items-center gap-1.5 rounded-md pr-2 text-[13px] outline-none',
+        'transition-colors duration-100 focus-visible:ring-2 focus-visible:ring-accent-solid/60 focus-visible:ring-inset',
+        selected ? 'bg-accent-soft font-medium text-accent-fg' : 'text-fg hover:bg-surface-3',
+        props.dropping && 'bg-accent-soft ring-2 ring-accent-solid ring-inset',
       )}
     >
-      <span className="flex size-5 shrink-0 items-center justify-center">
+      <span className="flex size-4 shrink-0 items-center justify-center">
         {props.expandable ? (
           <button
             type="button"
@@ -617,11 +695,11 @@ function Row(props: RowProps) {
               event.stopPropagation();
               props.onToggle?.();
             }}
-            className="flex size-5 items-center justify-center rounded text-fg-subtle hover:bg-surface-3"
+            className="flex size-4 items-center justify-center rounded text-fg-subtle hover:bg-surface-3"
           >
             <ChevronRight
               className={cn(
-                'size-3.5 transition-transform duration-150 motion-reduce:transition-none',
+                'size-3 transition-transform duration-150 motion-reduce:transition-none',
                 props.expanded && 'rotate-90',
               )}
             />
@@ -644,17 +722,24 @@ function Row(props: RowProps) {
         </span>
       )}
       {props.isSaveFolder ? (
-        <span
-          data-testid="folder-save-badge"
-          title="New captures are saved here"
-          className="inline-flex shrink-0 items-center rounded-md bg-accent-solid p-0.5 text-white"
-        >
-          <MapPin className="size-3" aria-hidden="true" />
-          <span className="sr-only">Save location</span>
-        </span>
+        <Tooltip content="New captures are saved here" side="right">
+          <span
+            data-testid="folder-save-badge"
+            className="inline-flex shrink-0 items-center text-accent-fg"
+          >
+            <Pin className="size-3 fill-current" aria-hidden="true" />
+            <span className="sr-only">Save location</span>
+          </span>
+        </Tooltip>
       ) : null}
       {!props.renaming ? (
-        <span data-testid="folder-count" className="shrink-0 text-xs text-fg-subtle tabular-nums">
+        <span
+          data-testid="folder-count"
+          className={cn(
+            'shrink-0 text-[11px] tabular-nums',
+            selected ? 'text-accent-fg/80' : 'text-fg-subtle',
+          )}
+        >
           {props.count}
         </span>
       ) : null}
@@ -696,7 +781,7 @@ function NameField({
   return (
     <span
       className={cn('flex min-w-0 flex-col', inline ? 'flex-1' : 'py-1 pr-2')}
-      style={inline ? undefined : { paddingLeft: 6 + depth * 16 + 26 }}
+      style={inline ? undefined : { paddingLeft: 4 + depth * 16 + 20 }}
       onClick={(event) => event.stopPropagation()}
     >
       <input

@@ -25,7 +25,7 @@ const SECONDS = 6;
 let dir: string;
 let clip: string;
 let app: ElectronApplication;
-/** The main window; `page` is the Editor window of the latest openEditor(). */
+/** The main window; `page` is the main window with the tab of the latest openEditor(). */
 let main: Page;
 let page: Page;
 
@@ -55,7 +55,7 @@ async function openEditor(fileName = 'clip.webm'): Promise<void> {
   if ((await main.getByTestId('history-details').count()) === 0) {
     await main
       .getByRole('navigation', { name: 'Primary' })
-      .getByRole('button', { name: 'History' })
+      .getByRole('button', { name: 'Library' })
       .click();
     await main
       .getByTestId('history-item')

@@ -248,19 +248,19 @@ test.describe('title bar and command center', () => {
     await expect(page.getByTestId('shot-region')).toBeEnabled();
   });
 
-  test('"history" navigates, and the command shows up as recent next time', async () => {
+  test('"library" navigates, and the command shows up as recent next time', async () => {
     await openByClick();
-    await input().fill('history');
+    await input().fill('library');
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('history-view')).toBeVisible();
     await expect(
-      page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'History' }),
+      page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Library' }),
     ).toHaveAttribute('aria-current', 'page');
 
     await openByClick();
     const first = page.getByTestId('command-group-Recent');
     await expect(first).toBeVisible();
-    await expect(first.getByTestId('command-nav.history')).toBeVisible();
+    await expect(first.getByTestId('command-nav.library')).toBeVisible();
     // Recent is the first group of the list.
     await expect(page.locator('[data-testid^="command-group-"]').first()).toHaveAttribute(
       'data-testid',
@@ -323,7 +323,7 @@ test.describe('title bar and command center', () => {
     await page.keyboard.press('ArrowRight');
     await expect(popup).toHaveAttribute('data-menu', 'view');
     await page.keyboard.press('ArrowDown');
-    await expect(page.getByTestId('menu-item-nav.history')).toBeFocused();
+    await expect(page.getByTestId('menu-item-nav.library')).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(popup).toBeHidden();
     await expect(page.getByTestId('history-view')).toBeVisible();
@@ -399,7 +399,7 @@ test.describe('title bar and command center', () => {
     await expect(search).toHaveAttribute('aria-label', 'Search commands and captures');
     await expect(search).not.toContainText('Search commands');
     await page.getByTestId('menubar-all').click();
-    await expect(page.getByTestId('menu-item-nav.history')).toBeVisible();
+    await expect(page.getByTestId('menu-item-nav.library')).toBeVisible();
     await page.keyboard.press('Escape');
     await win.evaluate((w) => {
       w.setMinimumSize(860, 560);

@@ -50,10 +50,11 @@ describe('library tree (renderer)', () => {
   });
 
   it('filters items by selection, with and without subfolders', () => {
-    const inAcme = { folder: 'Clients/Acme' };
-    const inBugs = { folder: 'Clients/Acme/Bugs' };
-    const atRoot = {};
-    const elsewhere = { outside: true };
+    const base = { type: 'screenshot', createdAt: 0 } as const;
+    const inAcme = { ...base, folder: 'Clients/Acme' };
+    const inBugs = { ...base, folder: 'Clients/Acme/Bugs' };
+    const atRoot = { ...base };
+    const elsewhere = { ...base, outside: true };
     const acme: FolderSelection = { kind: 'folder', path: 'clients/acme' };
     expect(selectionMatches(inBugs, acme, true)).toBe(true);
     expect(selectionMatches(inBugs, acme, false)).toBe(false);
@@ -62,5 +63,16 @@ describe('library tree (renderer)', () => {
     expect(selectionMatches(elsewhere, { kind: 'other' }, true)).toBe(true);
     expect(selectionMatches(atRoot, { kind: 'other' }, true)).toBe(false);
     expect(selectionMatches(elsewhere, { kind: 'all' }, true)).toBe(true);
+  });
+
+  it('filters by kind and by the last week', () => {
+    const day = 86_400_000;
+    const now = 100 * day;
+    const fresh = { type: 'recording', createdAt: now - 2 * day } as const;
+    const old = { type: 'screenshot', createdAt: now - 30 * day } as const;
+    expect(selectionMatches(fresh, { kind: 'recent' }, true, now)).toBe(true);
+    expect(selectionMatches(old, { kind: 'recent' }, true, now)).toBe(false);
+    expect(selectionMatches(fresh, { kind: 'type', type: 'recording' }, true, now)).toBe(true);
+    expect(selectionMatches(old, { kind: 'type', type: 'recording' }, true, now)).toBe(false);
   });
 });

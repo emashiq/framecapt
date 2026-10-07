@@ -64,10 +64,10 @@ export function isNetworkRequestAllowed(url: string, config: AppOriginConfig): b
 const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write', 'fullscreen']);
 
 /**
- * Windows whose pages may go fullscreen (the History video player's fullscreen button). Add the
- * editor role here when it exists; the capture overlays, toolbar and camera never need it.
+ * Windows whose pages may go fullscreen (the Library's video player button; the editors are tabs of
+ * the main window). The capture overlays, toolbar and camera never need it.
  */
-const FULLSCREEN_ROLES: readonly Role[] = ['main', 'editor'];
+const FULLSCREEN_ROLES: readonly Role[] = ['main'];
 
 /** Windows that may ask for the camera (getUserMedia video): the recorder and the camera bubble. */
 const CAMERA_REQUEST_ROLES: readonly Role[] = ['recorder', 'camera'];

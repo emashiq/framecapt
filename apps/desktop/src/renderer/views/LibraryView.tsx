@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { announce, notify } from '../lib/notify';
-import { Camera, Clock, FolderOpen, FolderSearch, Search, SearchX, Video, X } from 'lucide-react';
-import type { HistoryItemView, HistoryType } from '../../shared/history-ipc';
+import { Camera, Clock, FolderOpen, FolderSearch, MapPin, SearchX, Video } from 'lucide-react';
+import type { HistoryItemView } from '../../shared/history-ipc';
 import { AlertConfirm } from '../components/ui/AlertConfirm';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
-import { Segmented } from '../components/ui/Segmented';
 import {
   cancelBulk,
   dismissBulkSummary,
@@ -15,11 +14,17 @@ import {
 } from '../history/bulk-store';
 import { useExportCapabilities } from '../history/use-export-capabilities';
 import { useHistory } from '../history/use-history';
-import { moveItemsTo } from '../library/actions';
+import { moveItemsTo, setCaptureFolder } from '../library/actions';
 import { startItemsDrag } from '../library/dnd';
 import { FolderPickerDialog } from '../library/FolderPickerDialog';
-import { ALL_SELECTION, selectionMatches, type FolderSelection } from '../library/tree';
+import {
+  ALL_SELECTION,
+  RECENT_DAYS,
+  selectionMatches,
+  type FolderSelection,
+} from '../library/tree';
 import { useLibrary } from '../library/use-library';
+import { setLibraryPrefs, useLibraryPrefs, type LibrarySort } from '../library/view-prefs';
 import { recordOptionsFromSettings } from '../../shared/settings';
 import { getSettings } from '../settings/store';
 import {
@@ -44,46 +49,64 @@ import {
   type Selection,
 } from './history/selection';
 import { SelectionBar } from './history/SelectionBar';
-import { FolderPane } from './history/FolderPane';
 import { HistoryCard } from './history/HistoryCard';
 import { HistoryDetails } from './history/HistoryDetails';
 import { useNow } from './history/use-now';
+import { LibraryHeader } from './library/LibraryHeader';
+import { LibraryList } from './library/LibraryList';
+import { LibrarySidebar, type SmartCounts } from './library/LibrarySidebar';
 
-type Filter = 'all' | HistoryType;
+const SCOPE_NOUN = { screenshot: 'screenshots', recording: 'recordings', flow: 'guides' } as const;
 
-const FILTERS = [
-  { value: 'all', label: 'All' },
-  { value: 'screenshot', label: 'Screenshots' },
-  { value: 'recording', label: 'Recordings' },
-  { value: 'flow', label: 'Guides' },
-] as const;
+function sorted(items: HistoryItemView[], sort: LibrarySort): HistoryItemView[] {
+  switch (sort) {
+    case 'newest':
+      return items;
+    case 'oldest':
+      return [...items].reverse();
+    case 'name':
+      return [...items].sort((a, b) =>
+        a.fileName.localeCompare(b.fileName, undefined, { numeric: true }),
+      );
+    case 'size':
+      return [...items].sort((a, b) => b.sizeBytes - a.sizeBytes);
+  }
+}
 
-export interface HistoryViewProps {
-  /** An item to open right away (chosen in the Recent captures strip). */
+export interface LibraryViewProps {
+  /** The Library is on screen (its pinned tab is showing): Escape and the like only count then. */
+  active: boolean;
+  /** What the sidebar has selected (it lives in the app, so the Guides button can set it). */
+  scope: FolderSelection;
+  onScopeChange: (scope: FolderSelection) => void;
+  /** An item to open right away (chosen in Recent captures). */
   focusId?: string | null;
   onFocusConsumed?: () => void;
   /** Opens a screenshot of history in the editor again. */
   onEditItem?: (id: string) => void;
   /** Opens a recording of history in the video editor. */
   onEditVideo?: (id: string) => void;
-  /** Opens a step guide in the Flow view. */
+  /** Opens a step guide. */
   onOpenFlow?: (id: string) => void;
 }
 
 /**
- * Everything FrameCapt captured, newest first: filter, search, a keyboard-navigable grid and a
- * details view with a preview and every action. Entries come from main by id; moved or deleted
- * files stay listed in a calm "File moved or deleted" state until the user re-links or removes
- * them. Removing an entry never touches its file; deleting a file is a separate confirmed action.
+ * Everything FrameCapt captured, like a file manager: a sidebar (smart items and the tree of real
+ * folders), a header (breadcrumb, search, sort, grid or list) and the captures. Entries come from
+ * main by id; moved or deleted files stay listed in a calm "File moved or deleted" state until the
+ * user re-links or removes them. Removing an entry never touches its file; deleting a file is a
+ * separate confirmed action.
  */
-export function HistoryView({
+export function LibraryView({
+  active,
+  scope,
+  onScopeChange,
   focusId = null,
   onFocusConsumed,
   onEditItem,
   onEditVideo,
   onOpenFlow,
-}: HistoryViewProps) {
-  const [filter, setFilter] = useState<Filter>('all');
+}: LibraryViewProps) {
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(focusId);
@@ -93,9 +116,8 @@ export function HistoryView({
   const [rawSelection, setRawSelection] = useState<Selection>(EMPTY_SELECTION);
   const [menu, setMenu] = useState<ContextTarget | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string[] | null>(null);
-  const [folderSel, setFolderSel] = useState<FolderSelection>(ALL_SELECTION);
-  const [includeSub, setIncludeSub] = useState(true);
   const [moveIds, setMoveIds] = useState<string[] | null>(null);
+  const prefs = useLibraryPrefs();
   const { tree } = useLibrary();
   // A selected folder that no longer exists (deleted, or renamed elsewhere) falls back to All captures.
   const [seenTree, setSeenTree] = useState(tree);
@@ -103,10 +125,10 @@ export function HistoryView({
     setSeenTree(tree);
     if (
       tree &&
-      folderSel.kind === 'folder' &&
-      !tree.folders.some((info) => info.path.toLowerCase() === folderSel.path.toLowerCase())
+      scope.kind === 'folder' &&
+      !tree.folders.some((info) => info.path.toLowerCase() === scope.path.toLowerCase())
     ) {
-      setFolderSel(ALL_SELECTION);
+      onScopeChange(ALL_SELECTION);
     }
   }
   const bulk = useBulkState();
@@ -117,28 +139,36 @@ export function HistoryView({
   const now = useNow();
   const caps = useExportCapabilities();
 
-  // While one item is open the whole list is loaded, so "converted from" can find its original.
-  const list = useHistory(
-    selectedId
-      ? {}
-      : {
-          ...(filter !== 'all' && { filter }),
-          ...(query && { query }),
-        },
-  );
-  const { items: listed, total, loaded, failed, reload } = list;
-  // The folder pane filters the list here; an open item needs the whole list (its original may be elsewhere).
-  const folderFiltered = folderSel.kind !== 'all' && !selectedId;
-  const items = useMemo(
+  // The whole list feeds the counts, the details view (its original may be elsewhere) and every
+  // scope; a search asks main for the matching ones.
+  const everything = useHistory({});
+  const searched = useHistory(query ? { query } : { limit: 1 });
+  const { loaded, failed, total } = everything;
+  const reload = everything.reload;
+  const listed = query && !selectedId ? searched.items : everything.items;
+
+  const counts = useMemo<SmartCounts>(() => {
+    const since = now - RECENT_DAYS * 86_400_000;
+    const tally: SmartCounts = { all: 0, recent: 0, screenshot: 0, recording: 0, flow: 0 };
+    for (const item of everything.items) {
+      tally.all += 1;
+      if (item.createdAt >= since) tally.recent += 1;
+      tally[item.type] += 1;
+    }
+    return tally;
+  }, [everything.items, now]);
+
+  const scoped = useMemo(
     () =>
-      folderFiltered
-        ? listed.filter((item) => selectionMatches(item, folderSel, includeSub))
-        : listed,
-    [listed, folderFiltered, folderSel, includeSub],
+      scope.kind === 'all'
+        ? listed
+        : listed.filter((item) => selectionMatches(item, scope, prefs.includeSubfolders, now)),
+    [listed, scope, prefs.includeSubfolders, now],
   );
+  const items = useMemo(() => sorted(scoped, prefs.sort), [scoped, prefs.sort]);
   const order = useMemo(() => items.map((item) => item.id), [items]);
   // Cards that are no longer listed (removed, filtered out) leave the selection, so a bulk action
-  // can only ever touch what the grid shows.
+  // can only ever touch what the view shows.
   const selection = loaded && !selectedId ? prune(rawSelection, order) : rawSelection;
   if (selection !== rawSelection) setRawSelection(selection);
   const selectedCount = selection.ids.size;
@@ -159,7 +189,7 @@ export function HistoryView({
     if (focusId) onFocusConsumed?.();
   }, [focusId, onFocusConsumed]);
 
-  const selected = selectedId ? items.find((item) => item.id === selectedId) : undefined;
+  const selected = selectedId ? everything.items.find((item) => item.id === selectedId) : undefined;
   // An item that vanished (removed, undone elsewhere) closes the details view.
   if (selectedId && loaded && !selected) setSelectedId(null);
 
@@ -204,13 +234,12 @@ export function HistoryView({
   }, []);
   const saveCopies = useCallback((ids: string[]) => void startBulkExport(ids), []);
   const nameOf = useCallback(
-    (id: string) => items.find((item) => item.id === id)?.fileName ?? 'Item',
-    [items],
+    (id: string) => everything.items.find((item) => item.id === id)?.fileName ?? 'Item',
+    [everything.items],
   );
 
   const mp4Available = caps?.mp4Available ?? false;
   const missingCount = items.filter((item) => !item.exists).length;
-  const filtering = filter !== 'all' || query !== '' || folderFiltered;
 
   const onGridKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
     const target = event.target as HTMLElement;
@@ -295,7 +324,7 @@ export function HistoryView({
 
   // Escape clears the selection from anywhere in the view (menus and dialogs take it first).
   useEffect(() => {
-    if (selectedCount === 0) return;
+    if (selectedCount === 0 || !active) return;
     const onKey = (event: globalThis.KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       if (document.querySelector('dialog[open], [role="menu"], [role="alertdialog"]')) return;
@@ -303,7 +332,7 @@ export function HistoryView({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [selectedCount, clearSelection]);
+  }, [selectedCount, clearSelection, active]);
   const onGridKeyUp = (event: KeyboardEvent<HTMLUListElement>): void => {
     // The key-up of Ctrl+Space would click the focused card (open it): it only selects.
     if ((event.ctrlKey || event.metaKey) && event.key === ' ') event.preventDefault();
@@ -371,19 +400,25 @@ export function HistoryView({
   if (selected) {
     return (
       <>
-        <HistoryDetails
-          item={selected}
-          original={
-            selected.derivedFrom ? items.find((i) => i.id === selected.derivedFrom) : undefined
-          }
-          now={now}
-          actions={actions}
-          onBack={() => setSelectedId(null)}
-          onSelect={select}
-          onAskDelete={setConfirmDelete}
-          onEdit={onEdit}
-          onAskDeleteProject={setConfirmProject}
-        />
+        <div className="h-full overflow-y-auto">
+          <div className="view-in mx-auto max-w-6xl px-8 py-7">
+            <HistoryDetails
+              item={selected}
+              original={
+                selected.derivedFrom
+                  ? everything.items.find((i) => i.id === selected.derivedFrom)
+                  : undefined
+              }
+              now={now}
+              actions={actions}
+              onBack={() => setSelectedId(null)}
+              onSelect={select}
+              onAskDelete={setConfirmDelete}
+              onEdit={onEdit}
+              onAskDeleteProject={setConfirmProject}
+            />
+          </div>
+        </div>
         {confirmDialog}
         {projectDialog}
         <SaveAsHost />
@@ -405,226 +440,246 @@ export function HistoryView({
       }
     });
   };
+  const clearMissing = (): void => {
+    void window.framecapt.invoke('history:clearMissing').then((response) => {
+      if (!response.ok) notify.error(response.error);
+      else {
+        notify.info(
+          `Removed ${response.data.removed} missing ${response.data.removed === 1 ? 'item' : 'items'} from history`,
+        );
+        reload();
+      }
+    });
+  };
 
   const dragIds = (item: HistoryItemView): string[] =>
     selection.ids.has(item.id) && selection.ids.size > 1 ? [...selection.ids] : [item.id];
   const activeId = tabStopId && items.some((i) => i.id === tabStopId) ? tabStopId : items[0]?.id;
 
+  const countText = !loaded
+    ? ''
+    : total === 0
+      ? ''
+      : query
+        ? `${items.length} of ${total} ${total === 1 ? 'item' : 'items'}`
+        : `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+
+  const folderPath = scope.kind === 'folder' ? scope.path : null;
+  const isSaveFolder =
+    folderPath !== null && tree?.captureFolder?.toLowerCase() === folderPath.toLowerCase();
+  const emptyScope =
+    scope.kind === 'type'
+      ? `No ${SCOPE_NOUN[scope.type]} yet`
+      : scope.kind === 'recent'
+        ? 'Nothing from the last week'
+        : 'Nothing here yet';
+
   return (
-    <div data-testid="history-view" className="flex items-start gap-5">
-      <FolderPane
-        tree={tree}
-        selection={folderSel}
-        onSelect={setFolderSel}
-        includeSubfolders={includeSub}
-        onIncludeSubfolders={setIncludeSub}
-        onMoved={clearSelection}
-      />
-      <div className="min-w-0 flex-1" data-testid="history-main">
-        <header className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-fg">History</h1>
-            <p
-              className="mt-1 text-[15px] text-fg-muted"
-              data-testid="history-count"
-              aria-live="polite"
-            >
-              {!loaded
-                ? ' '
-                : total === 0
-                  ? 'Everything you capture is listed here.'
-                  : filtering
-                    ? `${items.length} of ${total} ${total === 1 ? 'item' : 'items'}`
-                    : `${total} ${total === 1 ? 'item' : 'items'}`}
-            </p>
-          </div>
-          {total > 0 ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <Segmented
-                label="Filter by type"
-                value={filter}
-                options={FILTERS}
-                onChange={setFilter}
-                data-testid="history-filter"
+    <div data-testid="history-view" className="flex h-full min-h-0">
+      {prefs.sidebarCollapsed ? null : (
+        <LibrarySidebar
+          tree={tree}
+          counts={counts}
+          selection={scope}
+          onSelect={onScopeChange}
+          width={prefs.sidebarWidth}
+          onMoved={clearSelection}
+        />
+      )}
+      <div className="flex min-w-0 flex-1 flex-col" data-testid="history-main">
+        <LibraryHeader
+          scope={scope}
+          onScope={onScopeChange}
+          sidebarHidden={prefs.sidebarCollapsed}
+          onShowSidebar={() => setLibraryPrefs({ sidebarCollapsed: false })}
+          countText={countText}
+          showControls={total > 0}
+          query={queryInput}
+          onQuery={setQueryInput}
+          sort={prefs.sort}
+          onSort={(sort) => setLibraryPrefs({ sort })}
+          view={prefs.view}
+          onView={(view) => setLibraryPrefs({ view })}
+          includeSubfolders={prefs.includeSubfolders}
+          onIncludeSubfolders={(value) => setLibraryPrefs({ includeSubfolders: value })}
+          onFindExisting={findExisting}
+          missingCount={missingCount}
+          onClearMissing={clearMissing}
+        />
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {selectedCount > 0 ? (
+            <div className="sticky top-0 z-10 px-5 pt-4">
+              <SelectionBar
+                count={selectedCount}
+                listed={items.length}
+                bulk={bulk}
+                onSaveCopies={() => saveCopies([...selection.ids])}
+                onRemove={() => setConfirmRemove([...selection.ids])}
+                onMoveTo={() => setMoveIds([...selection.ids])}
+                onSelectAll={() => setRawSelection(selectAll(order))}
+                onClear={clearSelection}
+                onCancelBulk={() => void cancelBulk()}
               />
-              <label className="relative block">
-                <span className="sr-only">Search history</span>
-                <Search
-                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-fg-subtle"
-                  aria-hidden="true"
-                />
-                <input
-                  type="search"
-                  data-testid="history-search"
-                  value={queryInput}
-                  onChange={(event) => setQueryInput(event.target.value)}
-                  placeholder="Search name, date or type"
-                  className="selectable h-9 w-60 rounded-lg border border-control bg-surface pr-8 pl-8 text-[13px] text-fg shadow-card placeholder:text-fg-subtle focus-visible:border-accent [&::-webkit-search-cancel-button]:hidden"
-                />
-                {queryInput ? (
-                  <button
-                    type="button"
-                    aria-label="Clear search"
-                    onClick={() => setQueryInput('')}
-                    className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-3 hover:text-fg"
-                  >
-                    <X className="size-3.5" aria-hidden="true" />
-                  </button>
-                ) : null}
-              </label>
-              <Button
-                size="sm"
-                variant="ghost"
-                data-testid="history-find-existing"
-                icon={<FolderSearch className="size-4" aria-hidden="true" />}
-                onClick={findExisting}
-              >
-                Find existing captures
-              </Button>
-              {missingCount > 0 ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="history-clear-missing"
-                  onClick={() =>
-                    void window.framecapt.invoke('history:clearMissing').then((response) => {
-                      if (!response.ok) notify.error(response.error);
-                      else {
-                        notify.info(
-                          `Removed ${response.data.removed} missing ${response.data.removed === 1 ? 'item' : 'items'} from history`,
-                        );
-                        reload();
-                      }
-                    })
-                  }
-                >
-                  Clear {missingCount} missing
-                </Button>
-              ) : null}
             </div>
           ) : null}
-        </header>
 
-        {selectedCount > 0 ? (
-          <SelectionBar
-            count={selectedCount}
-            listed={items.length}
-            bulk={bulk}
-            onSaveCopies={() => saveCopies([...selection.ids])}
-            onRemove={() => setConfirmRemove([...selection.ids])}
-            onMoveTo={() => setMoveIds([...selection.ids])}
-            onSelectAll={() => setRawSelection(selectAll(order))}
-            onClear={clearSelection}
-            onCancelBulk={() => void cancelBulk()}
-          />
-        ) : null}
-
-        {loaded && failed ? (
-          <EmptyState
-            icon={<SearchX className="size-6" />}
-            title="History could not be loaded"
-            description="Something went wrong while reading your history. Your files are safe. Try again, and if it keeps happening open Settings, Advanced to see the log."
-            action={
-              <Button variant="primary" data-testid="history-retry" onClick={reload}>
-                Try again
-              </Button>
-            }
-          />
-        ) : loaded && total === 0 ? (
-          <EmptyState
-            icon={<Clock className="size-6" />}
-            title="Your captures will appear here"
-            description="Take a screenshot or record your screen. Everything you save is listed here so you can find it again, copy it or open its folder."
-            action={
-              <div className="flex flex-wrap justify-center gap-2.5">
-                <Button
-                  variant="primary"
-                  data-testid="history-empty-shot"
-                  icon={<Camera className="size-4" aria-hidden="true" />}
-                  onClick={startScreenshot}
-                >
-                  Take a screenshot
+          {loaded && failed ? (
+            <EmptyState
+              icon={<SearchX className="size-6" />}
+              title="History could not be loaded"
+              description="Something went wrong while reading your history. Your files are safe. Try again, and if it keeps happening open Settings, Advanced to see the log."
+              action={
+                <Button variant="primary" data-testid="history-retry" onClick={reload}>
+                  Try again
                 </Button>
+              }
+            />
+          ) : loaded && total === 0 ? (
+            <EmptyState
+              icon={<Clock className="size-6" />}
+              title="Your captures will appear here"
+              description="Take a screenshot or record your screen. Everything you save is listed here so you can find it again, copy it or open its folder."
+              action={
+                <div className="flex flex-wrap justify-center gap-2.5">
+                  <Button
+                    variant="primary"
+                    data-testid="history-empty-shot"
+                    icon={<Camera className="size-4" aria-hidden="true" />}
+                    onClick={startScreenshot}
+                  >
+                    Take a screenshot
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    data-testid="history-empty-record"
+                    icon={<Video className="size-4" aria-hidden="true" />}
+                    onClick={startRecording}
+                  >
+                    Record your screen
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    data-testid="history-empty-find"
+                    icon={<FolderSearch className="size-4" aria-hidden="true" />}
+                    onClick={findExisting}
+                  >
+                    Find existing captures
+                  </Button>
+                </div>
+              }
+            />
+          ) : loaded && items.length === 0 && query === '' && folderPath !== null ? (
+            <EmptyState
+              icon={<FolderOpen className="size-6" />}
+              title="This folder is empty"
+              description="Drag captures here, or make it the save location so new captures land in it."
+              action={
+                isSaveFolder ? (
+                  <p className="text-[13px] text-fg-muted" data-testid="folder-empty-is-save">
+                    New captures are saved here.
+                  </p>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    data-testid="folder-empty-set-save"
+                    icon={<MapPin className="size-4" aria-hidden="true" />}
+                    onClick={() => void setCaptureFolder(folderPath)}
+                  >
+                    Save new captures here
+                  </Button>
+                )
+              }
+            />
+          ) : loaded && items.length === 0 && query === '' ? (
+            <EmptyState
+              icon={<FolderOpen className="size-6" />}
+              title={emptyScope}
+              description={
+                scope.kind === 'other'
+                  ? 'Captures saved outside the capture folders show up here.'
+                  : 'New captures of this kind will be listed here.'
+              }
+              action={
                 <Button
                   variant="secondary"
-                  data-testid="history-empty-record"
-                  icon={<Video className="size-4" aria-hidden="true" />}
-                  onClick={startRecording}
+                  data-testid="history-show-all"
+                  onClick={() => onScopeChange(ALL_SELECTION)}
                 >
-                  Record your screen
+                  Show all captures
                 </Button>
+              }
+            />
+          ) : loaded && items.length === 0 ? (
+            <EmptyState
+              icon={<SearchX className="size-6" />}
+              title="No matches"
+              description="Nothing in your library fits this search."
+              action={
                 <Button
-                  variant="ghost"
-                  data-testid="history-empty-find"
-                  icon={<FolderSearch className="size-4" aria-hidden="true" />}
-                  onClick={findExisting}
+                  variant="secondary"
+                  data-testid="history-clear-filters"
+                  onClick={() => {
+                    setQueryInput('');
+                    onScopeChange(ALL_SELECTION);
+                  }}
                 >
-                  Find existing captures
+                  Clear search
                 </Button>
-              </div>
-            }
-          />
-        ) : loaded && items.length === 0 && folderFiltered && query === '' && filter === 'all' ? (
-          <EmptyState
-            icon={<FolderOpen className="size-6" />}
-            title="Nothing in this folder yet"
-            description="Drag captures onto the folder, or choose Move to… on a capture. New captures land here when you set it as the save location."
-          />
-        ) : loaded && items.length === 0 ? (
-          <EmptyState
-            icon={<SearchX className="size-6" />}
-            title="No matches"
-            description={
-              query
-                ? 'Nothing in your history fits this search.'
-                : 'Nothing in your history fits this filter.'
-            }
-            action={
-              <Button
-                variant="secondary"
-                data-testid="history-clear-filters"
-                onClick={() => {
-                  setFilter('all');
-                  setQueryInput('');
-                  setFolderSel(ALL_SELECTION);
-                }}
-              >
-                {query ? 'Clear search' : 'Show everything'}
-              </Button>
-            }
-          />
-        ) : (
-          <ul
-            ref={gridRef}
-            data-testid="history-grid"
-            aria-label="Captures"
-            onKeyDown={onGridKeyDown}
-            onKeyUp={onGridKeyUp}
-            className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-4"
-          >
-            {items.map((item) => (
-              <HistoryCard
-                key={item.id}
-                item={item}
-                now={now}
-                tabStop={item.id === activeId}
-                mp4Available={mp4Available}
-                actions={actions}
-                onSelect={select}
-                onAskDelete={setConfirmDelete}
-                onEdit={onEdit}
-                selected={selection.ids.has(item.id)}
-                selectMode={selectedCount > 0}
-                onSelectClick={selectClick}
-                onToggleSelect={toggleSelect}
-                onContextMenu={(target, point) => setMenu({ item: target, ...point })}
-                onDragOut={startItemDrag}
-                onItemsDrag={(dragged, transfer) => startItemsDrag(transfer, dragIds(dragged))}
-                onMoveTo={(target) => setMoveIds([target.id])}
-              />
-            ))}
-          </ul>
-        )}
+              }
+            />
+          ) : prefs.view === 'list' ? (
+            <LibraryList
+              items={items}
+              now={now}
+              activeId={activeId}
+              selection={selection.ids}
+              selectMode={selectedCount > 0}
+              actions={actions}
+              listRef={gridRef}
+              onSelect={select}
+              onEdit={onEdit}
+              onSelectClick={selectClick}
+              onToggleSelect={toggleSelect}
+              onContextMenu={(target, point) => setMenu({ item: target, ...point })}
+              onDragOut={startItemDrag}
+              onItemsDrag={(dragged, transfer) => startItemsDrag(transfer, dragIds(dragged))}
+              onKeyDown={onGridKeyDown}
+              onKeyUp={onGridKeyUp}
+            />
+          ) : (
+            <ul
+              ref={gridRef}
+              data-testid="history-grid"
+              aria-label="Captures"
+              onKeyDown={onGridKeyDown}
+              onKeyUp={onGridKeyUp}
+              className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-4 p-5"
+            >
+              {items.map((item) => (
+                <HistoryCard
+                  key={item.id}
+                  item={item}
+                  now={now}
+                  tabStop={item.id === activeId}
+                  mp4Available={mp4Available}
+                  actions={actions}
+                  onSelect={select}
+                  onAskDelete={setConfirmDelete}
+                  onEdit={onEdit}
+                  selected={selection.ids.has(item.id)}
+                  selectMode={selectedCount > 0}
+                  onSelectClick={selectClick}
+                  onToggleSelect={toggleSelect}
+                  onContextMenu={(target, point) => setMenu({ item: target, ...point })}
+                  onDragOut={startItemDrag}
+                  onItemsDrag={(dragged, transfer) => startItemsDrag(transfer, dragIds(dragged))}
+                  onMoveTo={(target) => setMoveIds([target.id])}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
         {confirmDialog}
         {projectDialog}
         <HistoryContextMenu

@@ -111,6 +111,70 @@ export function DurationChip({ durationMs }: { durationMs: number | null }) {
   );
 }
 
+/** The part of a card that shows the capture: thumbnail with its badges, then name, age and size. */
+export function CardFace({
+  item,
+  now,
+  converting = false,
+  percent = null,
+  room = false,
+}: {
+  item: HistoryItemView;
+  now: number;
+  /** A conversion runs: a chip with its progress. */
+  converting?: boolean;
+  percent?: number | null;
+  /** Leave room under the text for buttons laid over the card (a missing file's Locate/Remove). */
+  room?: boolean;
+}) {
+  const missing = !item.exists;
+  const subtitle = [dimensionsText(item), formatBytes(item.sizeBytes)].filter(Boolean).join(' · ');
+  // The type badge already says ".png"; the name shows the part that tells captures apart.
+  const stem = item.type === 'flow' ? item.fileName : item.fileName.replace(/[.][^.]+$/, '');
+  return (
+    <>
+      <span className="relative block">
+        <Thumb item={item} className="aspect-video w-full" />
+        <span className="absolute bottom-2 left-2 flex items-center gap-1.5">
+          <TypeBadge item={item} />
+          <MultiBadge item={item} />
+        </span>
+        <span className="absolute right-2 bottom-2 flex items-center gap-1.5">
+          {converting ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-accent-solid px-1.5 py-0.5 text-xs font-medium text-white tabular-nums">
+              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+              {percent !== null ? `${percent}%` : 'MP4'}
+            </span>
+          ) : null}
+          <DurationChip durationMs={item.durationMs} />
+        </span>
+        {missing ? (
+          <span
+            data-testid="history-missing"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-bg/55 text-center text-[13px] font-medium text-fg-muted"
+          >
+            <FileX2 className="size-5" aria-hidden="true" />
+            File moved or deleted
+          </span>
+        ) : null}
+      </span>
+      <span className={cn('flex flex-col gap-0.5 px-3 pt-2.5 pb-3', room && 'pb-14')}>
+        <span className="truncate text-[13px] font-medium text-fg" title={item.fileName}>
+          {stem}
+        </span>
+        <span
+          className="text-xs text-fg-muted"
+          title={formatExact(item.createdAt)}
+          data-testid="history-time"
+        >
+          {formatRelative(item.createdAt, now)}
+        </span>
+        <span className="truncate text-xs text-fg-subtle tabular-nums">{subtitle}</span>
+      </span>
+    </>
+  );
+}
+
 export function HistoryCard({
   item,
   now,
@@ -131,12 +195,10 @@ export function HistoryCard({
 }: HistoryCardProps) {
   const exportState = useExportState(item.id);
   const converting = exportState?.status === 'running' || exportState?.status === 'starting';
+  const percent = exportState?.status === 'running' ? exportState.percent : null;
   const missing = !item.exists;
-  const subtitle = [dimensionsText(item), formatBytes(item.sizeBytes)].filter(Boolean).join(' · ');
   const kind =
     item.type === 'screenshot' ? 'screenshot' : item.type === 'flow' ? 'step guide' : 'recording';
-  // The type badge already says ".png"; the name shows the part that tells captures apart.
-  const stem = item.type === 'flow' ? item.fileName : item.fileName.replace(/[.][^.]+$/, '');
   const openMenu = (event: MouseEvent<HTMLElement>): void => {
     event.preventDefault();
     // The mouse reports button 2; the Menu key and Shift+F10 do not: anchor those at the card.
@@ -188,46 +250,7 @@ export function HistoryCard({
             : 'border-line hover:border-line-strong group-hover/card:shadow-raised',
         )}
       >
-        <span className="relative block">
-          <Thumb item={item} className="aspect-video w-full" />
-          <span className="absolute bottom-2 left-2 flex items-center gap-1.5">
-            <TypeBadge item={item} />
-            <MultiBadge item={item} />
-          </span>
-          <span className="absolute right-2 bottom-2 flex items-center gap-1.5">
-            {converting ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-accent-solid px-1.5 py-0.5 text-xs font-medium text-white tabular-nums">
-                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                {exportState?.status === 'running' && exportState.percent !== null
-                  ? `${exportState.percent}%`
-                  : 'MP4'}
-              </span>
-            ) : null}
-            <DurationChip durationMs={item.durationMs} />
-          </span>
-          {missing ? (
-            <span
-              data-testid="history-missing"
-              className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-bg/55 text-center text-[13px] font-medium text-fg-muted"
-            >
-              <FileX2 className="size-5" aria-hidden="true" />
-              File moved or deleted
-            </span>
-          ) : null}
-        </span>
-        <span className={cn('flex flex-col gap-0.5 px-3 pt-2.5 pb-3', missing && 'pb-14')}>
-          <span className="truncate text-[13px] font-medium text-fg" title={item.fileName}>
-            {stem}
-          </span>
-          <span
-            className="text-xs text-fg-muted"
-            title={formatExact(item.createdAt)}
-            data-testid="history-time"
-          >
-            {formatRelative(item.createdAt, now)}
-          </span>
-          <span className="truncate text-xs text-fg-subtle tabular-nums">{subtitle}</span>
-        </span>
+        <CardFace item={item} now={now} converting={converting} percent={percent} room={missing} />
       </button>
 
       <label

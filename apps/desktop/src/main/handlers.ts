@@ -107,17 +107,16 @@ function withE2eRemuxDelay(tools: MediaTools): MediaTools {
 }
 
 function emitToMain<
-  E extends 'export:progress' | 'export:done' | 'export:failed' | 'history:bulkProgress',
+  E extends
+    | 'export:progress'
+    | 'export:done'
+    | 'export:failed'
+    | 'history:bulkProgress'
+    | 'video:exportProgress'
+    | 'video:exportDone'
+    | 'video:exportFailed',
 >(event: E, payload: IpcEventPayload<E>): void {
   for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
-}
-
-/** Video exports are started from the Editor window, which shows their progress and result. */
-function emitToEditor<E extends 'video:exportProgress' | 'video:exportDone' | 'video:exportFailed'>(
-  event: E,
-  payload: IpcEventPayload<E>,
-): void {
-  for (const contents of webContentsWithRoles(['editor'])) sendEvent(contents, event, payload);
 }
 
 /** A free `<name><suffix><extension>` next to the recording (no dialog). */
@@ -170,7 +169,7 @@ export function registerHandlers(
 
   handle(
     'app:reportError',
-    { roles: ['main', 'editor', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] },
+    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] },
     (report, ctx) => {
       const parts = [`Renderer error (${ctx.role}, ${report.source}): ${report.message}`];
       if (report.stack) parts.push(report.stack);
@@ -219,7 +218,7 @@ export function registerHandlers(
     trashItem: (file) => shell.trashItem(file),
     folderOf: (dir) => library.folderOfDir(dir),
     onChange: () => {
-      for (const contents of webContentsWithRoles(['main', 'editor']))
+      for (const contents of webContentsWithRoles(['main']))
         sendEvent(contents, 'history:changed', {});
     },
   });
@@ -331,12 +330,12 @@ export function registerHandlers(
       runner,
       destination: (source, extension) => editedDestination(source, extension, freeFileName),
       emit: {
-        progress: (event) => emitToEditor('video:exportProgress', event),
+        progress: (event) => emitToMain('video:exportProgress', event),
         done: (event) => {
-          emitToEditor('video:exportDone', event);
+          emitToMain('video:exportDone', event);
           void autoCopy.file(event.path);
         },
-        failed: (event) => emitToEditor('video:exportFailed', event),
+        failed: (event) => emitToMain('video:exportFailed', event),
       },
     }),
   );

@@ -1,4 +1,4 @@
-import type { HistoryItemView } from '../../shared/history-ipc';
+import type { HistoryItemView, HistoryType } from '../../shared/history-ipc';
 import {
   folderBaseName,
   isInsideFolder,
@@ -17,9 +17,19 @@ export interface FolderNode {
   children: FolderNode[];
 }
 
-/** What History shows: everything, one folder (and optionally what is below it), or other locations. */
+/**
+ * What the Library shows: everything, the last days, one kind of capture, one folder (and
+ * optionally what is below it), or the captures outside the capture folders.
+ */
 export type FolderSelection =
-  { kind: 'all' } | { kind: 'folder'; path: string } | { kind: 'other' };
+  | { kind: 'all' }
+  | { kind: 'recent' }
+  | { kind: 'type'; type: HistoryType }
+  | { kind: 'folder'; path: string }
+  | { kind: 'other' };
+
+/** "Recent" is the last week. */
+export const RECENT_DAYS = 7;
 
 export const ALL_SELECTION: FolderSelection = { kind: 'all' };
 
@@ -75,13 +85,18 @@ export function ancestorsOf(folder: string): string[] {
 }
 
 export function selectionMatches(
-  item: Pick<HistoryItemView, 'folder' | 'outside'>,
+  item: Pick<HistoryItemView, 'folder' | 'outside' | 'type' | 'createdAt'>,
   selection: FolderSelection,
   includeSubfolders: boolean,
+  now: number = Date.now(),
 ): boolean {
   switch (selection.kind) {
     case 'all':
       return true;
+    case 'recent':
+      return item.createdAt >= now - RECENT_DAYS * 86_400_000;
+    case 'type':
+      return item.type === selection.type;
     case 'other':
       return item.outside === true;
     case 'folder': {

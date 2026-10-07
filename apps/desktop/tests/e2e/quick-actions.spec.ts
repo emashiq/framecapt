@@ -54,7 +54,7 @@ test.afterAll(async () => {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const nav = (name: 'Capture' | 'History' | 'Settings') =>
+const nav = (name: 'Home' | 'Library' | 'Settings') =>
   page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 
 const shotsDir = async (): Promise<string> => {
@@ -119,7 +119,7 @@ test('Ctrl+Shift+S saves into the screenshots folder with no dialog, lists it in
   await expect.poll(() => saved().length).toBe(3);
   await editor.getByTestId('editor-done').click();
   await expectEditorClosed(app);
-  await nav('History');
+  await nav('Library');
   await expect(page.getByTestId('history-item')).toHaveCount(3);
 });
 
@@ -127,7 +127,7 @@ test('quick save is a customizable editor shortcut, listed in Settings', async (
   await nav('Settings');
   await page.getByTestId('settings-nav-shortcuts').click();
   await expect(page.getByTestId('settings-shortcuts')).toContainText('Quick save');
-  await nav('Capture');
+  await nav('Home');
 });
 
 test('Settings search filters sections and options, and shows an empty state', async () => {
@@ -157,7 +157,7 @@ test('Settings search filters sections and options, and shows an empty state', a
   await search.fill('folder');
   await page.keyboard.press('Escape');
   await expect(search).toHaveValue('');
-  await nav('Capture');
+  await nav('Home');
 });
 
 test('tucking the toolbar away keeps recording; the pause shortcut works while it is tucked', async () => {

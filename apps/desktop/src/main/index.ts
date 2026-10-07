@@ -24,6 +24,7 @@ import {
   getRole,
   getOriginConfig,
   getRendererDir,
+  isQuitting,
   setQuitting,
   showMainWindow,
 } from './windows';
@@ -70,10 +71,11 @@ function start(): void {
   // From here on closing windows really closes them (close-to-tray stands down).
   app.on('before-quit', () => setQuitting(true));
 
-  // With close-to-tray the app lives on in the tray after its last window is gone.
+  // With close-to-tray the app lives on in the tray after its last window is gone, unless the user
+  // quit: a quit that the unsaved-work question stopped starts again once they discard.
   app.on('window-all-closed', () => {
     const keepAlive = settings?.get().general.closeToTray === true && desktop?.tray.active === true;
-    if (!keepAlive) app.quit();
+    if (!keepAlive || isQuitting()) app.quit();
   });
 
   app.on('activate', () => {

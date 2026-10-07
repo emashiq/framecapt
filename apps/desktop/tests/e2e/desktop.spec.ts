@@ -91,7 +91,7 @@ const settingsFile = (dir: string): string => path.join(dir, 'settings.json');
 const readSettings = (dir: string): Record<string, Record<string, unknown>> =>
   fs.existsSync(settingsFile(dir)) ? JSON.parse(fs.readFileSync(settingsFile(dir), 'utf8')) : {};
 
-async function goTo(page: Page, name: 'Capture' | 'History' | 'Settings'): Promise<void> {
+async function goTo(page: Page, name: 'Home' | 'Library' | 'Settings'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 }
 
@@ -349,7 +349,7 @@ test.describe('settings', () => {
     await openSettings(page, 'storage');
     await page.getByTestId('folder-change-screenshots').click();
     await expect.poll(() => readSettings(dir).screenshots?.outputDir).toBe(out);
-    await goTo(page, 'Capture');
+    await goTo(page, 'Home');
 
     await app.evaluate(({ dialog }) => {
       (globalThis as unknown as { __saveOptions: unknown }).__saveOptions = null;
@@ -400,7 +400,7 @@ test.describe('settings', () => {
     await editor.getByTestId('editor-done').click();
     await expectEditorClosed(app); // closed on its own: nothing was asked
     await expect(page.getByTestId('shot-region')).toBeVisible();
-    await goTo(page, 'History');
+    await goTo(page, 'Library');
     await expect(page.getByTestId('history-grid').locator('li')).toHaveCount(1);
   });
 });
@@ -458,7 +458,7 @@ test.describe('shortcuts', () => {
     expect(await hooks(app, (h) => [...h.heldShortcuts()].includes('Ctrl+Shift+7'))).toBe(false);
     expect(await hooks(app, (h) => h.heldShortcuts().size)).toBe(10);
 
-    await goTo(page, 'Capture');
+    await goTo(page, 'Home');
     await expect(page.getByTestId('hint-recordRegion')).toContainText('Q');
     const menu = await hooks(app, (h) => h.trayMenu());
     const record = menu.find((item) => item.label === 'Record')?.submenu as {
@@ -500,7 +500,7 @@ test.describe('shortcuts', () => {
     await expect(page.getByTestId('shortcut-value-recordWindow')).toHaveText('Not set');
     await expect.poll(() => readSettings(dir).shortcuts?.recordWindow).toBeNull();
     expect(await hooks(app, (h) => [...h.heldShortcuts()].includes('Ctrl+Shift+6'))).toBe(false);
-    await goTo(page, 'Capture');
+    await goTo(page, 'Home');
     await expect(page.getByTestId('hint-recordWindow')).toHaveText('Not set');
     // And back to the default.
     await openSettings(page, 'shortcuts');
@@ -724,14 +724,15 @@ test.describe('keyboard and focus', () => {
       if (id === 'shot-region') break;
     }
     expect(order.at(-1)).toBe('shot-region');
-    // A fresh profile: skip link, the title bar's menu bar (one tab stop), command center and
-    // three tabs, help, the first-run card's "Got it", the tip's "Got it", then
-    // the three screenshot buttons (was 11 before the menu bar and the command center).
-    expect(order.length).toBeLessThanOrEqual(13);
-    // Skip link, then the title bar, then the navigation, then the content.
+    // A fresh profile: skip link, the title bar's menu bar (one tab stop) and command center, the
+    // icon rail (one tab stop), the Home tab, the "Change" link of the save location, the first-run
+    // card's "Got it", the tip's "Got it", then the first screenshot tile.
+    expect(order.length).toBeLessThanOrEqual(10);
+    // Skip link, then the title bar, then the rail and the tab strip, then the content.
     expect(order[0]).toBe('skip-link');
     expect(order.slice(1, 5).join(' ')).toContain('menubar-file');
-    expect(order.slice(1, 6).join(' ')).toContain('Capture');
+    expect(order.slice(1, 6).join(' ')).toContain('rail-home');
+    expect(order.slice(1, 7)).toContain('home-tab');
 
     await page.keyboard.press('Enter');
     const overlay = await overlayFor(app, '1001');
@@ -865,7 +866,7 @@ test.describe('keyboard and focus', () => {
     const { page } = await start();
     const trigger = page
       .getByRole('navigation', { name: 'Primary' })
-      .getByRole('button', { name: 'History' });
+      .getByRole('button', { name: 'Library' });
     await trigger.focus();
     await page.keyboard.press('?');
     const help = page.getByTestId('keyboard-help');
@@ -887,7 +888,7 @@ test.describe('keyboard and focus', () => {
     await page.keyboard.press('Escape');
     // Typing a question mark in a text field does not open it.
     await page.getByTestId('settings-nav-general').count();
-    await goTo(page, 'History');
+    await goTo(page, 'Library');
   });
 
   test('every settings control has an accessible name and a description', async () => {
@@ -1007,7 +1008,7 @@ test.describe('idle', () => {
     expect(after.activeIntervals).toBe(0);
 
     // Settings and History are idle too.
-    for (const name of ['Settings', 'History'] as const) {
+    for (const name of ['Settings', 'Library'] as const) {
       await goTo(page, name);
       await page.waitForTimeout(800);
       const start0 = await readLog();

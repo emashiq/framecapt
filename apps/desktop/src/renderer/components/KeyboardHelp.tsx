@@ -44,12 +44,23 @@ const EDITOR_FIXED_KEYS: Entry[] = [
   { keys: ['Enter'], text: 'Apply the crop' },
 ];
 
-const EDITOR_WINDOW_KEYS: Entry[] = [
+const TAB_KEYS: Entry[] = [
   { keys: ['Ctrl', 'Tab'], text: 'Next tab (Ctrl+Shift+Tab: previous tab)' },
-  { keys: ['Alt', '1…8'], text: 'Go to that tab (Alt+9: the last tab)' },
-  { keys: ['Ctrl', 'W'], text: 'Close the tab (asks first when it has unsaved changes)' },
+  { keys: ['Alt', '1…8'], text: 'Go to that tab, Home is 1 (Alt+9: the last tab)' },
+  {
+    keys: ['Ctrl', 'W'],
+    text: 'Close the tab (asks first when it has unsaved changes; Home stays)',
+  },
   { keys: ['Middle click'], text: 'Close a tab' },
   { keys: ['Drag'], text: 'Drag a tab to reorder' },
+  { keys: ['↑', '↓'], text: 'Icon rail: move between Home, Library, Guides and Settings' },
+];
+
+const LIBRARY_KEYS: Entry[] = [
+  { keys: ['Ctrl', 'B'], text: 'Show or hide the folder sidebar' },
+  { keys: ['F2'], text: 'Sidebar: rename the folder' },
+  { keys: ['Ctrl', 'A'], text: 'Select every capture shown' },
+  { keys: ['Ctrl', 'Space'], text: 'Select the focused capture without opening it' },
 ];
 
 const VIDEO_EDITOR_KEYS: Entry[] = [
@@ -72,7 +83,7 @@ const VIDEO_EDITOR_KEYS: Entry[] = [
 const OTHER_KEYS: Entry[] = [
   {
     keys: ['←', '↑', '→', '↓'],
-    text: 'History: move between captures (Delete removes from history)',
+    text: 'Library: move between captures (Delete removes from history)',
   },
   { keys: ['Enter'], text: 'Window picker: pick the focused window' },
   { keys: ['Tab'], text: 'Recording bar: move between Pause, Stop and the mute buttons' },
@@ -167,7 +178,8 @@ export function KeyboardHelp({ open, onClose }: KeyboardHelpProps) {
           <Group title="From anywhere" entries={global} />
           <Group title="In the main window" entries={[...commandCenter, ...MAIN_KEYS]} />
           <Group title="Choosing an area" entries={OVERLAY_KEYS} />
-          <Group title="Editor window and tabs" entries={EDITOR_WINDOW_KEYS} />
+          <Group title="Tabs and the icon rail" entries={TAB_KEYS} />
+          <Group title="In the Library" entries={LIBRARY_KEYS} />
           <Group title="In the editor" entries={editor} />
           <Group title="In the video editor" entries={VIDEO_EDITOR_KEYS} />
           <Group title="Elsewhere" entries={OTHER_KEYS} />

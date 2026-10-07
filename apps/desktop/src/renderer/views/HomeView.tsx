@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   AppWindow,
-  Camera,
   Fullscreen,
-  FolderOpen,
   ImagePlus,
   Keyboard,
   Layers,
@@ -13,10 +11,11 @@ import {
   Monitor,
   ScanLine,
   TriangleAlert,
-  Video,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import { friendlyError } from '../../shared/error-messages';
+import type { HistoryItemView } from '../../shared/history-ipc';
 import type { RecordTarget } from '../../shared/recorder-ipc';
 import { patchFromRecordOptions, recordOptionsFromSettings } from '../../shared/settings';
 import type { SettingsSectionId, StartRequestEvent } from '../../shared/settings-ipc';
@@ -25,16 +24,16 @@ import { acceleratorKeys, type ShortcutAction } from '../../shared/shortcuts';
 import type { CaptureTarget } from '../../shared/shots';
 import { Loader } from '../components/Loader';
 import { OnboardingCard } from '../components/OnboardingCard';
-import { PageHeader } from '../components/PageHeader';
 import { RecentCaptures } from '../components/RecentCaptures';
 import { RecordOptions } from '../components/RecordOptions';
 import { RecoveryBanner } from '../components/RecoveryBanner';
 import { SourcePicker } from '../components/SourcePicker';
 import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
 import { Kbd } from '../components/ui/Kbd';
+import { Tooltip } from '../components/ui/Tooltip';
 import { useCaptureFlow } from '../capture/use-capture-flow';
 import { SavingTo } from '../library/SavingTo';
+import { cn } from '../lib/cn';
 import { subscribeLaunch } from '../lib/launch-bus';
 import { notify } from '../lib/notify';
 import { useMultiDisplay } from '../lib/use-multi-display';
@@ -47,12 +46,6 @@ import {
   useSettingsLoaded,
   useShortcutStates,
 } from '../settings/store';
-
-const SOURCES = [
-  { label: 'Screen', target: 'screen', icon: Monitor },
-  { label: 'Window', target: 'window', icon: AppWindow },
-  { label: 'Region', target: 'region', icon: ScanLine },
-] as const;
 
 const STATUS_TEXT: Record<CaptureTarget, string> = {
   screen: 'Choose a screen…',
@@ -71,108 +64,134 @@ const RECORD_STATUS_TEXT: Record<string, string> = {
   processing: 'Saving the recording…',
 };
 
-/** The configured shortcut of an action, "Not set", or a warning when it could not be registered. */
-function ShortcutHint({ action }: { action: ShortcutAction }) {
+/**
+ * What a tile says under its label: the configured shortcut of an action ("Not set" when there is
+ * none) or, when it could not be registered, a warning. Shown on hover and focus; always there for
+ * a shortcut that does not work. Assistive technology gets the same words as the button's
+ * description (the button's name stays its label).
+ */
+function ShortcutHint({ action, id }: { action: ShortcutAction; id: string }) {
   const { shortcuts } = useSettings();
   const loaded = useSettingsLoaded();
   const state = useShortcutStates()?.[action];
   const accelerator = shortcuts[action];
-  if (!loaded) return <span className="h-6 w-24" aria-hidden="true" />;
-  if (accelerator === null) {
-    return (
-      <span className="text-xs text-fg-muted" data-testid={`hint-${action}`}>
-        Not set
-      </span>
-    );
-  }
+  if (!loaded) return <span className="h-4" aria-hidden="true" />;
   const unavailable = state?.status === 'conflict' || state?.status === 'invalid';
+  const keys = accelerator === null ? 'Not set' : acceleratorKeys(accelerator).join('+');
   return (
-    <span
-      className="inline-flex items-center gap-1.5"
-      data-testid={`hint-${action}`}
-      data-status={state?.status ?? 'unknown'}
-      title={unavailable ? state?.message : undefined}
-    >
-      {unavailable ? (
-        <TriangleAlert
-          className="size-4 text-warning"
-          role="img"
-          aria-label={`${accelerator} is unavailable: ${state?.message ?? 'in use by another app'}`}
-        />
-      ) : null}
-      <Kbd keys={acceleratorKeys(accelerator)} className={unavailable ? 'opacity-60' : undefined} />
-    </span>
+    <>
+      <span id={id} className="sr-only">
+        {unavailable
+          ? `${accelerator ?? 'The shortcut'} is unavailable: ${state?.message ?? 'in use by another app'}`
+          : accelerator === null
+            ? 'No shortcut set'
+            : `Shortcut ${keys}`}
+      </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'inline-flex h-4 items-center gap-1 text-[11px] leading-4',
+          unavailable
+            ? 'text-warning'
+            : 'invisible text-fg-subtle group-focus-visible/tile:visible group-hover/tile:visible',
+        )}
+        data-testid={`hint-${action}`}
+        data-status={state?.status ?? 'unknown'}
+        title={unavailable ? state?.message : undefined}
+      >
+        {unavailable ? <TriangleAlert className="size-3" /> : null}
+        {keys}
+      </span>
+    </>
   );
 }
 
-interface ModeCardProps {
-  title: string;
-  description: string;
-  icon: ReactNode;
-  /** Shortcut actions for Screen, Window and Region (their configured keys are shown). */
-  actions: readonly [ShortcutAction, ShortcutAction, ShortcutAction];
-  /** Prefix of the buttons' test ids: `<prefix>-screen` and so on. */
-  testPrefix: 'shot' | 'record';
-  /** The one primary button of the page (the main flow). */
-  primaryTarget?: (typeof SOURCES)[number]['target'];
-  onStart: (target: CaptureTarget, trigger: HTMLElement) => void;
-  /** While something runs, the card's buttons are disabled. */
-  busy?: boolean;
-  /** One more row below the three sources. */
-  extra?: ReactNode;
+interface TileProps {
+  label: string;
+  icon: LucideIcon;
+  testId: string;
+  onClick: (trigger: HTMLElement) => void;
+  disabled?: boolean;
+  /** The configured shortcut under the label... */
+  action?: ShortcutAction;
+  /** ...or a plain note. */
+  note?: string;
+  /** The main flow of the page: tinted. */
+  primary?: boolean;
+  /** Names the button's shortcut for assistive technology. */
+  keyShortcuts?: string | null;
+  /** A longer explanation on hover and focus. */
+  tooltip?: string;
 }
 
-function ModeCard({
+/** A square tile of the dashboard: an icon, a label and a hint that shows on hover and focus. */
+function Tile({
+  label,
+  icon: Icon,
+  testId,
+  onClick,
+  disabled = false,
+  action,
+  note,
+  primary = false,
+  keyShortcuts,
+  tooltip,
+}: TileProps) {
+  const hintId = useId();
+  const button = (
+    <button
+      type="button"
+      data-testid={testId}
+      disabled={disabled}
+      aria-label={label}
+      aria-keyshortcuts={keyShortcuts ?? undefined}
+      aria-describedby={action ? hintId : undefined}
+      onClick={(event) => onClick(event.currentTarget)}
+      className={cn(
+        'group/tile flex h-[88px] w-24 shrink-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 shadow-card',
+        'transition-[border-color,background-color,box-shadow] duration-150 disabled:opacity-50',
+        primary
+          ? 'border-accent-solid/35 bg-accent-soft text-accent-fg hover:border-accent-solid/60'
+          : 'border-line bg-surface text-fg hover:border-line-strong hover:bg-surface-2',
+        'not-disabled:hover:shadow-raised',
+      )}
+    >
+      <Icon className={cn('size-6', !primary && 'text-accent-fg')} aria-hidden="true" />
+      <span className="max-w-full truncate text-[13px] font-medium">{label}</span>
+      {action ? (
+        <ShortcutHint action={action} id={hintId} />
+      ) : (
+        <span className="invisible h-4 max-w-full truncate text-[11px] leading-4 text-fg-subtle group-focus-visible/tile:visible group-hover/tile:visible">
+          {note}
+        </span>
+      )}
+    </button>
+  );
+  return tooltip ? (
+    <Tooltip content={tooltip} side="bottom">
+      {button}
+    </Tooltip>
+  ) : (
+    button
+  );
+}
+
+function Group({
   title,
-  description,
-  icon,
-  actions,
-  testPrefix,
-  primaryTarget,
-  onStart,
-  busy = false,
-  extra,
-}: ModeCardProps) {
+  testId,
+  children,
+}: {
+  title: string;
+  testId?: string;
+  children: ReactNode;
+}) {
   return (
-    <Card padding="lg" className="flex h-full flex-col" data-testid={`mode-${title.toLowerCase()}`}>
-      <div className="mb-5 flex items-start gap-4">
-        <div
-          className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-fg"
-          aria-hidden="true"
-        >
-          {icon}
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-fg">{title}</h2>
-          <p className="text-sm text-fg-muted">{description}</p>
-        </div>
-      </div>
-      <ul className="flex flex-col gap-2.5">
-        {SOURCES.map(({ label, target, icon: Icon }, index) => (
-          <li key={label} className="flex items-center gap-3">
-            <Button
-              variant={primaryTarget === target ? 'primary' : 'secondary'}
-              className="flex-1 justify-start"
-              icon={
-                <Icon
-                  className={primaryTarget === target ? 'size-4' : 'size-4 text-fg-subtle'}
-                  aria-hidden="true"
-                />
-              }
-              disabled={busy}
-              onClick={(event) => onStart(target, event.currentTarget)}
-              data-testid={`${testPrefix}-${target}`}
-            >
-              {label}
-            </Button>
-            <div className="flex min-w-32 justify-end">
-              <ShortcutHint action={actions[index] ?? actions[0]} />
-            </div>
-          </li>
-        ))}
-        {extra}
-      </ul>
-    </Card>
+    <section aria-label={title} data-testid={testId}>
+      <h2 className="mb-2 text-[11px] font-semibold tracking-wider text-fg-subtle uppercase">
+        {title}
+      </h2>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </section>
   );
 }
 
@@ -194,8 +213,8 @@ function Banner({
       data-testid={testId}
       className={
         tone === 'tip'
-          ? 'mb-5 flex items-center gap-3 rounded-xl border border-line bg-accent-soft px-4 py-3 text-sm text-fg'
-          : 'mb-5 flex items-center gap-3 rounded-xl bg-warning-soft px-4 py-3 text-sm text-warning'
+          ? 'mb-4 flex items-center gap-3 rounded-lg border border-line bg-accent-soft px-3.5 py-2 text-[13px] text-fg'
+          : 'mb-4 flex items-center gap-3 rounded-lg bg-warning-soft px-3.5 py-2 text-[13px] text-warning'
       }
     >
       <span aria-hidden="true" className="shrink-0 text-accent-fg">
@@ -207,86 +226,26 @@ function Banner({
   );
 }
 
-export interface CaptureViewProps {
+export interface HomeViewProps {
   /** Opens a picture file in the editor (File > Open image). */
   onOpenImage: () => void;
-  /** Opens History, with one item selected when an id is given. */
-  onOpenHistory: (id?: string) => void;
+  /** Opens a capture: a tab for what the editors take, the Library's details for the rest. */
+  onOpenItem: (item: HistoryItemView) => void;
+  /** The Library section of the pinned tab. */
+  onOpenLibrary: () => void;
   onOpenSettings: (section?: SettingsSectionId) => void;
 }
 
 /**
- * The step guide card: a different kind of capture. Start hides the window and shows a small
- * pill; every time the pointer comes to rest on something, a screenshot with the pointer
- * highlighted is added to the guide.
+ * The Home section of the pinned tab: the capture dashboard. Screenshot and Record tiles, Steps and
+ * Open image, the recording options and the latest captures.
  */
-function StepsCard({ onStart, busy }: { onStart: () => void; busy: boolean }) {
-  return (
-    <Card padding="md" className="mt-5 flex flex-wrap items-center gap-4" data-testid="mode-steps">
-      <div
-        className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-fg"
-        aria-hidden="true"
-      >
-        <ListOrdered className="size-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <h2 className="text-sm font-semibold text-fg">Steps</h2>
-        <p className="text-sm text-fg-muted">Capture a step-by-step guide.</p>
-        <p className="mt-1 text-[13px] text-fg-subtle" data-testid="steps-hint">
-          Move the mouse to an item and pause: FrameCapt takes a screenshot with the pointer
-          highlighted. Press Done to save the guide.
-        </p>
-      </div>
-      <ShortcutHint action="stepsToggle" />
-      <Button
-        variant="secondary"
-        icon={<ListOrdered className="size-4 text-fg-subtle" aria-hidden="true" />}
-        disabled={busy}
-        onClick={onStart}
-        data-testid="steps-start"
-      >
-        Start
-      </Button>
-    </Card>
-  );
-}
-
-/** An existing picture instead of a capture: open a file, drop one on the window or paste it. */
-function OpenImageRow({ onOpen }: { onOpen: () => void }) {
-  const { editorShortcuts } = useSettings();
-  const accelerator = editorShortcuts.openImage;
-  return (
-    <Card
-      padding="md"
-      className="mt-5 flex flex-wrap items-center gap-4"
-      data-testid="open-image-card"
-    >
-      <div
-        className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-fg"
-        aria-hidden="true"
-      >
-        <ImagePlus className="size-5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <h2 className="text-sm font-semibold text-fg">Edit an existing picture</h2>
-        <p className="text-sm text-fg-muted">
-          Open an image file, drop one on this window, or paste one with Ctrl+V.
-        </p>
-      </div>
-      {accelerator ? <Kbd keys={acceleratorKeys(accelerator)} /> : null}
-      <Button
-        variant="secondary"
-        icon={<FolderOpen className="size-4 text-fg-subtle" aria-hidden="true" />}
-        onClick={onOpen}
-        data-testid="open-image"
-      >
-        Open image…
-      </Button>
-    </Card>
-  );
-}
-
-export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: CaptureViewProps) {
+export function HomeView({
+  onOpenImage,
+  onOpenItem,
+  onOpenLibrary,
+  onOpenSettings,
+}: HomeViewProps) {
   const flow = useCaptureFlow();
   const recorder = useRecorderState();
   const settings = useSettings();
@@ -301,6 +260,7 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
   const anythingBusy = flow.running !== null || recordingBusy;
   const problems = problemCount(shortcutStates);
   const regionShortcut = settings.shortcuts.screenshotRegion;
+  const openImageShortcut = settings.editorShortcuts.openImage;
   const showTip =
     problems === 0 &&
     !settings.notices.homeTipDismissed &&
@@ -396,7 +356,7 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
     void startRecording(target, trigger);
   }
 
-  // A tray or shortcut action that needed the main window (a picker, or the editor to close first).
+  // A tray or shortcut action that needed the main window (a picker).
   const launchHandler = useRef<(request: StartRequestEvent) => void>(() => undefined);
   useEffect(() => {
     launchHandler.current = (request) => {
@@ -422,10 +382,10 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
 
   return (
     <>
-      <PageHeader
-        title="What would you like to capture?"
-        description="Pick a mode and a source. Everything stays on your device, no account needed."
-      />
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <h1 className="text-xl font-semibold tracking-tight text-fg">Capture</h1>
+        <SavingTo />
+      </header>
 
       <RecoveryBanner busy={anythingBusy} />
 
@@ -434,7 +394,7 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
           role="alert"
           data-testid="record-error"
           data-code={recorder.error.code}
-          className="mb-5 flex items-center gap-3 rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger"
+          className="mb-4 flex items-center gap-3 rounded-lg bg-danger-soft px-3.5 py-2 text-[13px] text-danger"
         >
           <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
           <span className="flex-1">
@@ -505,106 +465,129 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
         </Banner>
       ) : null}
 
-      <SavingTo />
+      <div className="flex flex-wrap gap-x-10 gap-y-5">
+        <Group title="Screenshot" testId="mode-screenshot">
+          <Tile
+            label="Region"
+            icon={ScanLine}
+            testId="shot-region"
+            primary
+            action="screenshotRegion"
+            keyShortcuts={settings.shortcuts.screenshotRegion}
+            disabled={anythingBusy}
+            onClick={(trigger) => startScreenshot('region', trigger)}
+          />
+          <Tile
+            label="Screen"
+            icon={Monitor}
+            testId="shot-screen"
+            action="screenshotScreen"
+            keyShortcuts={settings.shortcuts.screenshotScreen}
+            disabled={anythingBusy}
+            onClick={(trigger) => startScreenshot('screen', trigger)}
+          />
+          <Tile
+            label="Window"
+            icon={AppWindow}
+            testId="shot-window"
+            action="screenshotWindow"
+            keyShortcuts={settings.shortcuts.screenshotWindow}
+            disabled={anythingBusy}
+            onClick={(trigger) => startScreenshot('window', trigger)}
+          />
+          {multiDisplay ? (
+            <Tile
+              label="All screens"
+              icon={Fullscreen}
+              testId="shot-all-screens"
+              action="screenshotAllScreens"
+              keyShortcuts={settings.shortcuts.screenshotAllScreens}
+              disabled={anythingBusy}
+              onClick={(trigger) => startScreenshot('screen', trigger, true)}
+            />
+          ) : null}
+        </Group>
 
-      <div className="grid items-stretch gap-5 md:grid-cols-2">
-        <ModeCard
-          title="Screenshot"
-          description="Grab a still image, then mark it up."
-          icon={<Camera className="size-5" />}
-          actions={['screenshotScreen', 'screenshotWindow', 'screenshotRegion']}
-          testPrefix="shot"
-          primaryTarget="region"
-          onStart={(target, trigger) => startScreenshot(target, trigger)}
-          busy={anythingBusy}
-          extra={
-            multiDisplay ? (
-              <li className="flex items-center gap-3">
-                <Button
-                  variant="secondary"
-                  className="flex-1 justify-start"
-                  icon={<Fullscreen className="size-4 text-fg-subtle" aria-hidden="true" />}
-                  disabled={anythingBusy}
-                  onClick={(event) => startScreenshot('screen', event.currentTarget, true)}
-                  data-testid="shot-all-screens"
-                >
-                  All screens
-                </Button>
-                <div className="flex min-w-32 justify-end">
-                  <ShortcutHint action="screenshotAllScreens" />
-                </div>
-              </li>
-            ) : null
-          }
-        />
-        <ModeCard
-          title="Record"
-          description="Capture video with optional audio."
-          icon={<Video className="size-5" />}
-          actions={['recordScreen', 'recordWindow', 'recordRegion']}
-          testPrefix="record"
-          onStart={onRecordClick}
-          busy={anythingBusy}
-          extra={
-            <>
-              {multiDisplay ? (
-                <li className="flex items-center gap-3">
-                  <Button
-                    variant="secondary"
-                    className="flex-1 justify-start"
-                    icon={<Fullscreen className="size-4 text-fg-subtle" aria-hidden="true" />}
-                    disabled={anythingBusy}
-                    onClick={(event) => void recordAllScreens(event.currentTarget)}
-                    data-testid="record-all-screens"
-                  >
-                    All screens
-                  </Button>
-                  <div className="flex min-w-32 justify-end text-xs text-fg-muted">One video</div>
-                </li>
-              ) : null}
-              <li className="flex items-center gap-3">
-                <Button
-                  variant="secondary"
-                  className="flex-1 justify-start"
-                  icon={<Layers className="size-4 text-fg-subtle" aria-hidden="true" />}
-                  disabled={anythingBusy}
-                  onClick={(event) => onRecordClick('multi', event.currentTarget)}
-                  data-testid="record-multi"
-                >
-                  Multiple…
-                </Button>
-                <div className="flex min-w-32 justify-end text-xs text-fg-muted">
-                  Screens and windows
-                </div>
-              </li>
-            </>
-          }
-        />
-      </div>
+        <Group title="Record" testId="mode-record">
+          <Tile
+            label="Screen"
+            icon={Monitor}
+            testId="record-screen"
+            action="recordScreen"
+            keyShortcuts={settings.shortcuts.recordScreen}
+            disabled={anythingBusy}
+            onClick={(trigger) => onRecordClick('screen', trigger)}
+          />
+          <Tile
+            label="Region"
+            icon={ScanLine}
+            testId="record-region"
+            action="recordRegion"
+            keyShortcuts={settings.shortcuts.recordRegion}
+            disabled={anythingBusy}
+            onClick={(trigger) => onRecordClick('region', trigger)}
+          />
+          <Tile
+            label="Window"
+            icon={AppWindow}
+            testId="record-window"
+            action="recordWindow"
+            keyShortcuts={settings.shortcuts.recordWindow}
+            disabled={anythingBusy}
+            onClick={(trigger) => onRecordClick('window', trigger)}
+          />
+          {multiDisplay ? (
+            <Tile
+              label="All screens"
+              icon={Fullscreen}
+              testId="record-all-screens"
+              note="One video"
+              disabled={anythingBusy}
+              onClick={(trigger) => void recordAllScreens(trigger)}
+            />
+          ) : null}
+          <Tile
+            label="Multiple…"
+            icon={Layers}
+            testId="record-multi"
+            note="Screens and windows"
+            disabled={anythingBusy}
+            onClick={(trigger) => onRecordClick('multi', trigger)}
+          />
+        </Group>
 
-      <StepsCard onStart={() => void startSteps()} busy={anythingBusy} />
-
-      <OpenImageRow onOpen={onOpenImage} />
-
-      <div className="mt-5">
-        <RecordOptions
-          options={options}
-          onChange={(next) => void updateSettings(patchFromRecordOptions(next))}
-          disabled={anythingBusy}
-          outputDir={dirs.recordingsDir}
-          onOpenSettings={() => onOpenSettings('recording')}
-          cameraStyle={{
-            shape: settings.recording.cameraShape,
-            size: settings.recording.cameraSize,
-            corner: settings.recording.cameraCorner,
-          }}
-        />
+        <Group title="More" testId="mode-steps">
+          <Tile
+            label="Steps"
+            icon={ListOrdered}
+            testId="steps-start"
+            action="stepsToggle"
+            keyShortcuts={settings.shortcuts.stepsToggle}
+            tooltip="Capture a step-by-step guide: move the mouse to an item and pause, and FrameCapt screenshots it."
+            disabled={anythingBusy}
+            onClick={() => void startSteps()}
+          />
+          <span className="sr-only" data-testid="steps-hint">
+            Steps: move the mouse to an item and pause, and FrameCapt takes a screenshot with the
+            pointer highlighted. Press Done to save the guide.
+          </span>
+          <Tile
+            label="Open image"
+            icon={ImagePlus}
+            testId="open-image"
+            note={
+              openImageShortcut ? acceleratorKeys(openImageShortcut).join('+') : 'Or drop one here'
+            }
+            keyShortcuts={openImageShortcut}
+            onClick={onOpenImage}
+          />
+        </Group>
       </div>
 
       <p
         role="status"
         data-testid="flow-status"
-        className="mt-4 flex h-5 items-center gap-2 text-sm text-fg-muted"
+        className="mt-3 flex h-5 items-center gap-2 text-[13px] text-fg-muted"
       >
         {statusText ? (
           <>
@@ -618,7 +601,23 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
         ) : null}
       </p>
 
-      <RecentCaptures onOpen={(id) => onOpenHistory(id)} onViewAll={() => onOpenHistory()} />
+      <div className="mt-2">
+        <RecordOptions
+          compact
+          options={options}
+          onChange={(next) => void updateSettings(patchFromRecordOptions(next))}
+          disabled={anythingBusy}
+          outputDir={dirs.recordingsDir}
+          onOpenSettings={() => onOpenSettings('recording')}
+          cameraStyle={{
+            shape: settings.recording.cameraShape,
+            size: settings.recording.cameraSize,
+            corner: settings.recording.cameraCorner,
+          }}
+        />
+      </div>
+
+      <RecentCaptures onOpen={onOpenItem} onViewAll={onOpenLibrary} />
 
       <SourcePicker
         open={picker !== null}

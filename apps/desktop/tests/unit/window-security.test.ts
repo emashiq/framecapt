@@ -57,7 +57,7 @@ import {
 } from '../../src/main/security';
 import type { AppOriginConfig } from '../../src/main/app-origin';
 import type { Role } from '../../src/shared/types';
-import { createEditorWindow, getRole, securePreferences } from '../../src/main/windows';
+import { securePreferences } from '../../src/main/windows';
 
 const config: AppOriginConfig = {};
 
@@ -93,31 +93,6 @@ describe('securePreferences: what every window gets', () => {
     expect(securePreferences().devTools).toBe(true);
     hoisted.isPackaged.value = true;
     expect(securePreferences().devTools).toBe(false);
-  });
-});
-
-describe('the Editor window', () => {
-  it('gets the secure preferences, its own role and no default menu', () => {
-    hoisted.isPackaged.value = true;
-    const win = createEditorWindow();
-    const { options, menuRemoved, url } = hoisted.windows.at(-1) ?? {
-      options: {},
-      menuRemoved: false,
-      url: '',
-    };
-    expect(options.webPreferences).toMatchObject({
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      webviewTag: false,
-      devTools: false,
-    });
-    expect(options).toMatchObject({ show: false, minWidth: 900, minHeight: 600 });
-    // The app's own origin and the editor's hash: nothing remote, nothing from file://.
-    expect(url).toMatch(/^(app:\/\/framecapt\/|http:\/\/localhost)[^#]*#\/editor$/);
-    expect(menuRemoved).toBe(true);
-    expect(getRole(win.webContents.id)).toBe('editor');
   });
 });
 
@@ -271,7 +246,7 @@ describe('session policies', () => {
       expect(ask('media', app, ['video']), role).toBe(true);
       expect(ask('media', 'https://evil.example/', ['video']), role).toBe(false);
     }
-    for (const role of ['editor', 'overlay', 'toolbar', 'countdown'] as const) {
+    for (const role of ['overlay', 'toolbar', 'countdown'] as const) {
       roleOfContents.value = role;
       expect(ask('media', app, ['video']), role).toBe(false);
       expect(check({}, 'media', app, { requestingUrl: app, mediaType: 'video' }), role).toBe(false);

@@ -32,7 +32,7 @@ vi.mock('../../src/main/logger', () => ({
 }));
 vi.mock('../../src/main/windows', () => ({
   dialogParent: () => undefined,
-  onEditorWindowClosed: () => undefined,
+  onMainWindowClosed: () => undefined,
 }));
 vi.mock('../../src/main/shots/after-capture', () => ({
   writePngToClipboard: async () => undefined,

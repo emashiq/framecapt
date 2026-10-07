@@ -167,7 +167,7 @@ function expectPixel(actual: number[], expected: number[]): void {
   );
 }
 
-/** The Editor window: a capture opens there, as a tab, and the window closes with its last tab. */
+/** The main window once a capture opened in it as a tab (Home is shown again when the tab closes). */
 const editor = (): Promise<Page> => editorPage(app);
 
 async function leaveResult(): Promise<void> {
@@ -545,14 +545,7 @@ test('saving JPEG writes a real JPEG with the right size', async () => {
 });
 
 test('export and clipboard channels validate their input in main', async () => {
-  // The screenshot channels belong to the Editor window: the main window is refused outright.
-  const copyFromMain = await page.evaluate(async () => {
-    const bytes = new Uint8Array([1, 2, 3, 4, 5]).buffer;
-    return window.framecapt.invoke('shot:copy', { sessionId: 'x', bytes });
-  });
-  expect(copyFromMain).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
-
-  // The Editor window may call it, and main still validates what it sends.
+  // The main window may call it, and main still validates what it sends.
   await page.getByTestId('shot-screen').click();
   const b = await overlayFor('1002', 'overlay-pick');
   await b.mouse.click(300, 300);

@@ -117,19 +117,19 @@ async function scan(name: string, scope?: string, target: Page = page): Promise<
   expect(summary, `${name}: serious or critical accessibility violations`).toEqual([]);
 }
 
-async function go(name: 'Capture' | 'History' | 'Settings'): Promise<void> {
+async function go(name: 'Home' | 'Library' | 'Settings'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 }
 
 for (const theme of THEMES) {
   test(`Home, History and every Settings section (${theme})`, async () => {
     await setTheme(theme);
-    await go('Capture');
+    await go('Home');
     await expect(page.getByTestId('shot-region')).toBeVisible();
     await expect(page.getByTestId('home-tip')).toBeVisible();
     await scan(`Home ${theme}`);
 
-    await go('History');
+    await go('Library');
     await expect(page.getByTestId('history-grid').locator('li').first()).toBeVisible();
     await page.waitForTimeout(500); // thumbnails
     await scan(`History ${theme}`);
@@ -156,7 +156,7 @@ for (const theme of THEMES) {
 
   test(`Title bar (${theme})`, async () => {
     await setTheme(theme);
-    await go('Capture');
+    await go('Home');
     await expect(page.getByTestId('shot-region')).toBeVisible();
     await page.waitForTimeout(400); // the view's entry animation
     await expect(page.getByTestId('title-bar')).toBeVisible();
@@ -165,7 +165,7 @@ for (const theme of THEMES) {
 
   test(`Editor, dialogs and the window picker (${theme})`, async () => {
     await setTheme(theme);
-    await go('Capture');
+    await go('Home');
     // The editor, from a real region capture on the mock display.
     await page.getByTestId('shot-region').click();
     const overlay = await (async () => {

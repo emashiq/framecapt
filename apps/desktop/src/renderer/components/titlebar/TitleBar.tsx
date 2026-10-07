@@ -7,7 +7,7 @@ import {
   useState,
   type RefObject,
 } from 'react';
-import { PencilRuler, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { acceleratorKeys, matchEditorAction } from '../../../shared/shortcuts';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { buildCommands, type Command, type CommandActions } from '../../commands/registry';
@@ -27,14 +27,16 @@ export interface TitleBarProps {
   /** What the app itself does for a command: the same functions as its buttons (see App.tsx). */
   actions: Pick<
     CommandActions,
-    'startCapture' | 'navigate' | 'showKeyboardHelp' | 'editVideo' | 'openImage' | 'startSteps'
+    | 'startCapture'
+    | 'navigate'
+    | 'toggleLibrarySidebar'
+    | 'showKeyboardHelp'
+    | 'editVideo'
+    | 'openImage'
+    | 'startSteps'
   >;
-  /** Opens a saved capture in History. */
+  /** Opens a saved capture in the Library. */
   onOpenCapture: (id: string) => void;
-  /** Tabs open in the Editor window; its button shows while there are any. */
-  editorTabs: number;
-  /** Brings the Editor window to the front. */
-  onShowEditor: () => void;
 }
 
 const FULL_LAYOUT: TitleBarLayout = { collapsedMenus: false, iconSearch: false };
@@ -66,7 +68,7 @@ function useBarLayout(areaRef: RefObject<HTMLDivElement | null>): TitleBarLayout
  * The main window's title bar: logo and menus on the left, the command center in the middle. With the window-controls overlay the OS draws minimize, maximize
  * and close over the right end of this bar; the content stays left of them (`.title-bar-area`).
  */
-export function TitleBar({ actions, onOpenCapture, editorTabs, onShowEditor }: TitleBarProps) {
+export function TitleBar({ actions, onOpenCapture }: TitleBarProps) {
   const settings = useSettings();
   const recorder = useRecorderState();
   const multiDisplay = useMultiDisplay();
@@ -180,26 +182,6 @@ export function TitleBar({ actions, onOpenCapture, editorTabs, onShowEditor }: T
               )}
             </button>
           </div>
-          {editorTabs > 0 ? (
-            <button
-              type="button"
-              data-testid="open-editor-button"
-              aria-label={`Show the editor, ${editorTabs} open`}
-              title="Show the Editor window"
-              onClick={onShowEditor}
-              className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 text-[13px] text-fg-muted transition-colors duration-150 hover:border-line-strong hover:text-fg"
-            >
-              <PencilRuler className="size-3.5" aria-hidden="true" />
-              <span aria-hidden="true">Editor</span>
-              <span
-                aria-hidden="true"
-                data-testid="open-editor-count"
-                className="rounded-full bg-accent-soft px-1.5 text-[11px] font-medium text-accent-fg"
-              >
-                {editorTabs}
-              </span>
-            </button>
-          ) : null}
         </div>
       </header>
       <CommandPalette

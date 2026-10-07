@@ -29,6 +29,7 @@ function actions(): CommandActions {
     stopRecording: vi.fn(),
     togglePause: vi.fn(),
     navigate: vi.fn(),
+    toggleLibrarySidebar: vi.fn(),
     showKeyboardHelp: vi.fn(),
     editVideo: vi.fn(),
     openImage: vi.fn(),
@@ -88,9 +89,9 @@ describe('rankCommands', () => {
   });
 
   it('puts the best title match first inside a group', () => {
-    const [group] = rankCommands(commands, 'history');
+    const [group] = rankCommands(commands, 'library');
     expect(group?.heading).toBe('Navigate');
-    expect(group?.items[0]?.command.id).toBe('nav.history');
+    expect(group?.items[0]?.command.id).toBe('nav.library');
   });
 
   it('finds a command by a keyword that is not in its title', () => {
@@ -222,7 +223,7 @@ describe('shortcut hints', () => {
       shortcuts: { ...DEFAULT_SETTINGS.shortcuts, recordRegion: null },
     };
     expect(hintFor(find(commands, 'rec.region'), unset)).toBe('Not set');
-    expect(hintFor(find(commands, 'nav.history'), DEFAULT_SETTINGS)).toBeNull();
+    expect(hintFor(find(commands, 'nav.library'), DEFAULT_SETTINGS)).toBeNull();
   });
 
   it('shows the command center key from the editable in-app shortcuts', () => {

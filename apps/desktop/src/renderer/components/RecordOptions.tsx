@@ -9,6 +9,7 @@ import {
 import type { RecordOptions as Options } from '../../shared/recorder-ipc';
 import type { RecordFps, RecordQuality } from '../../shared/recording';
 import { followFromSetting, type FollowMouseSetting } from '../../shared/settings';
+import { cn } from '../lib/cn';
 import { usePlatformCapabilities } from '../lib/use-platform-capabilities';
 import { useCameras } from '../recorder/use-cameras';
 import { useMicrophones } from '../recorder/use-microphones';
@@ -29,6 +30,8 @@ export interface RecordOptionsProps {
   onOpenSettings?: () => void;
   /** The remembered camera style: used when the camera is switched on (undefined: the defaults). */
   cameraStyle?: { shape: CameraShape; size: CameraSize; corner: CameraCorner };
+  /** The dashboard's dense form: four columns, no explanatory lines. */
+  compact?: boolean;
 }
 
 const QUALITY = [
@@ -97,7 +100,10 @@ export function RecordOptions({
   outputDir,
   onOpenSettings,
   cameraStyle = DEFAULT_CAMERA_STYLE,
+  compact = false,
 }: RecordOptionsProps) {
+  /** Explanations are for the roomy form; what a switch cannot do is always said. */
+  const note = (text: ReactNode): ReactNode => (compact ? undefined : text);
   const micId = useId();
   const cameraId = useId();
   const systemId = useId();
@@ -113,9 +119,16 @@ export function RecordOptions({
   const platform = usePlatformCapabilities();
 
   return (
-    <Card padding="lg" data-testid="record-options" aria-label="Recording options" role="group">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-[15px] font-semibold text-fg">Recording options</h2>
+    <Card
+      padding={compact ? 'md' : 'lg'}
+      data-testid="record-options"
+      aria-label="Recording options"
+      role="group"
+    >
+      <div className={cn('flex items-center justify-between gap-3', compact ? 'mb-3' : 'mb-4')}>
+        <h2 className={cn('font-semibold text-fg', compact ? 'text-[13px]' : 'text-[15px]')}>
+          Recording options
+        </h2>
         {onOpenSettings ? (
           <Button
             size="sm"
@@ -128,7 +141,12 @@ export function RecordOptions({
           </Button>
         ) : null}
       </div>
-      <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div
+        className={cn(
+          'grid sm:grid-cols-2',
+          compact ? 'gap-x-6 gap-y-4 lg:grid-cols-4' : 'gap-x-8 gap-y-5 lg:grid-cols-3',
+        )}
+      >
         <Cell
           id={micId}
           label="Microphone"
@@ -157,7 +175,7 @@ export function RecordOptions({
         <Cell
           id={cameraId}
           label="Camera"
-          hint="Your webcam, in the corner of the video. Drag the bubble to move it."
+          hint={note('Your webcam, in the corner of the video. Drag the bubble to move it.')}
           control={
             <Switch
               aria-labelledby={cameraId}
@@ -207,7 +225,9 @@ export function RecordOptions({
           id={systemId}
           label="System audio"
           hint={
-            platform.systemAudio ? 'Everything you hear on this PC' : platform.systemAudioReason
+            platform.systemAudio
+              ? note('Everything you hear on this PC')
+              : platform.systemAudioReason
           }
           control={
             <Switch
@@ -222,7 +242,7 @@ export function RecordOptions({
         <Cell
           id={countdownId}
           label="Countdown"
-          hint="3 seconds before it starts"
+          hint={note('3 seconds before it starts')}
           control={
             <Switch
               aria-labelledby={countdownId}
@@ -236,7 +256,9 @@ export function RecordOptions({
         <Cell
           id={qualityId}
           label="Quality"
-          hint={options.quality === '1080p' ? 'Fits 1920 × 1080' : 'Full resolution, larger files'}
+          hint={note(
+            options.quality === '1080p' ? 'Fits 1920 × 1080' : 'Full resolution, larger files',
+          )}
         >
           <Segmented<RecordQuality>
             label="Quality"
@@ -247,7 +269,7 @@ export function RecordOptions({
             onChange={(quality) => onChange({ ...options, quality })}
           />
         </Cell>
-        <Cell id={fpsId} label="Frame rate" hint="Frames per second">
+        <Cell id={fpsId} label="Frame rate" hint={note('Frames per second')}>
           <Segmented<RecordFps>
             label="Frame rate"
             data-testid="opt-fps"
@@ -260,7 +282,9 @@ export function RecordOptions({
         <Cell
           id={followId}
           label="Follow mouse"
-          hint="Zooms in and pans to the mouse. Screen recordings only: window and region recordings ignore it."
+          hint={note(
+            'Zooms in and pans to the mouse. Screen recordings only: window and region recordings ignore it.',
+          )}
         >
           <Segmented<FollowMouseSetting>
             label="Follow mouse"

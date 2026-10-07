@@ -1045,7 +1045,8 @@ export function AboutSection() {
         ) : null}
 
         <p className="mt-5 text-xs text-fg-muted">
-          FrameCapt works fully offline and sends no telemetry. Licensed under GPL-3.0-only.
+          Captures stay on this device. FrameCapt works fully offline and sends no telemetry.
+          Licensed under GPL-3.0-only.
         </p>
       </Card>
     </section>

@@ -97,7 +97,7 @@ async function historyItems(page: Page) {
   return response.data.items;
 }
 
-async function goTo(page: Page, name: 'Capture' | 'History' | 'Settings'): Promise<void> {
+async function goTo(page: Page, name: 'Home' | 'Library' | 'Settings'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 }
 
@@ -318,7 +318,7 @@ test.describe('Save in another format', () => {
       },
     });
     await stubTrash(app);
-    await goTo(page, 'History');
+    await goTo(page, 'Library');
     await expect(page.getByTestId('history-item')).toHaveCount(1);
     await page.getByTestId('history-item').first().locator('[data-card-main]').click();
     await page.getByTestId('details-save-as').click();
@@ -350,7 +350,7 @@ test.describe('Save in another format', () => {
   test('MKV with no compression is a lossless re-wrap; the card menu and context menu offer the action', async () => {
     const { page, app } = await launch({ seed: (dir) => void seedClip(dir) });
     await stubTrash(app);
-    await goTo(page, 'History');
+    await goTo(page, 'Library');
     const card = page.getByTestId('history-item').first();
     await card.getByTestId('history-more').click();
     await expect(page.getByTestId('history-menu-save-as')).toBeVisible();
@@ -405,7 +405,7 @@ test.describe('Save in another format', () => {
         fs.writeFileSync(file, JSON.stringify(data));
       },
     });
-    await goTo(page, 'History');
+    await goTo(page, 'Library');
     await page.getByTestId('history-item').first().locator('[data-card-main]').click();
     await page.getByTestId('details-save-as').click();
     const dialog = page.getByTestId('save-as-dialog');

@@ -7,15 +7,7 @@ import type {
 } from './ipc-contract';
 
 /** Roles a FrameCapt window can have. One renderer bundle serves every role (see main.tsx). */
-export const ROLES = [
-  'main',
-  'editor',
-  'overlay',
-  'toolbar',
-  'recorder',
-  'countdown',
-  'camera',
-] as const;
+export const ROLES = ['main', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] as const;
 export type Role = (typeof ROLES)[number];
 
 export const IPC_ERROR_CODES = [

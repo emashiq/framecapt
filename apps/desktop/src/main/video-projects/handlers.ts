@@ -25,17 +25,15 @@ export async function pickAudioFile(): Promise<string | null> {
  * uses `export:cancel` (the job queue is shared).
  */
 export function registerVideoHandlers(service: VideoEditService): void {
-  handle('video:open', { roles: ['editor'] }, (request) => service.open(request.historyId));
-  handle('video:save', { roles: ['editor'] }, (request) =>
+  handle('video:open', { roles: ['main'] }, (request) => service.open(request.historyId));
+  handle('video:save', { roles: ['main'] }, (request) =>
     service.save(request.historyId, request.project),
   );
-  handle('video:addImage', { roles: ['editor'] }, (request) =>
+  handle('video:addImage', { roles: ['main'] }, (request) =>
     service.addImage(request.historyId, new Uint8Array(request.png)),
   );
-  handle('video:pickAudio', { roles: ['editor'] }, (request) =>
-    service.pickAudio(request.historyId),
-  );
-  handle('video:export', { roles: ['editor'] }, (request) =>
+  handle('video:pickAudio', { roles: ['main'] }, (request) => service.pickAudio(request.historyId));
+  handle('video:export', { roles: ['main'] }, (request) =>
     service.export(
       request.historyId,
       request.project,

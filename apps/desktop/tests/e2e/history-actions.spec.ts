@@ -97,7 +97,7 @@ async function launch(
 async function openHistory(page: Page, count: number): Promise<void> {
   await page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'History' })
+    .getByRole('button', { name: 'Library' })
     .click();
   await expect(page.getByTestId('history-item')).toHaveCount(count);
 }

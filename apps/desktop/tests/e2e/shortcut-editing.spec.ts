@@ -204,7 +204,7 @@ test('editor keys: rebound in Settings, then they work in the editor (and the ol
   // Into the editor.
   await page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Capture' })
+    .getByRole('button', { name: 'Home' })
     .click();
   await page.getByTestId('shot-screen').click();
   const editor = await editorPage(app);

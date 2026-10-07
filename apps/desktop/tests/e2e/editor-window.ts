@@ -1,32 +1,10 @@
 import { expect, type ElectronApplication, type Locator, type Page } from '@playwright/test';
 
 /**
- * Screenshots and videos are edited in the Editor window (one window, one tab per item), a window
- * of its own at `#/editor`. These helpers find it and the main window among the app's windows.
+ * Screenshots, videos and step guides are edited in tabs of the main window (ADR-050), next to the
+ * pinned Home tab. The helpers keep the names they had when the editors had a window of their own:
+ * `editorPage` is the main window once an editor tab is open.
  */
-const isEditor = (page: Page): boolean => page.url().includes('#/editor');
-
-/** The Editor window, once it exists (made on the first open, closed with its last tab). */
-export async function editorPage(app: ElectronApplication, timeout = 20_000): Promise<Page> {
-  let found: Page | undefined;
-  await expect
-    .poll(
-      () => {
-        found = app.windows().find(isEditor);
-        return found !== undefined;
-      },
-      { timeout, message: 'the Editor window did not open' },
-    )
-    .toBe(true);
-  const page = found as unknown as Page;
-  await page.waitForLoadState('domcontentloaded');
-  return page;
-}
-
-/** True while an Editor window is open. */
-export function hasEditorPage(app: ElectronApplication): boolean {
-  return app.windows().some(isEditor);
-}
 
 /** The main window (the first one the app opens). */
 export function mainPage(app: ElectronApplication): Page {
@@ -35,17 +13,48 @@ export function mainPage(app: ElectronApplication): Page {
   return main;
 }
 
-/** Waits until the Editor window is gone. */
+/** The editor tabs, in order (the pinned Home tab is not one of them). */
+export function tabs(page: Page): Locator {
+  return page.getByTestId('editor-tab');
+}
+
+/** The main window, once an editor tab is open and showing (it opens on a capture or an Edit). */
+export async function editorPage(app: ElectronApplication, timeout = 20_000): Promise<Page> {
+  let main: Page | undefined;
+  await expect
+    .poll(
+      () => {
+        main = app.windows().find((page) => page.url().endsWith('#/'));
+        return main !== undefined;
+      },
+      { timeout, message: 'the main window is not open' },
+    )
+    .toBe(true);
+  const page = main as unknown as Page;
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page.locator('[data-testid="editor-panel"][data-active="true"]')).toBeVisible({
+    timeout,
+  });
+  return page;
+}
+
+/** True while an editor tab is open. */
+export async function hasEditorPage(app: ElectronApplication): Promise<boolean> {
+  return (await tabs(mainPage(app)).count()) > 0;
+}
+
+/** Waits until every editor tab is closed. */
 export async function expectEditorClosed(app: ElectronApplication): Promise<void> {
-  await expect.poll(() => hasEditorPage(app), { timeout: 15_000 }).toBe(false);
+  await expect(tabs(mainPage(app))).toHaveCount(0, { timeout: 15_000 });
 }
 
 /** The panel of the tab that is showing (every open tab stays mounted, so ids repeat across panels). */
-export function activePanel(editor: Page): Locator {
-  return editor.locator('[data-testid="editor-panel"][data-active="true"]');
+export function activePanel(page: Page): Locator {
+  return page.locator('[data-testid="editor-panel"][data-active="true"]');
 }
 
-/** The tab strip's tabs, in order. */
-export function tabs(editor: Page): Locator {
-  return editor.getByTestId('editor-tab');
+/** Shows the pinned Home tab (the section it was on stays). */
+export async function showHome(page: Page): Promise<void> {
+  await page.getByTestId('home-tab').click();
+  await expect(page.getByTestId('home-panel')).toHaveAttribute('data-active', 'true');
 }

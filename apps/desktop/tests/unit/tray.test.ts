@@ -66,7 +66,7 @@ describe('buildTrayTemplate', () => {
       'Capture steps',
       '-',
       'Open FrameCapt',
-      'History',
+      'Library',
       'Settings',
       '-',
       'Quit FrameCapt',
