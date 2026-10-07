@@ -35,6 +35,7 @@ describe('defaults', () => {
       launchAtLogin: false,
       closeToTray: true,
       showNotifications: true,
+      captureFolder: null,
     });
     expect(DEFAULT_SETTINGS.screenshots).toMatchObject({
       format: 'png',

@@ -7,6 +7,9 @@ import { ExportService } from './history/export-service';
 import { ExtractService } from './history/extract-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
 import { rescanLibrary } from './history/rescan';
+import { registerLibraryHandlers } from './library/handlers';
+import { LibraryService } from './library/service';
+import { LibraryStore } from './library/store';
 import { createAfterCapture, createSaveCaptureDirect } from './shots/after-capture';
 import { rememberExported } from './shots/exported-paths';
 import type { AppSettings } from './settings';
@@ -180,7 +183,8 @@ export function registerHandlers(
   const store = new ShotSessionStore(path.join(app.getPath('userData'), 'shots'));
   const synthetic = isMockCaptureEnabled();
   const recordingsDir = path.join(app.getPath('userData'), 'recordings');
-  const outputDir = (): string => settings.dirs().recordingsDir;
+  // New recordings (and what is saved beside them) go into the chosen library folder, if any.
+  const outputDir = (): string => library.saveDir('recordings');
   const tools = withE2eRemuxDelay(
     createMediaTools(() =>
       resolveFfmpeg({
@@ -204,11 +208,32 @@ export function registerHandlers(
     videoProjects,
     tools,
     trashItem: (file) => shell.trashItem(file),
+    folderOf: (dir) => library.folderOfDir(dir),
     onChange: () => {
       for (const contents of webContentsWithRoles(['main']))
         sendEvent(contents, 'history:changed', {});
     },
   });
+  const libraryStore = new LibraryStore(app.getPath('userData'));
+  const library: LibraryService = new LibraryService({
+    roots: () => settings.dirs(),
+    history: {
+      ready: Promise.all([history.ready, libraryStore.load()]).then(() => undefined),
+      items: () => history.items(),
+      rewritePaths: (changes) => history.rewritePaths(changes),
+    },
+    store: libraryStore,
+    captureFolder: {
+      get: () => settings.store.get().general.captureFolder,
+      set: (folder) => void settings.store.setCaptureFolder(folder),
+    },
+    trashItem: (file) => shell.trashItem(file),
+    onChange: () => {
+      for (const contents of webContentsWithRoles(['main']))
+        sendEvent(contents, 'library:changed', {});
+    },
+  });
+  registerLibraryHandlers(library);
   // Capability is asked once, at startup, and cached (the answer cannot change while running).
   // E2E builds only (FRAMECAPT_E2E_NO_H264=1): behave like a build without an H.264 encoder.
   const detected: Promise<Mp4Capability> =
@@ -280,7 +305,7 @@ export function registerHandlers(
     tools,
     runner,
     capability: () => mp4Capability,
-    screenshotsDir: () => settings.dirs().screenshotsDir,
+    screenshotsDir: () => library.saveDir('screenshots'),
     scratchDir: flowsDir,
     thumbnail: guideThumbnail,
     trashItem: (file) => shell.trashItem(file),
@@ -312,7 +337,7 @@ export function registerHandlers(
   });
   const captureSaving = {
     settings: () => settings.store.get(),
-    screenshotsDir: () => settings.dirs().screenshotsDir,
+    screenshotsDir: () => library.saveDir('screenshots'),
     history,
   };
   const saveDirect = createSaveCaptureDirect(captureSaving);
@@ -407,7 +432,7 @@ export function registerHandlers(
     history,
     {
       get: () => settings.store.get(),
-      screenshotsDir: () => settings.dirs().screenshotsDir,
+      screenshotsDir: () => library.saveDir('screenshots'),
     },
     { store: projects, appVersion: app.getVersion() },
     flows,

@@ -5,6 +5,7 @@ import {
   ExternalLink,
   FileX2,
   Film,
+  FolderInput,
   FolderOpen,
   Layers,
   Link2,
@@ -47,6 +48,10 @@ export interface HistoryCardProps {
   onContextMenu: (item: HistoryItemView, point: { x: number; y: number }) => void;
   /** Dragging the card out of the window drops its file; null when that is not allowed now. */
   onDragOut: ((item: HistoryItemView) => void) | null;
+  /** Dragging the card inside the window carries its id (or the selection's) to a folder in the folder pane. Alt+drag still drags the file out. */
+  onItemsDrag?: (item: HistoryItemView, transfer: DataTransfer) => void;
+  /** Opens the folder picker to move the item. */
+  onMoveTo?: (item: HistoryItemView) => void;
 }
 
 export function dimensionsText(item: Pick<HistoryItemView, 'width' | 'height'>): string {
@@ -120,6 +125,8 @@ export function HistoryCard({
   onToggleSelect,
   onContextMenu,
   onDragOut,
+  onItemsDrag,
+  onMoveTo,
 }: HistoryCardProps) {
   const exportState = useExportState(item.id);
   const converting = exportState?.status === 'running' || exportState?.status === 'starting';
@@ -154,11 +161,19 @@ export function HistoryCard({
         data-missing={missing || undefined}
         tabIndex={tabStop ? 0 : -1}
         aria-label={`${item.fileName}, ${kind}, ${formatRelative(item.createdAt, now)}${missing ? ', file missing' : ''}${selected ? ', selected' : ''}`}
-        draggable={onDragOut !== null && !missing && item.type !== 'flow'}
+        draggable={
+          !missing && (onItemsDrag !== undefined || (onDragOut !== null && item.type !== 'flow'))
+        }
         onDragStart={(event) => {
+          const fileDrag = onDragOut !== null && item.type !== 'flow';
+          // Dragging within the window moves the card to a folder; with Alt (or without a folder pane) the file is dragged out.
+          if (onItemsDrag && !(event.altKey && fileDrag)) {
+            onItemsDrag(item, event.dataTransfer);
+            return;
+          }
           // The OS drag is started by main (it knows the file); the browser drag is not used.
           event.preventDefault();
-          if (onDragOut && !missing && item.type !== 'flow') onDragOut(item);
+          if (onDragOut && !missing && fileDrag) onDragOut(item);
         }}
         onClick={(event) => {
           if (event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -334,6 +349,16 @@ export function HistoryCard({
                   >
                     <Save className="size-4 text-fg-subtle" aria-hidden="true" />
                     Save a copy as…
+                  </DropdownMenu.Item>
+                ) : null}
+                {onMoveTo ? (
+                  <DropdownMenu.Item
+                    data-testid="history-menu-move"
+                    onSelect={() => onMoveTo(item)}
+                    className={menuItemClass}
+                  >
+                    <FolderInput className="size-4 text-fg-subtle" aria-hidden="true" />
+                    Move to…
                   </DropdownMenu.Item>
                 ) : null}
                 <DropdownMenu.Item

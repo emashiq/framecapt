@@ -7,6 +7,7 @@ import {
   ExternalLink,
   FileX2,
   Film,
+  FolderInput,
   FolderOpen,
   Link2,
   Pencil,
@@ -40,6 +41,8 @@ export interface HistoryContextMenuProps {
   onSaveCopies: (ids: string[]) => void;
   onRemoveMany: (ids: string[]) => void;
   onClearSelection: () => void;
+  /** Opens the folder picker to move these items. */
+  onMoveTo?: ((ids: string[]) => void) | undefined;
   onClose: () => void;
 }
 
@@ -145,6 +148,14 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                 label={`Save ${bulkIds.length} copies…`}
                 onSelect={() => props.onSaveCopies(bulkIds)}
               />
+              {props.onMoveTo ? (
+                <Entry
+                  testId="ctx-bulk-move"
+                  icon={<FolderInput className={ICON} />}
+                  label={`Move ${bulkIds.length} to…`}
+                  onSelect={() => props.onMoveTo?.(bulkIds)}
+                />
+              ) : null}
               <Entry
                 testId="ctx-bulk-remove"
                 icon={<Trash2 className={ICON} />}
@@ -223,6 +234,14 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                   icon={<Link2 className={ICON} />}
                   label="Locate…"
                   onSelect={() => actions.locate(item)}
+                />
+              ) : null}
+              {props.onMoveTo ? (
+                <Entry
+                  testId="ctx-move"
+                  icon={<FolderInput className={ICON} />}
+                  label="Move to…"
+                  onSelect={() => props.onMoveTo?.([item.id])}
                 />
               ) : null}
               <DropdownMenu.Separator className="my-1 h-px bg-line" />

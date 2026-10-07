@@ -101,15 +101,26 @@ describe('rescan of step guide folders', () => {
     expect(await run()).toBe(0);
   });
 
-  it('ignores folders with other names, invalid or missing flow.json and deeper nesting', async () => {
+  it('ignores folders with other names, invalid or missing flow.json and nesting beyond 8 levels', async () => {
     await makeGuide(shots, 'My holiday steps');
-    await makeGuide(path.join(shots, 'archive'), flowFolderName(new Date(2026, 9, 2, 14, 5, 9)));
+    const tooDeep = path.join(shots, ...'abcdefghi'.split(''));
+    await makeGuide(tooDeep, flowFolderName(new Date(2026, 9, 2, 14, 5, 9)));
     const broken = path.join(shots, flowFolderName(new Date(2026, 9, 2, 14, 5, 10)));
     fs.mkdirSync(broken);
     fs.writeFileSync(path.join(broken, 'flow.json'), '{ nope');
     fs.mkdirSync(path.join(shots, flowFolderName(new Date(2026, 9, 2, 14, 5, 11))));
     const { run } = setup();
     expect(await run()).toBe(0);
+  });
+
+  it('finds a guide inside a library folder', async () => {
+    await makeGuide(
+      path.join(shots, 'Clients', 'Acme'),
+      flowFolderName(new Date(2026, 9, 2, 14, 5, 9)),
+    );
+    const { history, run } = setup();
+    expect(await run()).toBe(1);
+    expect((await history.list({})).items[0]).toMatchObject({ type: 'flow' });
   });
 
   it('still finds ordinary screenshots next to guides', async () => {

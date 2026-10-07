@@ -1,4 +1,4 @@
-import { CheckSquare, Download, Loader2, Trash2, X } from 'lucide-react';
+import { CheckSquare, Download, FolderInput, Loader2, Trash2, X } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import type { BulkState } from '../../history/bulk-store';
 import { selectionLabel } from './selection';
@@ -10,6 +10,8 @@ export interface SelectionBarProps {
   bulk: BulkState;
   onSaveCopies: () => void;
   onRemove: () => void;
+  /** Opens the folder picker for the selection. */
+  onMoveTo?: () => void;
   onSelectAll: () => void;
   onClear: () => void;
   onCancelBulk: () => void;
@@ -24,6 +26,7 @@ export function SelectionBar({
   bulk,
   onSaveCopies,
   onRemove,
+  onMoveTo,
   onSelectAll,
   onClear,
   onCancelBulk,
@@ -65,6 +68,18 @@ export function SelectionBar({
             Save copies…
           </Button>
         )}
+        {onMoveTo ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            data-testid="bulk-move"
+            icon={<FolderInput className="size-4" aria-hidden="true" />}
+            disabled={bulk.status === 'running'}
+            onClick={onMoveTo}
+          >
+            Move to…
+          </Button>
+        ) : null}
         <Button
           size="sm"
           variant="secondary"

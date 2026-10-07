@@ -55,6 +55,11 @@ export interface HistoryDeps {
   videoProjects?: Pick<VideoProjectStore, 'remove' | 'sweep'>;
   /** Moves a file to the Recycle Bin (`shell.trashItem`); never a permanent delete. */
   trashItem: (file: string) => Promise<void>;
+  /**
+   * The library folder of a directory: its path relative to the capture folders (empty = the
+   * root), or null when it is outside both ("Other locations"). Absent: no folders are shown.
+   */
+  folderOf?: (dir: string) => string | null;
   /** Called after every change a list may show (add, remove, thumbnail ready). */
   onChange?: () => void;
   now?: () => number;
@@ -230,6 +235,19 @@ export class HistoryService {
     return this.store.get(id);
   }
 
+  /** Every item, newest first (the library counts and moves them). */
+  items(): readonly HistoryItem[] {
+    return this.store.items();
+  }
+
+  /** Points items at their moved files in one write; nothing else about them changes. */
+  async rewritePaths(changes: readonly { id: string; path: string }[]): Promise<void> {
+    await this.ready;
+    if (changes.length === 0) return;
+    await this.store.updatePaths(changes);
+    this.changed();
+  }
+
   /** The item that points at `file` (same path, any case on Windows), if any. */
   findByPath(file: string): HistoryItem | undefined {
     return this.existingFor(file);
@@ -292,7 +310,17 @@ export class HistoryService {
       editable: item.type === 'screenshot' && item.projectId !== undefined,
       ...(item.format === 'fcap' && { layout: exists ? await fcapLayout(item.path) : null }),
       ...(item.stepCount !== undefined && { stepCount: item.stepCount }),
+      ...this.folderFields(item),
     };
+  }
+
+  private folderFields(item: HistoryItem): Pick<HistoryItemView, 'folder' | 'outside'> {
+    if (!this.deps.folderOf) return {};
+    // A guide's file sits in its own folder, which is the item: its library folder is that one's parent.
+    const dir = path.dirname(item.type === 'flow' ? path.dirname(item.path) : item.path);
+    const folder = this.deps.folderOf(dir);
+    if (folder === null) return { outside: true };
+    return folder === '' ? {} : { folder };
   }
 
   // --- adding -----------------------------------------------------------------------------

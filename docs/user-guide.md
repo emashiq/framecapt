@@ -152,6 +152,17 @@ The pill shows the number of steps and has: **Auto** (off: only manual steps), *
 - **Uninstalling** asks whether to remove your FrameCapt data (history, settings, editable projects) as well; the default and a timeout keep it. Your screenshots and recordings stay unless you tick **Also move my screenshots and recordings to the Recycle Bin**.
 - History keeps at most 1000 entries (older entries drop off the list; their files are never touched). It stores metadata and thumbnails only.
 
+## Folders
+
+History has a **folder pane** on the left (hide it with the button next to **New folder**). The folders are **real folders on your disk**: a folder you make in FrameCapt is made inside both your screenshots folder (default `Pictures\FrameCapt`) and your recordings folder (default `Videos\FrameCapt`), so Explorer, backups and other tools see the same organization. **All captures** shows everything; click a folder to show what is in it (the **Include subfolders** box adds what is below it); **Other locations** lists captures saved outside the two folders, so you can drag them in.
+
+- **New folder** makes a folder inside the selected one (or at the top). A name can have up to 80 characters, folders can be 8 levels deep, and a name cannot contain `< > : " / \ | ? *`, start with a dot, end with a dot or a space, or be a Windows device name such as `CON`.
+- **Right-click a folder** (or press `Shift+F10`): New subfolder, **Rename** (`F2`, inline), **Move contents to parent**, **Delete (empty only)**, **Set as save location** / **Clear save location**, and **Show in Explorer** for the screenshots copy and the recordings copy. Delete refuses a folder that holds anything; it never deletes your captures.
+- **Move captures**: drag a card (or a selection) onto a folder (drop on **All captures** to take them out of their folder), or use **Move to...** in the card menu, the right-click menu or the selection bar. The file moves on disk; its History entry, an editable screenshot and a step guide (which moves as its folder) keep working. A name that is taken gets ` (2)`. To drag a file out to another app, hold **Alt** while dragging.
+- **Keyboard**: the arrow keys move in the tree (`Right` opens a folder, `Left` closes it or goes to the parent), `Enter` selects, `F2` renames, `Delete` deletes an empty folder.
+- **Save location**: the folder that new screenshots, recordings and step guides are saved into is marked with a pin, and the Capture view says "Saving to: Clients / Acme" with a **Change** link. Without one, captures go to the main capture folders. Exports that are saved next to their source stay next to it.
+- **After a reinstall**, **Find existing captures** also looks inside your folders, so the organization comes back.
+
 ## Editing a saved screenshot
 
 In **History**, choose **Edit** on a screenshot to open it in the editor again. If FrameCapt kept the editable version (Settings, Screenshots, **Keep editable originals**, on by default), every annotation can be moved, restyled or deleted. Screenshots saved earlier, or whose editable data was deleted, open as a flattened copy: you can add new annotations, but the old ones cannot be changed.

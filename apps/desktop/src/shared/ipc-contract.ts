@@ -55,6 +55,17 @@ import {
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
 import {
+  LibraryFolderRequestSchema,
+  LibraryFolderResponseSchema,
+  LibraryMoveItemsRequestSchema,
+  LibraryMoveItemsResponseSchema,
+  LibraryMoveUpResponseSchema,
+  LibraryRenameRequestSchema,
+  LibraryRevealRequestSchema,
+  LibrarySetCaptureFolderRequestSchema,
+  LibraryTreeSchema,
+} from './library';
+import {
   BulkExportRequestSchema,
   BulkExportResponseSchema,
   BulkProgressEventSchema,
@@ -486,6 +497,45 @@ export const ipcContract = {
     response: ExtractFcapResponseSchema,
     roles: ['main'],
   },
+  // --- the capture library: a tree of real folders in the capture folders. Relative, validated folder names and history ids only. ---
+  'library:tree': { request: z.undefined(), response: LibraryTreeSchema, roles: ['main'] },
+  'library:createFolder': {
+    request: LibraryFolderRequestSchema,
+    response: LibraryFolderResponseSchema,
+    roles: ['main'],
+  },
+  /** Renames the last level of a folder in both capture folders and keeps History pointing at the files. */
+  'library:renameFolder': {
+    request: LibraryRenameRequestSchema,
+    response: LibraryFolderResponseSchema,
+    roles: ['main'],
+  },
+  /** Only an empty folder is deleted; anything else is refused with a message. */
+  'library:deleteFolder': {
+    request: LibraryFolderRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** Moves a folder's captures and subfolders up one level; the emptied folder is removed. */
+  'library:moveContentsUp': {
+    request: LibraryFolderRequestSchema,
+    response: LibraryMoveUpResponseSchema,
+    roles: ['main'],
+  },
+  /** Moves captures (a guide moves as its folder) to a folder, or to the root with null. */
+  'library:moveItems': {
+    request: LibraryMoveItemsRequestSchema,
+    response: LibraryMoveItemsResponseSchema,
+    roles: ['main'],
+  },
+  /** Where new captures are saved: a folder, or null for the capture folders themselves. */
+  'library:setCaptureFolder': {
+    request: LibrarySetCaptureFolderRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** Opens one capture folder's copy of a library folder in the file manager. */
+  'library:reveal': { request: LibraryRevealRequestSchema, response: z.void(), roles: ['main'] },
   'export:capabilities': {
     request: z.undefined(),
     response: ExportCapabilitiesSchema,
@@ -643,6 +693,8 @@ export const ipcEvents = {
   'recovery:changed': z.object({}),
   /** History changed (an item was added, removed or got its thumbnail): lists should reload. */
   'history:changed': z.object({}),
+  /** The folder tree changed (a folder was made, renamed, deleted, or captures moved). */
+  'library:changed': z.object({}),
   /** Progress of "save copies" (items finished of the total). */
   'history:bulkProgress': BulkProgressEventSchema,
   'export:progress': ExportProgressEventSchema,

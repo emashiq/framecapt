@@ -34,6 +34,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Kbd } from '../components/ui/Kbd';
 import { useCaptureFlow } from '../capture/use-capture-flow';
+import { SavingTo } from '../library/SavingTo';
 import { subscribeLaunch } from '../lib/launch-bus';
 import { notify } from '../lib/notify';
 import { useMultiDisplay } from '../lib/use-multi-display';
@@ -503,6 +504,8 @@ export function CaptureView({ onOpenImage, onOpenHistory, onOpenSettings }: Capt
           grab a region from anywhere.
         </Banner>
       ) : null}
+
+      <SavingTo />
 
       <div className="grid items-stretch gap-5 md:grid-cols-2">
         <ModeCard
