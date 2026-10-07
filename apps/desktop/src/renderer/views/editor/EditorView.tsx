@@ -82,12 +82,19 @@ export interface EditorShot {
 
 export interface EditorViewProps {
   shot: EditorShot;
-  /** True while a dialog is open over the editor: shortcuts are ignored. */
+  /** True while a dialog is open over the editor, or its tab is hidden: shortcuts are ignored. */
   blocked: boolean;
+  /** This tab is the one showing: it takes the keyboard focus. */
+  active: boolean;
   /** Edits or nothing saved yet: leaving would lose work. */
   onDirtyChange: (dirty: boolean) => void;
-  /** Done / Discard was pressed. The app decides whether to confirm. */
+  /** Done / Discard was pressed. The window decides whether to confirm. */
   onRequestLeave: () => void;
+  /**
+   * Hands the window the way to save this screenshot (the "Save" of the unsaved-tab question): it
+   * resolves true once the picture is saved, false when the user cancelled or it failed.
+   */
+  registerSave: (save: (() => Promise<boolean>) | null) => void;
 }
 
 type HistoryAction =
@@ -229,8 +236,10 @@ function EditorWorkspace({
   shot,
   bitmap,
   blocked,
+  active,
   onDirtyChange,
   onRequestLeave,
+  registerSave,
   initialAssets,
 }: EditorViewProps & { bitmap: ImageBitmap; initialAssets: EditorAssets }) {
   const [history, dispatch] = useReducer(historyReducer, undefined, () =>
@@ -278,10 +287,11 @@ function EditorWorkspace({
   const settings = useSettings();
   const saveFormat = settings.screenshots.format;
 
-  // A capture that was just opened: the keyboard works on the canvas straight away.
+  // A capture that was just opened, or a tab that was just shown: the keyboard works on the canvas
+  // straight away.
   useEffect(() => {
-    stageRef.current?.focus();
-  }, []);
+    if (active) stageRef.current?.focus();
+  }, [active]);
 
   const dirty = doc !== savedDoc;
   useEffect(() => {
@@ -661,11 +671,12 @@ function EditorWorkspace({
    * `quick` there is no dialog: main saves into the screenshots folder under a free name.
    */
   const save = useCallback(
-    async (format: ImageFormat, quick = false) => {
-      if (busy) return;
+    async (format: ImageFormat, quick = false): Promise<boolean> => {
+      if (busy) return false;
       stageRef.current?.commitText();
       const exporting = doc;
       const before = savedDoc;
+      let done = false;
       setBusy(format);
       try {
         const prepared = await prepareExport(exporting, format);
@@ -677,6 +688,7 @@ function EditorWorkspace({
           notify.error(result.error);
         } else if ('path' in result.data) {
           const saved = result.data.path;
+          done = true;
           setSavedDoc(exporting);
           // A copy made from History becomes the item this session saves over from now on.
           if (reedit && result.data.historyId) {
@@ -716,6 +728,7 @@ function EditorWorkspace({
       } finally {
         setBusy(null);
       }
+      return done;
     },
     [busy, doc, savedDoc, shot.session.id, announce, prepareExport, reedit],
   );
@@ -725,10 +738,11 @@ function EditorWorkspace({
   }, [save]);
 
   /** "Save changes": writes over the history item, in its own format, atomically (no dialog). */
-  const saveOver = useCallback(async () => {
-    if (busy || !reedit) return;
+  const saveOver = useCallback(async (): Promise<boolean> => {
+    if (busy || !reedit) return false;
     stageRef.current?.commitText();
     const exporting = doc;
+    let done = false;
     setBusy(reedit.format);
     try {
       const prepared = await prepareExport(exporting, reedit.format);
@@ -740,6 +754,7 @@ function EditorWorkspace({
       if (!result.ok) {
         notify.error(result.error);
       } else {
+        done = true;
         setSavedDoc(exporting);
         notify.success(`Changes saved to ${shortPath(result.data.path)}`);
         announce('Changes saved');
@@ -749,6 +764,7 @@ function EditorWorkspace({
     } finally {
       setBusy(null);
     }
+    return done;
   }, [busy, reedit, doc, shot.session.id, announce, prepareExport]);
 
   /** The first overwrite of a session asks: the previous version of the image is not kept. */
@@ -763,6 +779,17 @@ function EditorWorkspace({
     if (reedit) requestSaveOver();
     else void save(getSettings().screenshots.format);
   }, [reedit, requestSaveOver, save]);
+
+  // The "Save" of the unsaved-tab question: a screenshot from History saves its changes (the
+  // question already was the confirmation), a fresh capture goes through the Save dialog.
+  const saveForClose = useCallback(
+    () => (reedit ? saveOver() : save(getSettings().screenshots.format)),
+    [reedit, saveOver, save],
+  );
+  useEffect(() => {
+    registerSave(saveForClose);
+    return () => registerSave(null);
+  }, [saveForClose, registerSave]);
 
   // --- keyboard (this view only) ------------------------------------------------------------
 

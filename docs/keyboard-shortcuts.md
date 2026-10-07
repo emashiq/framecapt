@@ -48,7 +48,7 @@ refusing the registration ("used by another app"). A global shortcut also cannot
 
 ## Command center and menus (customizable)
 
-The title bar has a menu bar (**File**, **View**, **Help**) and a search box in the middle, the command center. These two keys open it from anywhere in the main window (the editor included); they are in-app keys, not registered with the operating system, and are edited on the same Settings, Shortcuts page (group **Main window**) and listed in the Keyboard shortcuts help. **Open image** (`Ctrl+O`) is in the same group: it picks a picture file (PNG, JPEG, WebP, GIF or BMP) and opens it in the editor like a screenshot; nothing is saved until you save.
+The title bar has a menu bar (**File**, **View**, **Help**) and a search box in the middle, the command center. These two keys open it from anywhere in the main window; they are in-app keys, not registered with the operating system, and are edited on the same Settings, Shortcuts page (group **Main window**) and listed in the Keyboard shortcuts help. **Open image** (`Ctrl+O`) is in the same group: it picks a picture file (PNG, JPEG, WebP, GIF or BMP) and opens it in the editor like a screenshot; nothing is saved until you save.
 
 | Action                                       | Default        |
 | -------------------------------------------- | -------------- |
@@ -137,9 +137,22 @@ These work inside History and are not configurable. Arrow keys, `Home` and `End`
 | Open the card's menu                      | Right-click, `Shift+F10` or the Menu key                          |
 | Remove the card (or all selected) entries | `Delete` (several: after a confirmation, with Undo)               |
 
+## Editor window and tabs
+
+These work inside the Editor window and are not configurable (the editors' own keys are below and under [Editor shortcuts](#editor-shortcuts-customizable)). `Ctrl+1` is the screenshot editor's "actual size", so the tab numbers use `Alt`.
+
+| Action                                      | Key                                              |
+| ------------------------------------------- | ------------------------------------------------ |
+| Next tab / previous tab                     | `Ctrl+Tab` / `Ctrl+Shift+Tab` (wraps around)     |
+| Go to the 1st to 8th tab                    | `Alt+1` to `Alt+8`                               |
+| Go to the last tab                          | `Alt+9`                                          |
+| Close the tab (asks if it has unsaved work) | `Ctrl+W`, or a middle click on the tab           |
+| Reorder the tabs                            | Drag a tab                                       |
+| Open image (a new tab)                      | `Ctrl+O` (customizable, like in the main window) |
+
 ## Video editor
 
-These work inside the video editor (History > a recording > **Edit video**) and are not configurable. They are ignored while you type in a field, and `Space` does not fire while a button has the keyboard.
+These work inside a video tab of the Editor window (History > a recording > **Edit video**) and are not configurable. They are ignored while you type in a field, and `Space` does not fire while a button has the keyboard.
 
 | Action                                                                      | Key                                                                  |
 | --------------------------------------------------------------------------- | -------------------------------------------------------------------- |

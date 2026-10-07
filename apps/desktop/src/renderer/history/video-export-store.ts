@@ -36,6 +36,14 @@ export function useVideoExport(historyId: string): VideoExportState | undefined 
   return states.get(historyId);
 }
 
+/** The history ids of the recordings being exported right now (closing their tab cancels the export). */
+export function useExportingVideos(): string[] {
+  useSyncExternalStore(subscribe, () => version);
+  return [...states]
+    .filter(([, s]) => s.status === 'starting' || s.status === 'running')
+    .map(([id]) => id);
+}
+
 const FORMAT_LABEL: Record<VideoExportFormat, string> = { mp4: 'MP4', webm: 'WebM', gif: 'GIF' };
 
 /** Subscribes to main's video export events once, for the whole app. Returns the unsubscribe. */

@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import {
   _electron as electron,
   expect,
@@ -166,11 +167,17 @@ function expectPixel(actual: number[], expected: number[]): void {
   );
 }
 
+/** The Editor window: a capture opens there, as a tab, and the window closes with its last tab. */
+const editor = (): Promise<Page> => editorPage(app);
+
 async function leaveResult(): Promise<void> {
-  await page.getByTestId('editor-done').click();
-  const confirm = page.getByTestId('confirm-yes');
-  if (await confirm.isVisible().catch(() => false)) await confirm.click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
+  const ed = await editor();
+  await ed.getByTestId('editor-done').click();
+  await ed
+    .getByTestId('confirm-yes')
+    .click({ timeout: 1500 })
+    .catch(() => undefined);
+  await expectEditorClosed(app);
   await expect(page.getByTestId('shot-region')).toBeVisible();
 }
 
@@ -245,14 +252,14 @@ test('region flow: overlays on both displays, drag, Enter, result size, save PNG
   await drag(a, [200, 150], [840, 510]);
   await pressClosing(a, 'Enter');
 
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('640 × 360');
+  await expect((await editor()).getByTestId('editor-dimensions')).toHaveText('640 × 360');
   await expectNoOverlays();
   await expectMainVisible();
   expect(shotDirs().length).toBe(before + 1);
 
   const target = path.join(outDir, 'region-a.png');
   await stubSaveDialog(target);
-  await page.getByTestId('editor-save').click();
+  await (await editor()).getByTestId('editor-save').click();
   await expect.poll(() => fs.existsSync(target)).toBe(true);
   const png = await readPng(target, [
     [0, 0],
@@ -263,12 +270,12 @@ test('region flow: overlays on both displays, drag, Enter, result size, save PNG
   expectPixel(png.pixels[0] ?? [], syntheticPixel(200, 150, 2560, 1440));
   expectPixel(png.pixels[1] ?? [], syntheticPixel(839, 509, 2560, 1440));
   expectPixel(png.pixels[2] ?? [], syntheticPixel(520, 330, 2560, 1440));
-  await expect(page.getByText(/Saved to/)).toBeVisible();
+  await expect((await editor()).getByText(/Saved to/)).toBeVisible();
 
   // Saved: leaving needs no confirmation.
-  await page.getByTestId('editor-done').click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
-  await expect(page.getByTestId('confirm-dialog')).toBeHidden();
+  const saved = await editor();
+  await saved.getByTestId('editor-done').click();
+  await expectEditorClosed(app);
 });
 
 test('region on display B uses the actual frame ratio (2293 DIP -> 3440 px)', async () => {
@@ -282,11 +289,11 @@ test('region on display B uses the actual frame ratio (2293 DIP -> 3440 px)', as
   const expectedW = x1 - x0;
   await expect(b.getByTestId('size-label')).toHaveText(`${expectedW} × 450`);
   await pressClosing(b, 'Enter');
-  await expect(page.getByTestId('editor-dimensions')).toHaveText(`${expectedW} × 450`);
+  await expect((await editor()).getByTestId('editor-dimensions')).toHaveText(`${expectedW} × 450`);
 
   const target = path.join(outDir, 'region-b.png');
   await stubSaveDialog(target);
-  await page.getByTestId('editor-save').click();
+  await (await editor()).getByTestId('editor-save').click();
   await expect.poll(() => fs.existsSync(target)).toBe(true);
   const png = await readPng(target, [[0, 0]]);
   expect({ w: png.width, h: png.height }).toEqual({ w: expectedW, h: 450 });
@@ -325,7 +332,7 @@ test('region: keyboard nudge, resize and double click', async () => {
   // Double click inside the selection confirms.
   const current = await selection();
   await a.mouse.dblclick(current.x + 30, current.y + 30);
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('120 × 90');
+  await expect((await editor()).getByTestId('editor-dimensions')).toHaveText('120 × 90');
   await leaveResult();
 });
 
@@ -387,7 +394,7 @@ test('screen flow with two displays: click the highlight on display B', async ()
   await expect(b.getByText('Click to capture this screen')).toBeVisible();
   void a;
   await b.mouse.click(400, 300);
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('3440 × 1440');
+  await expect((await editor()).getByTestId('editor-dimensions')).toHaveText('3440 × 1440');
   await expectNoOverlays();
   await expectMainVisible();
   await leaveResult();
@@ -395,10 +402,12 @@ test('screen flow with two displays: click the highlight on display B', async ()
 
 test('All screens (two displays) captures every screen at once, with no overlays', async () => {
   await page.getByTestId('shot-all-screens').click();
-  await expect(page.getByTestId('editor-dimensions')).toBeVisible();
+  await expect((await editor()).getByTestId('editor-dimensions')).toBeVisible();
   // The synthetic frames are 2560 x 1440 and 3440 x 1440; the joined image is at least as big as
   // the larger one (where they sit on the desktop depends on the real displays under the test).
-  const [width, height] = ((await page.getByTestId('editor-dimensions').textContent()) ?? '')
+  const [width, height] = (
+    (await (await editor()).getByTestId('editor-dimensions').textContent()) ?? ''
+  )
     .split('×')
     .map((part) => Number(part.trim()));
   expect(width).toBeGreaterThanOrEqual(3440);
@@ -440,7 +449,7 @@ test('window picker: grid, search, keyboard navigation and Enter to capture', as
   await page.keyboard.press('Home');
   await page.keyboard.press('Enter');
 
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('1280 × 720');
+  await expect((await editor()).getByTestId('editor-dimensions')).toHaveText('1280 × 720');
   await expectMainVisible();
   await leaveResult();
 });
@@ -473,15 +482,16 @@ test('copy puts a PNG on the clipboard; discard asks first when nothing was save
   await page.getByTestId('shot-screen').click();
   const b = await overlayFor('1002', 'overlay-pick');
   await b.mouse.click(300, 300);
-  await expect(page.getByTestId('editor-view')).toBeVisible();
+  const ed = await editor();
+  await expect(ed.getByTestId('editor-view')).toBeVisible();
 
   // The clipboard API needs a focused document; a window manager (Linux) hands focus back a moment
   // after the overlays close.
-  await (await app.browserWindow(page)).evaluate((win) => win.focus());
-  await expect.poll(() => page.evaluate(() => document.hasFocus())).toBe(true);
-  await page.getByTestId('editor-copy').click();
+  await (await app.browserWindow(ed)).evaluate((win) => win.focus());
+  await expect.poll(() => ed.evaluate(() => document.hasFocus())).toBe(true);
+  await (await editor()).getByTestId('editor-copy').click();
   // Encoding a 3440x1440 image is slow without a GPU (Linux CI): more than the default 5 s.
-  await expect(page.getByText('Copied to clipboard')).toBeVisible({ timeout: 20_000 });
+  await expect((await editor()).getByText('Copied to clipboard')).toBeVisible({ timeout: 20_000 });
   const size = await app.evaluate(async ({ clipboard, nativeImage }) => {
     const items = await clipboard.read();
     const blob = await items[0]?.getType('image/png');
@@ -498,18 +508,22 @@ test('discarding an unsaved screenshot asks for confirmation and deletes the ses
   await page.getByTestId('shot-screen').click();
   const b = await overlayFor('1002', 'overlay-pick');
   await b.mouse.click(300, 300);
-  await expect(page.getByTestId('editor-view')).toBeVisible();
+  await expect((await editor()).getByTestId('editor-view')).toBeVisible();
   expect(shotDirs().length).toBe(before + 1);
 
-  await page.getByTestId('editor-discard').click();
-  await expect(page.getByTestId('confirm-dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Keep editing' }).click();
-  await expect(page.getByTestId('confirm-dialog')).toBeHidden();
+  const ed = await editor();
+  await ed.getByTestId('editor-discard').click();
+  await expect(ed.getByTestId('confirm-dialog')).toBeVisible();
+  await ed.getByRole('button', { name: 'Cancel' }).click();
+  await expect(ed.getByTestId('confirm-dialog')).toBeHidden();
   expect(shotDirs().length).toBe(before + 1);
 
-  await page.getByTestId('editor-discard').click();
-  await page.getByTestId('confirm-yes').click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
+  await ed.getByTestId('editor-discard').click();
+  await ed
+    .getByTestId('confirm-yes')
+    .click() // Don't save
+    .catch(() => undefined); // the window closes under the click
+  await expectEditorClosed(app);
   await expect.poll(() => shotDirs().length).toBe(before);
 });
 
@@ -518,12 +532,12 @@ test('saving JPEG writes a real JPEG with the right size', async () => {
   const a = await overlayFor('1001', 'overlay-region');
   await drag(a, [100, 100], [420, 340]); // 320 x 240
   await pressClosing(a, 'Enter');
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('320 × 240');
+  await expect((await editor()).getByTestId('editor-dimensions')).toHaveText('320 × 240');
 
   const target = path.join(outDir, 'shot.jpg');
   await stubSaveDialog(target);
-  await page.getByTestId('editor-save-menu').click();
-  await page.getByTestId('editor-save-jpeg').click();
+  await (await editor()).getByTestId('editor-save-menu').click();
+  await (await editor()).getByTestId('editor-save-jpeg').click();
   await expect.poll(() => fs.existsSync(target)).toBe(true);
   const bytes = fs.readFileSync(target);
   expect([...bytes.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
@@ -531,11 +545,25 @@ test('saving JPEG writes a real JPEG with the right size', async () => {
 });
 
 test('export and clipboard channels validate their input in main', async () => {
-  const wrongMagic = await page.evaluate(async () => {
+  // The screenshot channels belong to the Editor window: the main window is refused outright.
+  const copyFromMain = await page.evaluate(async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]).buffer;
+    return window.framecapt.invoke('shot:copy', { sessionId: 'x', bytes });
+  });
+  expect(copyFromMain).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
+
+  // The Editor window may call it, and main still validates what it sends.
+  await page.getByTestId('shot-screen').click();
+  const b = await overlayFor('1002', 'overlay-pick');
+  await b.mouse.click(300, 300);
+  const ed = await editor();
+  const wrongMagic = await ed.evaluate(async () => {
     const bytes = new Uint8Array([1, 2, 3, 4, 5]).buffer;
     return window.framecapt.invoke('shot:copy', { sessionId: 'x', bytes });
   });
   expect(wrongMagic).toMatchObject({ ok: false });
+  expect(wrongMagic).not.toMatchObject({ error: { code: 'FORBIDDEN' } });
+  await leaveResult();
 
   // shell:showItemInFolder only accepts paths FrameCapt exported itself.
   const showForeign = await page.evaluate(() =>
@@ -582,7 +610,7 @@ test('UI evidence: overlay, picker and result in both themes', async () => {
     await snap(a, `ui-overlay-selection-${scheme}.png`, { x: 0, y: 0, width: 1280, height: 800 });
   }
   await pressClosing(a, 'Enter');
-  await expect(page.getByTestId('editor-view')).toBeVisible();
+  await expect((await editor()).getByTestId('editor-view')).toBeVisible();
 
   await leaveResult();
 
@@ -636,7 +664,9 @@ test.describe('single display', () => {
       const main = await single.firstWindow();
       await main.waitForLoadState('domcontentloaded');
       await main.getByTestId('shot-screen').click();
-      await expect(main.getByTestId('editor-dimensions')).toHaveText('2560 × 1440');
+      await expect((await editorPage(single)).getByTestId('editor-dimensions')).toHaveText(
+        '2560 × 1440',
+      );
       expect(single.windows().filter((w) => w.url().includes('#/overlay'))).toHaveLength(0);
     } finally {
       await exitApp(single);

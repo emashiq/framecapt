@@ -42,8 +42,8 @@ function folderOf(settings: AppSettings, target: OutputTarget): string {
  */
 export function registerSettingsHandlers(settings: AppSettings, shortcuts: ShortcutManager): void {
   const { store } = settings;
-  handle('settings:get', { roles: ['main'] }, () => stateOf(settings));
-  handle('settings:update', { roles: ['main'] }, (request) => {
+  handle('settings:get', { roles: ['main', 'editor'] }, () => stateOf(settings));
+  handle('settings:update', { roles: ['main', 'editor'] }, (request) => {
     store.update(request.patch);
     return stateOf(settings);
   });
@@ -88,7 +88,9 @@ export function registerSettingsHandlers(settings: AppSettings, shortcuts: Short
     if (failure) throw new IpcError('INTERNAL', 'The folder could not be opened.');
   });
 
-  handle('shortcuts:status', { roles: ['main'] }, (): ShortcutStates => shortcuts.status());
+  handle('shortcuts:status', { roles: ['main', 'editor'] }, (): ShortcutStates =>
+    shortcuts.status(),
+  );
   handle('shortcuts:validate', { roles: ['main'] }, (request) => {
     if (request.accelerator === null) return { ok: true as const, accelerator: null };
     const { action } = request;

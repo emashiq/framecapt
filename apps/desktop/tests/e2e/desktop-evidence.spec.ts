@@ -14,6 +14,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { makeWebm, mockScreenshotPng, newId, seedHistory } from './history-fixtures';
 import { evidenceDirFor } from '../native/evidence';
 
@@ -229,13 +230,20 @@ test('keyboard selection overlay and the editor', async () => {
   await o.waitForTimeout(500);
   await both('overlay-keyboard', (file) => o.screenshot({ path: file }));
   await o.keyboard.press('Enter').catch(() => undefined);
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await expect(page.getByTestId('editor-canvas')).toBeFocused();
-  await page.waitForTimeout(500);
-  await shootPage('editor');
-  await page.getByTestId('editor-discard').click();
-  await both('discard-dialog', (file) => page.screenshot({ path: file }));
-  await page.getByTestId('confirm-yes').click();
+  // The editor is a window of its own: its pictures are taken of that window.
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-canvas')).toBeFocused();
+  await editor.waitForTimeout(500);
+  await expect(editor.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 12_000 });
+  await both('editor', (file) => editor.screenshot({ path: file }));
+  await editor.getByTestId('editor-discard').click();
+  await both('discard-dialog', (file) => editor.screenshot({ path: file }));
+  await editor
+    .getByTestId('confirm-yes')
+    .click()
+    .catch(() => undefined); // the window closes under the click
+  await expectEditorClosed(app);
   await expect(page.getByTestId('shot-region')).toBeVisible();
 });
 

@@ -44,6 +44,14 @@ const EDITOR_FIXED_KEYS: Entry[] = [
   { keys: ['Enter'], text: 'Apply the crop' },
 ];
 
+const EDITOR_WINDOW_KEYS: Entry[] = [
+  { keys: ['Ctrl', 'Tab'], text: 'Next tab (Ctrl+Shift+Tab: previous tab)' },
+  { keys: ['Alt', '1…8'], text: 'Go to that tab (Alt+9: the last tab)' },
+  { keys: ['Ctrl', 'W'], text: 'Close the tab (asks first when it has unsaved changes)' },
+  { keys: ['Middle click'], text: 'Close a tab' },
+  { keys: ['Drag'], text: 'Drag a tab to reorder' },
+];
+
 const VIDEO_EDITOR_KEYS: Entry[] = [
   { keys: ['Space'], text: 'Play or pause' },
   { keys: ['←', '→'], text: 'Step one frame (Shift: one second)' },
@@ -159,6 +167,7 @@ export function KeyboardHelp({ open, onClose }: KeyboardHelpProps) {
           <Group title="From anywhere" entries={global} />
           <Group title="In the main window" entries={[...commandCenter, ...MAIN_KEYS]} />
           <Group title="Choosing an area" entries={OVERLAY_KEYS} />
+          <Group title="Editor window and tabs" entries={EDITOR_WINDOW_KEYS} />
           <Group title="In the editor" entries={editor} />
           <Group title="In the video editor" entries={VIDEO_EDITOR_KEYS} />
           <Group title="Elsewhere" entries={OTHER_KEYS} />

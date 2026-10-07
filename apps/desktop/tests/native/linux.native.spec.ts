@@ -22,6 +22,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from '../e2e/app-exit';
+import { editorPage, expectEditorClosed } from '../e2e/editor-window';
 import { evidenceDirFor, writeEvidenceJson } from './evidence';
 
 test.skip(process.platform !== 'linux', 'Linux-only native checks');
@@ -290,13 +291,13 @@ test('real screen screenshot: exact display size and the magenta window is in it
       await overlay.mouse.move(900, 500);
       await overlay.mouse.click(900, 500);
     }
-    await expect(page.getByTestId('editor-dimensions')).toHaveText(
+    await expect((await editorPage(app)).getByTestId('editor-dimensions')).toHaveText(
       `${display.physicalSize.width} × ${display.physicalSize.height}`,
       { timeout: 30_000 },
     );
     const target = path.join(outDir, 'screen.png');
     await stubSaveDialog(target);
-    await page.getByTestId('editor-save').click();
+    await (await editorPage(app)).getByTestId('editor-save').click();
     await expect.poll(() => fs.existsSync(target), { timeout: 15_000 }).toBe(true);
     keep(target);
     const size = pngSize(target);
@@ -314,10 +315,13 @@ test('real screen screenshot: exact display size and the magenta window is in it
     }
     evidence.screenshot = { png: size, expected: display.physicalSize, magentaFraction: fraction };
     // Leave the editor.
-    await page.getByTestId('editor-done').click();
-    const confirm = page.getByTestId('confirm-yes');
-    if (await confirm.isVisible().catch(() => false)) await confirm.click();
-    await expect(page.getByTestId('editor-view')).toHaveCount(0);
+    const editor = await editorPage(app);
+    await editor.getByTestId('editor-done').click();
+    await editor
+      .getByTestId('confirm-yes')
+      .click({ timeout: 1500 })
+      .catch(() => undefined);
+    await expectEditorClosed(app);
   } finally {
     await closeWindow(id);
   }

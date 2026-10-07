@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { MainApp } from './MainApp';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { EditorApp } from './editor-window/EditorApp';
 import { installGlobalErrorReporting } from './lib/report-error';
 import { roleFromHash } from './role';
 import { CountdownView } from './views/CountdownView';
@@ -20,6 +21,7 @@ const ToolbarEntry = window.location.hash.includes('mode=steps') ? StepsPill : T
  * Per-role root components; the main role renders the app.
  */
 const roleViews: Partial<Record<Role, ComponentType>> = {
+  editor: EditorApp,
   overlay: OverlayView,
   recorder: RecorderWorker,
   toolbar: ToolbarEntry,

@@ -1,7 +1,7 @@
 import { dialog } from 'electron';
 import { AUDIO_EXTENSIONS } from '../../shared/video-edit';
 import { handle } from '../ipc';
-import { getMainWindow } from '../windows';
+import { dialogParent } from '../windows';
 import type { VideoEditService } from './service';
 
 /** The Open dialog for an audio file (a main-process dialog; the path never reaches a renderer). */
@@ -11,9 +11,9 @@ export async function pickAudioFile(): Promise<string | null> {
     filters: [{ name: 'Audio', extensions: [...AUDIO_EXTENSIONS] }],
     properties: ['openFile'],
   };
-  const main = getMainWindow();
-  const result = main
-    ? await dialog.showOpenDialog(main, options)
+  const parent = dialogParent();
+  const result = parent
+    ? await dialog.showOpenDialog(parent, options)
     : await dialog.showOpenDialog(options);
   const file = result.filePaths[0];
   return result.canceled || !file ? null : file;
@@ -25,15 +25,17 @@ export async function pickAudioFile(): Promise<string | null> {
  * uses `export:cancel` (the job queue is shared).
  */
 export function registerVideoHandlers(service: VideoEditService): void {
-  handle('video:open', { roles: ['main'] }, (request) => service.open(request.historyId));
-  handle('video:save', { roles: ['main'] }, (request) =>
+  handle('video:open', { roles: ['editor'] }, (request) => service.open(request.historyId));
+  handle('video:save', { roles: ['editor'] }, (request) =>
     service.save(request.historyId, request.project),
   );
-  handle('video:addImage', { roles: ['main'] }, (request) =>
+  handle('video:addImage', { roles: ['editor'] }, (request) =>
     service.addImage(request.historyId, new Uint8Array(request.png)),
   );
-  handle('video:pickAudio', { roles: ['main'] }, (request) => service.pickAudio(request.historyId));
-  handle('video:export', { roles: ['main'] }, (request) =>
+  handle('video:pickAudio', { roles: ['editor'] }, (request) =>
+    service.pickAudio(request.historyId),
+  );
+  handle('video:export', { roles: ['editor'] }, (request) =>
     service.export(
       request.historyId,
       request.project,

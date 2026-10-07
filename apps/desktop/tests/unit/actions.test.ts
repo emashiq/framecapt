@@ -25,7 +25,6 @@ function setup(status: RecorderStatus = 'idle', extra: Partial<ActionDeps> = {})
       captureStep: vi.fn(() => Promise.resolve()),
     },
     startScreenshot: vi.fn(() => Promise.resolve()),
-    editor: () => ({ open: false, dirty: false }),
     askMain: vi.fn(),
     toast: vi.fn(),
     log: { info: vi.fn() },
@@ -66,16 +65,6 @@ describe('screenshot actions', () => {
     expect(deps.startScreenshot).toHaveBeenCalledWith({ target: 'screen', allScreens: true });
   });
 
-  it('all screens goes through the main window while the editor holds unsaved work', () => {
-    const { run, deps } = setup('idle', { editor: () => ({ open: true, dirty: true }) });
-    run('screenshotAllScreens');
-    expect(deps.askMain).toHaveBeenCalledWith({
-      kind: 'screenshot',
-      target: 'screen',
-      allScreens: true,
-    });
-  });
-
   it('is ignored while a recording is being set up or saved', () => {
     for (const status of [
       'selecting',
@@ -94,7 +83,7 @@ describe('screenshot actions', () => {
 
   it('works while recording or paused, without touching the main window', () => {
     for (const status of ['recording', 'paused'] as const) {
-      const { run, deps } = setup(status, { editor: () => ({ open: true, dirty: true }) });
+      const { run, deps } = setup(status);
       run('screenshotRegion');
       run('screenshotAllScreens');
       expect(deps.startScreenshot).toHaveBeenNthCalledWith(1, { target: 'region' });
@@ -114,19 +103,6 @@ describe('screenshot actions', () => {
     expect(deps.toast).toHaveBeenCalledWith(
       expect.objectContaining({ level: 'error', message: expect.stringContaining('recording') }),
     );
-  });
-
-  it('goes through the main window while the editor holds unsaved work', () => {
-    const { run, deps } = setup('idle', { editor: () => ({ open: true, dirty: true }) });
-    run('screenshotRegion');
-    expect(deps.startScreenshot).not.toHaveBeenCalled();
-    expect(deps.askMain).toHaveBeenCalledWith({ kind: 'screenshot', target: 'region' });
-  });
-
-  it('starts directly when the editor is open but everything is saved', () => {
-    const { run, deps } = setup('idle', { editor: () => ({ open: true, dirty: false }) });
-    run('screenshotRegion');
-    expect(deps.startScreenshot).toHaveBeenCalled();
   });
 
   it('shows a friendly error when the flow refuses', async () => {
@@ -190,13 +166,6 @@ describe('record actions', () => {
     run('recordRegion');
     expect(recorder.start).not.toHaveBeenCalled();
     expect(deps.toast).toHaveBeenCalled();
-  });
-
-  it('an open editor sends it through the main window (it closes the editor first)', () => {
-    const { run, recorder, deps } = setup('idle', { editor: () => ({ open: true, dirty: false }) });
-    run('recordScreen');
-    expect(recorder.start).not.toHaveBeenCalled();
-    expect(deps.askMain).toHaveBeenCalledWith({ kind: 'record', target: 'screen' });
   });
 
   it('shows the reason when starting fails', async () => {

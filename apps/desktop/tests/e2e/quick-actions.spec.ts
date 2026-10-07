@@ -13,6 +13,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 
@@ -83,16 +84,17 @@ test('Ctrl+Shift+S saves into the screenshots folder with no dialog, lists it in
     fs.existsSync(folder) ? fs.readdirSync(folder).filter((name) => !name.endsWith('.tmp')) : [];
 
   await page.getByTestId('shot-screen').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await page.getByTestId('editor-canvas').click({ position: { x: 40, y: 40 } });
-  await page.keyboard.press('Control+Shift+S');
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await editor.getByTestId('editor-canvas').click({ position: { x: 40, y: 40 } });
+  await editor.keyboard.press('Control+Shift+S');
   await expect.poll(() => saved().length).toBe(1);
   const first = saved()[0] as string;
   expect(first).toMatch(/^FrameCapt \d{4}-\d{2}-\d{2} at \d{2}\.\d{2}\.\d{2}\.png$/);
   expect(fs.readdirSync(folder).filter((name) => name.endsWith('.tmp'))).toEqual([]);
-  await expect(page.getByText(/Saved to/).first()).toBeVisible();
+  await expect(editor.getByText(/Saved to/).first()).toBeVisible();
   // A second quick save of the same capture never overwrites the first.
-  await page.keyboard.press('Control+Shift+S');
+  await editor.keyboard.press('Control+Shift+S');
   await expect.poll(() => saved().length).toBe(2);
   expect(saved()).toContain(first);
   expect(await app.evaluate(() => (globalThis as unknown as { __dialogs: number }).__dialogs)).toBe(
@@ -100,22 +102,23 @@ test('Ctrl+Shift+S saves into the screenshots folder with no dialog, lists it in
   );
 
   // The menu entry does the same.
-  await page.getByTestId('editor-save-menu').click();
-  await page.getByTestId('editor-quick-save').click();
+  await editor.getByTestId('editor-save-menu').click();
+  await editor.getByTestId('editor-quick-save').click();
   await expect.poll(() => saved().length).toBe(3);
 
   // Undo the last one.
   // Stacked toasts overlap and animate: activate the newest Undo directly.
-  await page.getByRole('button', { name: 'Undo' }).last().dispatchEvent('click');
+  await editor.getByRole('button', { name: 'Undo' }).last().dispatchEvent('click');
   await expect.poll(() => saved().length).toBe(2);
   expect(
     await app.evaluate(() => (globalThis as unknown as { __trashed: string[] }).__trashed),
   ).toHaveLength(1);
 
   // After the undo the editor holds unsaved work again; quick save once more, then leave.
-  await page.keyboard.press('Control+Shift+S');
+  await editor.keyboard.press('Control+Shift+S');
   await expect.poll(() => saved().length).toBe(3);
-  await page.getByTestId('editor-done').click();
+  await editor.getByTestId('editor-done').click();
+  await expectEditorClosed(app);
   await nav('History');
   await expect(page.getByTestId('history-item')).toHaveCount(3);
 });

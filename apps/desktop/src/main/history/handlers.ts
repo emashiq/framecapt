@@ -94,7 +94,7 @@ export function registerHistoryHandlers(
   recordingsDir: () => string,
   rescan: () => Promise<number>,
 ): void {
-  handle('history:list', { roles: ['main'] }, (request) => history.list(request));
+  handle('history:list', { roles: ['main', 'editor'] }, (request) => history.list(request));
   handle('history:consumeNotice', { roles: ['main'] }, async () => ({
     reset: await history.consumeResetNotice(),
   }));
@@ -113,7 +113,7 @@ export function registerHistoryHandlers(
     }
   });
 
-  handle('history:reveal', { roles: ['main'] }, async (request) => {
+  handle('history:reveal', { roles: ['main', 'editor'] }, async (request) => {
     const item = requireItem(history, request.id);
     await requireFile(item.path);
     // A guide is a folder: it is shown as that folder.
@@ -168,7 +168,9 @@ export function registerHistoryHandlers(
     history.deleteProject(request.id),
   );
   handle('history:undoRemove', { roles: ['main'] }, (request) => history.undoRemove(request.id));
-  handle('history:deleteFile', { roles: ['main'] }, (request) => history.deleteFile(request.id));
+  handle('history:deleteFile', { roles: ['main', 'editor'] }, (request) =>
+    history.deleteFile(request.id),
+  );
 
   handle('history:relink', { roles: ['main'] }, async (request) => {
     const item = requireItem(history, request.id);
@@ -251,5 +253,7 @@ export function registerHistoryHandlers(
     return { mp4Available: result.available, ...(result.reason && { reason: result.reason }) };
   });
   handle('export:mp4', { roles: ['main'] }, (request) => exports.start(request.historyId));
-  handle('export:cancel', { roles: ['main'] }, (request) => exports.cancel(request.jobId));
+  handle('export:cancel', { roles: ['main', 'editor'] }, (request) =>
+    exports.cancel(request.jobId),
+  );
 }

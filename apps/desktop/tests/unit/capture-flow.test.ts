@@ -89,6 +89,7 @@ function display(id: string, x: number, y: number, width: number, height: number
 function setup(displays: DisplayInfo[], extra: Partial<CaptureFlowDeps> = {}) {
   const saveDirect = vi.fn(async () => ({ savedPath: 'C:\\shots\\a.png' }));
   const toast = vi.fn();
+  const openEditor = vi.fn();
   const create = vi.fn(async () => ({ id: 's1' }));
   const deps: CaptureFlowDeps = {
     provider: {
@@ -105,10 +106,11 @@ function setup(displays: DisplayInfo[], extra: Partial<CaptureFlowDeps> = {}) {
     synthetic: true,
     saveDirect,
     toast,
+    openEditor,
     ...extra,
   };
   const flow = new CaptureFlow(deps);
-  return { flow, saveDirect, toast, create };
+  return { flow, saveDirect, toast, create, openEditor };
 }
 
 const ended = async (flow: CaptureFlow): Promise<void> => {
@@ -123,7 +125,7 @@ beforeEach(() => {
 
 describe('a screenshot during a recording', () => {
   it('is saved directly and never touches the main window or opens the editor', async () => {
-    const { flow, saveDirect, toast, create } = setup([display('1', 0, 0, 4, 3)], {
+    const { flow, saveDirect, toast, create, openEditor } = setup([display('1', 0, 0, 4, 3)], {
       isRecording: () => true,
     });
     await flow.start({ target: 'screen' });
@@ -135,7 +137,7 @@ describe('a screenshot during a recording', () => {
     expect(hoisted.main.hide).not.toHaveBeenCalled();
     expect(hoisted.main.show).not.toHaveBeenCalled();
     expect(hoisted.main.focus).not.toHaveBeenCalled();
-    expect(hoisted.events).not.toContain('shot:ready');
+    expect(openEditor).not.toHaveBeenCalled();
     expect(flow.duringRecording).toBe(false);
   });
 
@@ -170,14 +172,15 @@ describe('a screenshot during a recording', () => {
 });
 
 describe('without a recording', () => {
-  it('hides the main window, opens the editor session and shows the window again', async () => {
-    const { flow, saveDirect, create } = setup([display('1', 0, 0, 4, 3)]);
+  it('hides the main window, opens the session in the Editor window and shows the window again', async () => {
+    const { flow, saveDirect, create, openEditor } = setup([display('1', 0, 0, 4, 3)]);
     await flow.start({ target: 'screen' });
     await ended(flow);
     expect(create).toHaveBeenCalled();
     expect(saveDirect).not.toHaveBeenCalled();
     expect(hoisted.main.show).toHaveBeenCalled();
-    expect(hoisted.events).toContain('shot:ready');
+    expect(openEditor).toHaveBeenCalledTimes(1);
+    expect(openEditor).toHaveBeenCalledWith(expect.objectContaining({ kind: 'session' }));
   });
 });
 

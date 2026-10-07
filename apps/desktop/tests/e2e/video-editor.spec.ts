@@ -15,6 +15,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { makeWebm, newId, seedHistory } from './history-fixtures';
 import { probeFile } from './media-fixtures';
 
@@ -24,6 +25,8 @@ const SECONDS = 6;
 let dir: string;
 let clip: string;
 let app: ElectronApplication;
+/** The main window; `page` is the Editor window of the latest openEditor(). */
+let main: Page;
 let page: Page;
 
 async function launch(): Promise<void> {
@@ -42,31 +45,39 @@ async function launch(): Promise<void> {
       FRAMECAPT_E2E_FAKE_SHORTCUTS: '1',
     },
   });
-  page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-  await expect(page.getByTestId('shot-region')).toBeVisible();
+  main = await app.firstWindow();
+  await main.waitForLoadState('domcontentloaded');
+  await expect(main.getByTestId('shot-region')).toBeVisible();
 }
 
 /** Opens the editor for the recording called `fileName` (from the list, or from the details view if one is open). */
 async function openEditor(fileName = 'clip.webm'): Promise<void> {
-  if ((await page.getByTestId('history-details').count()) === 0) {
-    await page
+  if ((await main.getByTestId('history-details').count()) === 0) {
+    await main
       .getByRole('navigation', { name: 'Primary' })
       .getByRole('button', { name: 'History' })
       .click();
-    await page
+    await main
       .getByTestId('history-item')
       .filter({ hasText: fileName })
       .locator('[data-card-main]')
       .click();
   }
-  await page.getByTestId('details-edit').click();
+  await main.getByTestId('details-edit').click();
+  // The recording opens as a tab of the Editor window (made on the first open).
+  page = await editorPage(app);
   await expect(page.getByTestId('video-editor')).toBeVisible();
   await expect(page.getByTestId('video-timeline')).toBeVisible();
   // The recording is decoded and the project loaded.
   await expect
     .poll(() => page.getByTestId('video-preview').evaluate((v: HTMLVideoElement) => v.readyState))
     .toBeGreaterThanOrEqual(2);
+}
+
+/** Closes the (only) tab: the Editor window closes with its last tab. */
+async function closeTab(): Promise<void> {
+  await page.getByTestId('tab-close').click();
+  await expectEditorClosed(app);
 }
 
 /** "Result 0:04.500 · from ..." -> 4.5 */
@@ -114,8 +125,11 @@ test('a recording opens in the video editor from History', async () => {
   await expect(page.getByTestId('video-title')).toHaveText('clip.webm');
   await expect(page.getByTestId('video-save-status')).toHaveText('All changes saved');
   expect(await resultSeconds()).toBeCloseTo(SECONDS, 0);
-  // The sidebar collapsed, like the screenshot editor's.
-  await expect(page.getByRole('button', { name: 'Keyboard shortcuts' })).toBeVisible();
+  // It is a video tab of the Editor window, named after the file; a video is never "unsaved".
+  await expect(page.getByTestId('editor-tab')).toHaveCount(1);
+  await expect(page.getByTestId('editor-tab')).toHaveAttribute('data-kind', 'video');
+  await expect(page.getByTestId('tab-title')).toHaveText('clip.webm');
+  await expect(page.getByTestId('editor-tab')).toHaveAttribute('data-dirty', 'false');
 });
 
 test('space plays and pauses; arrows step; the playhead follows', async () => {
@@ -220,9 +234,9 @@ test('trim handles and Delete on a selected cut', async () => {
 test('the project is saved by itself and restored when the editor is opened again', async () => {
   await expect(page.getByTestId('video-save-status')).toHaveText('All changes saved');
   const length = await resultSeconds();
-  await page.getByTestId('video-back').click();
-  // Back lands on the recording in History.
-  await expect(page.getByTestId('history-details')).toBeVisible();
+  await closeTab();
+  // The main window is still on the recording in History.
+  await expect(main.getByTestId('history-details')).toBeVisible();
   await openEditor();
   await expect(page.getByTestId('timeline-item-redact')).toHaveCount(1);
   await expect(page.getByTestId('timeline-cut')).toHaveCount(1);
@@ -276,10 +290,10 @@ test('export MP4 makes a new history item next to the source with the edited len
   // The source is untouched.
   expect(fs.existsSync(clip)).toBe(true);
 
-  await page.getByTestId('video-back').click();
-  await page.getByTestId('history-back').click();
-  await expect(page.getByTestId('history-item')).toHaveCount(2);
-  await expect(page.getByTestId('history-item').first()).toContainText('clip (edited).mp4');
+  await closeTab();
+  await main.getByTestId('history-back').click();
+  await expect(main.getByTestId('history-item')).toHaveCount(2);
+  await expect(main.getByTestId('history-item').first()).toContainText('clip (edited).mp4');
 });
 
 test('a GIF export is shown in History as an image, linked to its recording', async () => {
@@ -298,21 +312,21 @@ test('a GIF export is shown in History as an image, linked to its recording', as
   expect(probed.streams[0]?.codec_name).toBe('gif');
   expect(fs.readFileSync(output).subarray(0, 6).toString('latin1')).toBe('GIF89a');
 
-  await page.getByTestId('video-back').click();
-  await page.getByTestId('history-back').click();
-  const card = page.getByTestId('history-item').filter({ hasText: 'clip (edited).gif' });
+  await closeTab();
+  await main.getByTestId('history-back').click();
+  const card = main.getByTestId('history-item').filter({ hasText: 'clip (edited).gif' });
   await expect(card).toHaveCount(1);
   await expect(card.getByTestId('history-type')).toHaveText('gif');
   await card.locator('[data-card-main]').click();
-  await expect(page.getByTestId('history-image')).toBeVisible();
+  await expect(main.getByTestId('history-image')).toBeVisible();
   await expect
     .poll(() =>
-      page.getByTestId('history-image').evaluate((img: HTMLImageElement) => img.naturalWidth),
+      main.getByTestId('history-image').evaluate((img: HTMLImageElement) => img.naturalWidth),
     )
     .toBeGreaterThan(0);
   // A GIF is not edited in the video editor.
-  await expect(page.getByTestId('details-edit')).toHaveCount(0);
-  await page.getByTestId('history-back').click();
+  await expect(main.getByTestId('details-edit')).toHaveCount(0);
+  await main.getByTestId('history-back').click();
 });
 
 test('an export can be cancelled and leaves no file behind', async () => {

@@ -1,94 +1,48 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Toaster } from 'sonner';
+import type { EditorOpenRequest, EditorState } from '../shared/editor-ipc';
 import type { NavigateEvent, SettingsSectionId, StartRequestEvent } from '../shared/settings-ipc';
 import { AppShell, type ViewId } from './components/AppShell';
 import { KeyboardHelp } from './components/KeyboardHelp';
+import { LiveRegion } from './components/LiveRegion';
 import { RecorderChoiceDialog } from './components/RecorderChoiceDialog';
 import { AlertConfirm } from './components/ui/AlertConfirm';
 import { TooltipProvider } from './components/ui/Tooltip';
-import { useAnnouncement } from './lib/announce';
+import { isTyping } from './lib/is-typing';
 import { requestLaunch } from './lib/launch-bus';
 import { notify } from './lib/notify';
 import { useRecorderState, useRecorderToasts } from './recorder/use-recorder';
 import { CaptureView } from './views/CaptureView';
 import { RecordingResultView } from './views/RecordingResultView';
-import { EditorView, type EditorShot } from './views/editor/EditorView';
 import { FlowView } from './views/flow/FlowView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsView } from './views/SettingsView';
-import { VideoEditorView } from './views/video-editor/VideoEditorView';
 import { listenToBulk } from './history/bulk-store';
 import { listenToExports } from './history/export-store';
-import { listenToVideoExports } from './history/video-export-store';
 import { importPicture, pictureIn } from './editor/import-image';
-import { openFromHistory } from './editor/reedit';
 import { matchEditorAction } from '../shared/shortcuts';
 import { getSettings, startSettingsSync } from './settings/store';
 
-/** What the discard confirmation will do when the user agrees. */
-type PendingLeave = { kind: 'leave'; then?: () => void } | { kind: 'close' };
-
-/** True while the user is typing somewhere: single-key shortcuts must not fire. */
-function isTyping(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    !!target.closest('input, textarea, select, [contenteditable="true"]')
-  );
-}
-
-/** "…\FrameCapt\file.png": the last two path segments, for a toast. */
-function shortPath(file: string): string {
-  const parts = file.split(/[\\/]/).filter(Boolean);
-  return parts.length > 2 ? `…\\${parts.slice(-2).join('\\')}` : file;
-}
-
-/** One polite live region for status messages (saved, recording stopped, settings reset). */
-function LiveRegion() {
-  const { text, n } = useAnnouncement();
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      className="sr-only"
-      data-testid="live-region"
-    >
-      {/* The counter makes an identical message announce again. */}
-      <span key={n}>{text}</span>
-    </div>
-  );
-}
-
 /**
- * Main window UI. Navigation is plain state: three views do not need a router. A finished
- * screenshot opens in the editor (the Capture tab) until it is closed. Leaving the editor (Done,
- * Discard, another tab) or closing the window while the screenshot is unsaved asks first; the
- * session directory (the original) is deleted whenever the editor closes.
+ * Main window UI. Navigation is plain state: Capture, History, Settings and a saved step guide do
+ * not need a router. Screenshots and videos are edited in the Editor window (editor-window/): this
+ * window only asks main to open them there (`editor:open`).
  */
 export function App() {
   const [view, setView] = useState<ViewId>('capture');
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId | undefined>(undefined);
-  const [shot, setShot] = useState<EditorShot | null>(null);
-  const [dirty, setDirty] = useState(false);
   /** An item to open in History (picked in the Recent captures strip). */
   const [historyFocus, setHistoryFocus] = useState<string | null>(null);
   /** The step guide the Flow view shows. */
   const [flowId, setFlowId] = useState<string | null>(null);
-  const [pending, setPending] = useState<PendingLeave | null>(null);
   const [quitAsk, setQuitAsk] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  /** The recording open in the video editor (it saves itself; leaving writes what is pending). */
-  const [videoId, setVideoId] = useState<string | null>(null);
-  const [videoLeave, setVideoLeave] = useState<{ then?: () => void } | null>(null);
-  const videoFlush = useRef<(() => Promise<boolean>) | null>(null);
+  /** What the Editor window holds: its button shows the tab count. */
+  const [editor, setEditor] = useState<EditorState>({ tabs: 0, dirty: false });
   const viewRef = useRef<ViewId>('capture');
-  const shotRef = useRef<EditorShot | null>(null);
   const recorder = useRecorderState();
   useRecorderToasts(recorder);
 
-  useEffect(() => {
-    shotRef.current = shot;
-  }, [shot]);
   useEffect(() => {
     viewRef.current = view;
   }, [view]);
@@ -96,43 +50,8 @@ export function App() {
   // The settings (and the theme) load once; main pushes every later change.
   useEffect(() => startSettingsSync(), []);
 
-  useEffect(
-    () =>
-      window.framecapt.on('shot:ready', ({ session, savedPath }) => {
-        void window.framecapt.invoke('shot:get', { sessionId: session.id }).then((response) => {
-          if (!response.ok) {
-            notify.error(response.error);
-            return;
-          }
-          const previous = shotRef.current;
-          if (previous) {
-            void window.framecapt.invoke('shot:discard', { sessionId: previous.session.id });
-          }
-          setShot({
-            session: response.data.session,
-            png: response.data.png,
-            ...(savedPath && { savedPath }),
-          });
-          setDirty(savedPath === undefined); // unsaved, unless "save after capture" already saved it
-          void videoFlush.current?.(); // a video being edited keeps its changes (it saves itself)
-          setView('capture');
-          if (savedPath) {
-            notify.success(`Saved to ${shortPath(savedPath)}`, {
-              action: {
-                label: 'Show in folder',
-                onClick: () =>
-                  void window.framecapt.invoke('shell:showItemInFolder', { path: savedPath }),
-              },
-            });
-          }
-        });
-      }),
-    [],
-  );
-
   // MP4 export progress and results are shown wherever the user is.
   useEffect(() => listenToExports(), []);
-  useEffect(() => listenToVideoExports(), []);
   useEffect(() => listenToBulk(), []);
 
   // A damaged history file is set aside at startup; say so once.
@@ -149,8 +68,18 @@ export function App() {
     });
   }, []);
 
-  // Main asks before closing the window while the editor has unsaved work.
-  useEffect(() => window.framecapt.on('app:confirmClose', () => setPending({ kind: 'close' })), []);
+  // The Editor window's tab count (its button is shown while it has tabs).
+  useEffect(() => {
+    let live = true;
+    const off = window.framecapt.on('editor:stateChanged', setEditor);
+    void window.framecapt.invoke('editor:getState').then((response) => {
+      if (live && response.ok) setEditor(response.data);
+    });
+    return () => {
+      live = false;
+      off();
+    };
+  }, []);
 
   // Quit (tray, menu) while a recording runs: stop and save it first, or keep recording.
   useEffect(() => window.framecapt.on('app:confirmQuit', () => setQuitAsk(true)), []);
@@ -165,87 +94,22 @@ export function App() {
     [],
   );
 
-  // Main needs to know whether closing would lose work, and whether an editor is open at all.
-  useEffect(() => {
-    void window.framecapt.invoke('editor:setDirty', {
-      dirty: shot !== null && dirty,
-      open: shot !== null,
-    });
-  }, [shot, dirty]);
-
-  const endSession = useCallback(async () => {
-    const current = shotRef.current;
-    if (current) await window.framecapt.invoke('shot:discard', { sessionId: current.session.id });
-    setShot(null);
-    setDirty(false);
+  const navigate = useCallback((next: ViewId, section?: SettingsSectionId) => {
+    setView(next);
+    if (next === 'settings') setSettingsSection(section);
   }, []);
 
-  const registerVideoFlush = useCallback((flush: (() => Promise<boolean>) | null) => {
-    videoFlush.current = flush;
-  }, []);
-
-  /** Leaving the video editor: its pending changes are written first; if that fails, ask. */
-  const leaveVideo = useCallback((then?: () => void) => {
-    void (videoFlush.current?.() ?? Promise.resolve(true)).then((saved) => {
-      if (saved) then?.();
-      else setVideoLeave(then ? { then } : {});
+  /** Opens something as a tab of the Editor window (made on first use, brought to the front). */
+  const openInEditor = useCallback((request: EditorOpenRequest) => {
+    void window.framecapt.invoke('editor:open', request).then((response) => {
+      if (!response.ok) notify.error(response.error);
     });
   }, []);
 
-  const requestLeave = useCallback(
-    (then?: () => void) => {
-      if (viewRef.current === 'video-editor') {
-        leaveVideo(then);
-        return;
-      }
-      if (shotRef.current && dirty) {
-        setPending({ kind: 'leave', ...(then && { then }) });
-        return;
-      }
-      void endSession().then(then);
-    },
-    [dirty, endSession, leaveVideo],
-  );
-
-  const confirmDiscard = useCallback(async () => {
-    const request = pending;
-    setPending(null);
-    if (!request) return;
-    await endSession();
-    if (request.kind === 'leave') request.then?.();
-    else await window.framecapt.invoke('editor:resolveClose', { discard: true });
-  }, [pending, endSession]);
-
-  const keepEditing = useCallback(() => {
-    const request = pending;
-    setPending(null);
-    if (request?.kind === 'close') {
-      void window.framecapt.invoke('editor:resolveClose', { discard: false });
-    }
-  }, [pending]);
-
-  const navigate = useCallback(
-    (next: ViewId, section?: SettingsSectionId) => {
-      const go = (): void => {
-        setView(next);
-        if (next === 'settings') setSettingsSection(section);
-      };
-      if (viewRef.current === 'video-editor' && next !== 'video-editor') requestLeave(go);
-      else if (shotRef.current && next !== 'capture') requestLeave(go);
-      else go();
-    },
-    [requestLeave],
-  );
-
-  /** History's Edit video action: the recording opens in the video editor (asks first if work is unsaved). */
+  /** History's Edit video action, and "Edit the latest recording". */
   const editVideo = useCallback(
-    (id: string) => {
-      requestLeave(() => {
-        setVideoId(id);
-        setView('video-editor');
-      });
-    },
-    [requestLeave],
+    (id: string) => openInEditor({ kind: 'history', historyId: id }),
+    [openInEditor],
   );
 
   /** The command center's "Edit the latest recording". */
@@ -267,89 +131,36 @@ export function App() {
       });
   }, [editVideo]);
 
-  /** History's Edit action: a new editor session for a saved screenshot (asks first if work is unsaved). */
-  const editHistoryItem = useCallback(
-    (id: string) => {
-      requestLeave(() => {
-        void openFromHistory(window.framecapt, id).then((result) => {
-          if (!result.ok) {
-            notify.error(result.error);
-            return;
-          }
-          setShot({ session: result.shot.session, png: result.shot.png, edit: result.shot.edit });
-          setDirty(false);
-          setView('capture');
-        });
-      });
-    },
-    [requestLeave],
-  );
-
-  /** Opens a saved step guide (after Done, or from History); an unsaved editor asks first. */
-  const openFlow = useCallback(
-    (id: string) => {
-      requestLeave(() => {
-        setFlowId(id);
-        setView('flow');
-      });
-    },
-    [requestLeave],
-  );
+  /** Opens a saved step guide (after Done, or from History). */
+  const openFlow = useCallback((id: string) => {
+    setFlowId(id);
+    setView('flow');
+  }, []);
 
   /** The Flow view's "Open in editor": one step of a guide, saved back over its own picture. */
   const editFlowStep = useCallback(
-    (historyId: string, index: number) => {
-      requestLeave(() => {
-        void window.framecapt
-          .invoke('flow:openStepInEditor', { historyId, index })
-          .then((result) => {
-            if (!result.ok) {
-              notify.error(result.error);
-              return;
-            }
-            // A flattened picture of the step: Save writes it back over that step's image.
-            setShot({
-              session: result.data.session,
-              png: result.data.png,
-              edit: {
-                historyId,
-                format: 'png',
-                mode: 'flattened',
-                doc: null,
-                notice: null,
-                assets: [],
-              },
-            });
-            setDirty(false);
-            setView('capture');
-          });
-      });
-    },
-    [requestLeave],
+    (historyId: string, index: number) => openInEditor({ kind: 'step', historyId, index }),
+    [openInEditor],
   );
 
   /**
-   * A new editor session from a picture (Open image, a drop, a paste): an unsaved editor asks
-   * first. The picture is not saved anywhere; it is only an editable copy.
+   * A new editor tab from a picture (Open image, a drop, a paste). The picture is not saved
+   * anywhere; it is only an editable copy.
    */
   const openPicture = useCallback(
     (picture: Blob) => {
-      requestLeave(() => {
-        void importPicture(window.framecapt, picture).then((result) => {
-          if (!result.ok) {
-            notify.error(result.error);
-            return;
-          }
-          setShot({ session: result.session, png: result.png, imported: true });
-          setDirty(false);
-          setView('capture');
-        });
+      void importPicture(window.framecapt, picture).then((result) => {
+        if (!result.ok) {
+          notify.error(result.error);
+          return;
+        }
+        openInEditor({ kind: 'session', sessionId: result.session.id, imported: true });
       });
     },
-    [requestLeave],
+    [openInEditor],
   );
 
-  /** File > Open image: the Open dialog first (cancelling keeps the editor as it is). */
+  /** File > Open image: the Open dialog first. */
   const openImage = useCallback(async () => {
     const response = await window.framecapt.invoke('shot:openImage');
     if (!response.ok) notify.error(response.error);
@@ -358,22 +169,17 @@ export function App() {
 
   /**
    * Starts a screenshot or recording through the Capture view's own handlers (its buttons, with the
-   * window picker for "window"): a tray or shortcut action, and the menus and command center. An
-   * unsaved editor asks first.
+   * window picker for "window"): a tray or shortcut action, and the menus and command center.
    */
-  const startRequest = useCallback(
-    (request: StartRequestEvent) =>
-      requestLeave(() => {
-        setView('capture');
-        requestLaunch(request);
-      }),
-    [requestLeave],
-  );
+  const startRequest = useCallback((request: StartRequestEvent) => {
+    setView('capture');
+    requestLaunch(request);
+  }, []);
 
   // The tray menu asks for a view; a shortcut or the tray asks to start something here.
-  const latest = useRef({ navigate, startRequest, openImage, openPicture, openFlow, view });
+  const latest = useRef({ navigate, startRequest, openImage, openPicture, openFlow });
   useEffect(() => {
-    latest.current = { navigate, startRequest, openImage, openPicture, openFlow, view };
+    latest.current = { navigate, startRequest, openImage, openPicture, openFlow };
   });
   // A step guide was saved (Done in the pill, or its shortcut): it opens here.
   useEffect(
@@ -408,9 +214,8 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // A picture dropped on the window or pasted on the Capture view opens in the editor. Dropping a
-  // file anywhere must never navigate the window, so every file drag is claimed here; while the
-  // editor is open the canvas takes the drop (as an image layer) and the window only ignores it.
+  // A picture dropped on the window or pasted on the Capture view opens in the Editor window.
+  // Dropping a file anywhere must never navigate the window, so every file drag is claimed here.
   useEffect(() => {
     const hasFiles = (event: DragEvent): boolean =>
       event.dataTransfer?.types.includes('Files') === true;
@@ -419,14 +224,13 @@ export function App() {
     };
     const onDrop = (event: DragEvent): void => {
       if (!hasFiles(event)) return;
-      const takenByCanvas = event.defaultPrevented;
       event.preventDefault();
       const picture = pictureIn(event.dataTransfer?.files);
-      if (picture && !takenByCanvas && !shotRef.current) latest.current.openPicture(picture);
+      if (picture) latest.current.openPicture(picture);
     };
     // The DOM paste event carries the clipboard's files: no clipboard permission is involved.
     const onPaste = (event: ClipboardEvent): void => {
-      if (event.defaultPrevented || shotRef.current || latest.current.view !== 'capture') return;
+      if (event.defaultPrevented || viewRef.current !== 'capture') return;
       if (isTyping(event.target)) return;
       const picture = pictureIn(event.clipboardData?.files);
       if (!picture) return;
@@ -478,44 +282,27 @@ export function App() {
         setHistoryFocus(id);
         navigate('history');
       },
+      editorTabs: editor.tabs,
+      onShowEditor: () =>
+        void window.framecapt.invoke('editor:show').then((result) => {
+          if (!result.ok) notify.error(result.error);
+        }),
     }),
-    [startRequest, navigate, editLatestVideo, openImage],
+    [startRequest, navigate, editLatestVideo, openImage, editor.tabs],
   );
 
-  const showVideoEditor = view === 'video-editor' && videoId !== null;
-  const showEditor = view === 'capture' && shot !== null;
-  const showRecording = view === 'capture' && !showEditor && recorder.status === 'completed';
+  const showRecording = view === 'capture' && recorder.status === 'completed';
 
   return (
     <TooltipProvider>
       <AppShell
         view={view}
         onNavigate={(next) => navigate(next)}
-        editor={showEditor || showVideoEditor}
         wide={view === 'history' || view === 'flow'}
         onHelp={() => setHelpOpen(true)}
         titleBar={titleBar}
       >
-        {showEditor ? (
-          <EditorView
-            key={shot.session.id}
-            shot={shot}
-            blocked={pending !== null || helpOpen}
-            onDirtyChange={setDirty}
-            onRequestLeave={() => requestLeave()}
-          />
-        ) : showVideoEditor ? (
-          <VideoEditorView
-            key={videoId}
-            historyId={videoId}
-            blocked={pending !== null || helpOpen || quitAsk || videoLeave !== null}
-            onBack={() => {
-              setHistoryFocus(videoId);
-              navigate('history');
-            }}
-            registerFlush={registerVideoFlush}
-          />
-        ) : showRecording && recorder.result ? (
+        {showRecording && recorder.result ? (
           <RecordingResultView
             snapshot={recorder}
             result={recorder.result}
@@ -535,7 +322,7 @@ export function App() {
           <HistoryView
             focusId={historyFocus}
             onFocusConsumed={() => setHistoryFocus(null)}
-            onEditItem={editHistoryItem}
+            onEditItem={(id) => openInEditor({ kind: 'history', historyId: id })}
             onEditVideo={editVideo}
             onOpenFlow={openFlow}
           />
@@ -550,34 +337,6 @@ export function App() {
           <SettingsView section={settingsSection} onSectionChange={setSettingsSection} />
         ) : null}
       </AppShell>
-      <AlertConfirm
-        open={videoLeave !== null}
-        title="Leave without saving?"
-        description="The latest changes to this video could not be saved. The recording itself is not affected."
-        cancelLabel="Keep editing"
-        confirmLabel="Leave"
-        onConfirm={() => {
-          const request = videoLeave;
-          setVideoLeave(null);
-          request?.then?.();
-        }}
-        onCancel={() => setVideoLeave(null)}
-      />
-      <AlertConfirm
-        open={pending !== null}
-        title={shot?.edit || shot?.imported ? 'Discard your changes?' : 'Discard this screenshot?'}
-        description={
-          shot?.edit
-            ? 'Your changes have not been saved. The saved screenshot in History stays as it is.'
-            : shot?.imported
-              ? 'Your changes have not been saved. The picture you opened is not changed.'
-              : 'It has not been saved or copied since your last change. Discarding deletes it for good.'
-        }
-        cancelLabel="Keep editing"
-        confirmLabel="Discard"
-        onConfirm={() => void confirmDiscard()}
-        onCancel={keepEditing}
-      />
       <AlertConfirm
         open={quitAsk}
         title="Quit while recording?"

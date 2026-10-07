@@ -24,9 +24,19 @@ Start from the home screen (**Capture > Screenshot**) or from a global shortcut:
 - **Region** (`Ctrl+Shift+3`): the screen freezes under an overlay; drag a rectangle, move it, resize it with the handles, or use the keyboard (arrow keys start a centered selection, `Shift` moves 10 px, `Alt` resizes, `Enter` captures, `Esc` or right click cancels). A region stays on **one** monitor.
 - **All screens** (`Ctrl+Shift+4`, shown when more than one display is connected): one image of every screen, each at its place on your desktop (gaps between screens are transparent). It must fit in 16384 px on each side, otherwise FrameCapt says so and you can capture the screens one at a time.
 
-After a capture the screenshot opens in the editor (Settings > Screenshots > "After a capture" can also copy it to the clipboard or save it first). The selection overlay, pill and dim layer are never part of the image.
+After a capture the screenshot opens in the editor, in its own window (see [The Editor window and its tabs](#the-editor-window-and-its-tabs); Settings > Screenshots > "After a capture" can also copy it to the clipboard or save it first). The selection overlay, pill and dim layer are never part of the image.
 
 Save with `Ctrl+S` (PNG or JPEG, your choice in Settings; you pick the file name in a save dialog). **Quick save** (`Ctrl+Shift+S`, or the entry in the Save menu) skips the dialog: the screenshot goes straight into your screenshots folder (Settings > Storage) under the usual name ("FrameCapt 2026-10-02 at 14.05.09.png"; a name that is taken gets "(2)"), and a message offers **Show in folder** and **Undo** (which moves the new file to the Recycle Bin). The key can be changed in Settings > Shortcuts or copy with `Ctrl+C` (image to the clipboard). Saved screenshots go to `Pictures\FrameCapt` unless you changed the folder.
+
+## The Editor window and its tabs
+
+Screenshots and videos are edited in **one Editor window** that is separate from the main window. Everything you open is a **tab** of it: a new capture ("Screenshot"), a picture you opened ("Image"), a saved screenshot or recording from History (**Edit** / **Edit video**, named after its file) and one step of a step guide. The window opens with the first item, comes to the front whenever you open something, and closes when its last tab does. Its size and position are remembered. While it has tabs, the main window shows an **Editor** button (with the number of tabs) in its title bar that brings it back to the front.
+
+- **Opening something that is already open** shows its tab instead of adding a second one.
+- **Each tab keeps its own state**: undo history, selection, zoom, a half-typed text, the playhead. A video that is not showing is paused.
+- **Switch** by clicking a tab, `Ctrl+Tab` / `Ctrl+Shift+Tab` (next / previous), or `Alt+1` to `Alt+8` (`Alt+9` is the last tab). **Close** with the × on the tab, a middle click or `Ctrl+W`. **Reorder** by dragging a tab. With many tabs the strip scrolls sideways (and with the mouse wheel); FrameCapt suggests closing some at 12.
+- **Unsaved changes.** A dot on a tab means a screenshot has changes that are not saved or copied. Closing such a tab asks **Save** (saves it, then closes), **Don't save** or **Cancel**. Closing the Editor window (or quitting FrameCapt) with unsaved tabs asks once and lists them. A video saves by itself, so it never asks, except while an **export** is running: closing it then asks whether to cancel the export.
+- `Ctrl+O` (Open image) works in both windows; a picture you open from the Editor window becomes a new tab.
 
 ## The editor
 
@@ -154,14 +164,14 @@ The pill shows the number of steps and has: **Auto** (off: only manual steps), *
 
 ## Editing a saved screenshot
 
-In **History**, choose **Edit** on a screenshot to open it in the editor again. If FrameCapt kept the editable version (Settings, Screenshots, **Keep editable originals**, on by default), every annotation can be moved, restyled or deleted. Screenshots saved earlier, or whose editable data was deleted, open as a flattened copy: you can add new annotations, but the old ones cannot be changed.
+In **History**, choose **Edit** on a screenshot to open it in the Editor window again (as a new tab, or its tab if it is already open). If FrameCapt kept the editable version (Settings, Screenshots, **Keep editable originals**, on by default), every annotation can be moved, restyled or deleted. Screenshots saved earlier, or whose editable data was deleted, open as a flattened copy: you can add new annotations, but the old ones cannot be changed.
 
 - **Save** replaces the saved image (the previous version is not kept); **Save as copy** makes a new history item.
 - Redactions are applied in the saved image. The editable original keeps the pixels underneath, in FrameCapt's own data folder. Use **Delete editable data** in the item's details, or turn **Keep editable originals** off, if you do not want that.
 
 ## Video editor
 
-In **History**, choose **Edit video** on a WebM or MP4 recording (the button on its card, its context menu, or its details view; the command center also has **Edit the latest recording**). The editor never changes your recording: **Export** writes a new file next to it, named `<recording> (edited).mp4` (or `.webm`, `.gif`; a number is added if the name is taken), and adds it to History as derived from the original.
+In **History**, choose **Edit video** on a WebM, MP4 or multi-source recording (it opens as a tab of the Editor window) (the button on its card, its context menu, or its details view; the command center also has **Edit the latest recording**). The editor never changes your recording: **Export** writes a new file next to it, named `<recording> (edited).mp4` (or `.webm`, `.gif`; a number is added if the name is taken), and adds it to History as derived from the original.
 
 - **Preview.** The recording plays on top of a drawing layer that shows what will be in the result. Play and pause with `Space`, step a frame with the arrow keys (`Shift`: a second). Playback skips the pieces you cut out and stops at the end of the trim, so what you watch is what you export.
 - **Trim.** Drag the two ends of the clip on the timeline (or focus a handle and use the arrow keys). Everything outside is left out.
