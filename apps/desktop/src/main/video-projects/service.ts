@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type {
   VideoExportDoneEvent,
@@ -21,7 +22,7 @@ import type { HistoryService } from '../history/service';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import { exportEdit as realExportEdit, withProbedSource } from '../media/edit-export';
-import type { MediaTools, ProbeResult } from '../media/ffmpeg';
+import { localInput, mediaPath, type MediaTools, type ProbeResult } from '../media/ffmpeg';
 import type { JobRunner } from '../media/job-runner';
 import { readFcapHeaderCached } from '../recording/fcap';
 import type { VideoProjectStore } from './store';
@@ -209,8 +210,79 @@ export class VideoEditService {
       log.warn(`An audio file could not be added (${(error as Error).message})`);
       throw new IpcError('INTERNAL', 'The audio file could not be added.');
     }
+    const durationMs = await this.checkClip(historyId, imported, known);
+    return {
+      assetId: imported.assetId,
+      ext: known,
+      // A label only: control characters are dropped.
+      name: [...path.basename(file)]
+        .filter((char) => (char.codePointAt(0) ?? 0) > 31 && char !== '\u007f')
+        .join('')
+        .slice(0, 120),
+      durationMs,
+    };
+  }
+
+  /**
+   * A voice-over recorded in the editor (WebM/Opus from MediaRecorder). The bytes are remuxed to
+   * Ogg/Opus (no re-encoding; a MediaRecorder file has no length in its header, an Ogg file does),
+   * stored as an asset and checked like a picked file.
+   */
+  async addRecordedAudio(
+    historyId: string,
+    bytes: Uint8Array,
+  ): Promise<{ assetId: string; ext: AudioExtension; durationMs: number }> {
+    if (!this.deps.history.get(historyId)) {
+      throw new IpcError('NOT_FOUND', 'That recording is not in history.');
+    }
+    if (bytes.length > MAX_AUDIO_FILE_BYTES) {
+      throw new IpcError('INVALID_PAYLOAD', 'That voice-over is too large (the limit is 100 MB).');
+    }
+    const work = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'framecapt-voice-'));
+    let imported: { assetId: string; file: string };
+    try {
+      const input = path.join(work, 'voice.webm');
+      const output = path.join(work, 'voice.ogg');
+      await fs.promises.writeFile(input, bytes);
+      const result = await this.deps.tools.run(
+        [
+          '-hide_banner',
+          '-nostats',
+          '-y',
+          ...localInput(input, 'matroska'),
+          '-vn',
+          '-c:a',
+          'copy',
+          '-f',
+          'ogg',
+          mediaPath(output),
+        ],
+        { timeoutMs: 60_000 },
+      );
+      if (result.code !== 0) {
+        log.warn(`A voice-over could not be converted: ${result.stderrTail.slice(-300)}`);
+        throw new IpcError('INVALID_PAYLOAD', 'FrameCapt could not read that voice-over.');
+      }
+      imported = await this.deps.store.importAudio(historyId, output, 'ogg');
+    } catch (error) {
+      if (error instanceof IpcError) throw error;
+      log.warn(`A voice-over could not be added (${(error as Error).message})`);
+      throw new IpcError('INTERNAL', 'The voice-over could not be added.');
+    } finally {
+      await fs.promises.rm(work, { recursive: true, force: true }).catch(() => undefined);
+    }
+    const durationMs = await this.checkClip(historyId, imported, 'ogg');
+    return { assetId: imported.assetId, ext: 'ogg', durationMs };
+  }
+
+  /** Probes a stored audio asset: it must have audio and last up to two hours. Removed if not. */
+  private async checkClip(
+    historyId: string,
+    imported: { assetId: string; file: string },
+    ext: AudioExtension,
+  ): Promise<number> {
     const reject = async (message: string): Promise<never> => {
-      await this.deps.store.removeAsset(historyId, imported.assetId, known).catch(() => undefined);
+      await this.deps.store.removeAsset(historyId, imported.assetId, ext).catch(() => undefined);
       throw new IpcError('INVALID_PAYLOAD', message);
     };
     let probe: ProbeResult;
@@ -223,16 +295,7 @@ export class VideoEditService {
     const durationMs = probe.durationSec === null ? 0 : Math.round(probe.durationSec * 1000);
     if (durationMs < 1) return reject('FrameCapt could not find the length of that audio file.');
     if (durationMs > MAX_CLIP_MS) return reject('That audio file is longer than two hours.');
-    return {
-      assetId: imported.assetId,
-      ext: known,
-      // A label only: control characters are dropped.
-      name: [...path.basename(file)]
-        .filter((char) => (char.codePointAt(0) ?? 0) > 31 && char !== '\u007f')
-        .join('')
-        .slice(0, 120),
-      durationMs,
-    };
+    return durationMs;
   }
 
   /**

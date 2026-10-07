@@ -66,6 +66,10 @@ export const HistoryItemViewSchema = z.object({
   folder: z.string().optional(),
   /** The file is outside both capture folders ("Other locations"). */
   outside: z.boolean().optional(),
+  /** The item was saved to or opened from a project file (`.fcimage` / `.fcvideo`). */
+  projectFile: z.boolean().optional(),
+  /** Edits are stored for this item (a screenshot's editable project or a recording's video project). */
+  hasEditState: z.boolean().optional(),
 });
 export type HistoryItemView = z.infer<typeof HistoryItemViewSchema>;
 
@@ -86,6 +90,20 @@ export type HistoryListResponse = z.infer<typeof HistoryListResponseSchema>;
 export const HistoryIdRequestSchema = z.strictObject({ id: HistoryIdSchema });
 
 export const HistoryCancelledSchema = z.object({ cancelled: z.literal(true) });
+
+// --- duplicate and project files ----------------------------------------------------------------
+
+/** Project files: `.fcimage` (a screenshot with its edits) and `.fcvideo` (a recording's edits). */
+export const PROJECT_FILE_EXTENSIONS = ['fcimage', 'fcvideo'] as const;
+export const DuplicateResponseSchema = z.object({ id: HistoryIdSchema });
+export const SaveProjectFileResponseSchema = z.union([
+  z.object({ path: z.string() }),
+  HistoryCancelledSchema,
+]);
+export const OpenProjectFileResponseSchema = z.union([
+  z.object({ historyId: HistoryIdSchema }),
+  HistoryCancelledSchema,
+]);
 
 // --- MP4 export -------------------------------------------------------------------------------
 

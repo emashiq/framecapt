@@ -768,6 +768,17 @@ function EditorWorkspace({
   }, [busy, reedit, doc, shot.session.id, announce, prepareExport]);
 
   /** The first overwrite of a session asks: the previous version of the image is not kept. */
+  /** Saves the edits (first writing unsaved ones over the item) as a `.fcimage` project file. */
+  const saveProjectFile = useCallback(async () => {
+    if (!reedit) return;
+    if (dirty && !(await saveOver())) return;
+    const response = await window.framecapt.invoke('history:saveProjectFile', {
+      id: reedit.historyId,
+    });
+    if (!response.ok) notify.error(response.error);
+    else if ('path' in response.data) notify.success('Project file saved');
+  }, [reedit, dirty, saveOver]);
+
   const requestSaveOver = useCallback(() => {
     if (!reedit) return;
     if (overwriteOk.current) void saveOver();
@@ -1001,6 +1012,7 @@ function EditorWorkspace({
         onTogglePanel={togglePanel}
         reedit={reedit ? { format: reedit.format } : undefined}
         onSaveCopy={(format) => void save(format)}
+        onSaveProject={reedit ? () => void saveProjectFile() : undefined}
         onQuickSave={quickSave}
         onSaveOver={requestSaveOver}
         onInsertFile={() => void insertFromFile()}

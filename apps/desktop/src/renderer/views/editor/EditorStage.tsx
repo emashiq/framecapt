@@ -516,11 +516,36 @@ export function EditorStage(props: EditorStageProps) {
     if (!container) return;
     const sync = (): void => {
       const rect = container.getBoundingClientRect();
-      setStageSize((current) =>
-        current.width === rect.width && current.height === rect.height
-          ? current
-          : { width: rect.width, height: rect.height },
-      );
+      const current = latest.current.stageSize;
+      if (current.width === rect.width && current.height === rect.height) {
+        setDpr(window.devicePixelRatio || 1);
+        return;
+      }
+      const next = { width: rect.width, height: rect.height };
+      // A zoomed or panned picture scales with the stage too: same share of the stage, the
+      // picture point at the stage's center stays at the center.
+      const { image: size, dpr: ratio } = latest.current;
+      if (current.width > 0 && current.height > 0 && rect.width > 0 && rect.height > 0) {
+        setUserView((user) => {
+          if (!user) return user;
+          const before = fitView(current, size, ratio).zoom;
+          const after = fitView(next, size, ratio).zoom;
+          const zoom = clampZoom(user.zoom * (after / before));
+          const mid = screenToImage(user, ratio, {
+            x: current.width / 2,
+            y: current.height / 2,
+          });
+          const scale = zoom / ratio;
+          return clampPan(
+            { zoom, panX: next.width / 2 - mid.x * scale, panY: next.height / 2 - mid.y * scale },
+            next,
+            size,
+            ratio,
+          );
+        });
+      }
+      latest.current.stageSize = next;
+      setStageSize(next);
       setDpr(window.devicePixelRatio || 1);
     };
     sync();

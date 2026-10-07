@@ -20,10 +20,11 @@ import type { ProjectAsset, ProjectInput, ProjectStore } from '../projects/store
 import type { VideoProjectStore } from '../video-projects/store';
 import type { ProjectDoc } from '../../shared/project-ipc';
 import { writeFileAtomic } from '../shots/atomic-write';
+import { freeFileName } from '../shots/free-name';
 import { readFcapHeader, readFcapHeaderCached } from '../recording/fcap';
 import { CompletionRecordSchema, COMPLETED_DIR } from '../recording/manifest';
 import { HistoryStore, type HistoryItem } from './store';
-import { mapLimit, samePath } from './files';
+import { copyFileAtomic, mapLimit, samePath } from './files';
 import { itemName, matchesQuery } from './query';
 import { ThumbStore, thumbNameFor, THUMBS_CAP_BYTES } from './thumbs';
 
@@ -54,9 +55,11 @@ export interface HistoryDeps {
   dir: string;
   tools: MediaTools;
   /** Editable projects of screenshots (`<userData>/projects`). Absent: none are kept. */
-  projects?: Pick<ProjectStore, 'write' | 'updateDoc' | 'remove' | 'sweep'>;
+  projects?: Pick<ProjectStore, 'write' | 'updateDoc' | 'remove' | 'sweep'> &
+    Partial<Pick<ProjectStore, 'copy'>>;
   /** Video editing projects (`<userData>/video-projects`), removed with their history item. */
-  videoProjects?: Pick<VideoProjectStore, 'remove' | 'sweep'>;
+  videoProjects?: Pick<VideoProjectStore, 'remove' | 'sweep'> &
+    Partial<Pick<VideoProjectStore, 'copy' | 'has'>>;
   /** Moves a file to the Recycle Bin (`shell.trashItem`); never a permanent delete. */
   trashItem: (file: string) => Promise<void>;
   /**
@@ -86,6 +89,8 @@ export interface NewScreenshot {
   derivedFrom?: string;
   /** The editable project to store with it (id = the item's id). It is written before the item is listed. */
   project?: ProjectInput;
+  /** Opened from a project file: the Library marks it. */
+  projectFile?: boolean;
 }
 
 /** What `overwriteScreenshot` replaces. */
@@ -313,10 +318,17 @@ export class HistoryService {
       derivedFrom: item.derivedFrom,
       exists,
       editable: item.type === 'screenshot' && item.projectId !== undefined,
+      ...(this.hasEditState(item) && { hasEditState: true }),
+      ...(item.projectFile && { projectFile: true }),
       ...(item.format === 'fcap' && { layout: exists ? await fcapLayout(item.path) : null }),
       ...(item.stepCount !== undefined && { stepCount: item.stepCount }),
       ...this.folderFields(item),
     };
+  }
+
+  private hasEditState(item: HistoryItem): boolean {
+    if (item.type === 'screenshot') return item.projectId !== undefined;
+    return item.type === 'recording' && (this.deps.videoProjects?.has?.(item.id) ?? false);
   }
 
   private folderFields(item: HistoryItem): Pick<HistoryItemView, 'folder' | 'outside'> {
@@ -384,6 +396,7 @@ export class HistoryService {
       source: input.source,
       derivedFrom: input.derivedFrom ?? null,
       ...(projectId && { projectId }),
+      ...(input.projectFile && { projectFile: true }),
     });
     return { id };
   }
@@ -530,6 +543,77 @@ export class HistoryService {
     await this.collectThumbs();
     this.changed();
     return { path: item.path, editable: projectId !== undefined };
+  }
+
+  /**
+   * Copies a screenshot or recording to a free "<name> (copy)" file next to it, with its thumbnail
+   * and its edits (the editable project, or the video project and its assets), as a new item.
+   */
+  async duplicate(id: string): Promise<{ id: string }> {
+    await this.ready;
+    const item = this.get(id);
+    if (!item) throw new IpcError('NOT_FOUND', 'That item is not in history.');
+    if (item.type !== 'screenshot' && item.type !== 'recording') {
+      throw new IpcError('INVALID_PAYLOAD', 'Only screenshots and recordings can be duplicated.');
+    }
+    const present = await fs.promises.stat(item.path).then(
+      (stat) => stat.isFile(),
+      () => false,
+    );
+    if (!present) throw new IpcError('NOT_FOUND', 'The file was moved or deleted.');
+    const extension = path.extname(item.path);
+    const target = await freeFileName(
+      path.dirname(item.path),
+      `${path.basename(item.path, extension)} (copy)${extension}`,
+    );
+    try {
+      await copyFileAtomic(item.path, target);
+    } catch (error) {
+      log.warn(`Duplicate failed (${(error as Error).message})`);
+      throw new IpcError('INTERNAL', 'The copy could not be made.');
+    }
+    const copyId = randomUUID();
+    let thumbnail: string | null = null;
+    const thumbSource = item.thumbnail ? this.thumbs.pathOf(item.thumbnail) : undefined;
+    if (thumbSource) {
+      try {
+        await this.thumbs.write(thumbNameFor(copyId), await fs.promises.readFile(thumbSource));
+        thumbnail = thumbNameFor(copyId);
+      } catch {
+        // a recording's thumbnail is made again below; a screenshot shows a placeholder
+      }
+    }
+    let projectId: string | undefined;
+    try {
+      if (item.projectId !== undefined && (await this.deps.projects?.copy?.(id, copyId))) {
+        projectId = copyId;
+      }
+      await this.deps.videoProjects?.copy?.(id, copyId);
+    } catch (error) {
+      log.warn(`Could not copy the edits of an item (${(error as Error).message})`);
+    }
+    const copy: HistoryItem = {
+      ...item,
+      id: copyId,
+      path: target,
+      createdAt: this.now(),
+      thumbnail,
+      derivedFrom: null,
+    };
+    delete copy.projectId;
+    delete copy.projectFile;
+    if (projectId) copy.projectId = projectId;
+    await this.put(copy);
+    if (item.type === 'recording' && thumbnail === null) this.queueThumbnail(copy);
+    return { id: copyId };
+  }
+
+  /** Marks an item as saved to a project file (the Library shows a project badge). */
+  async markProjectFile(id: string): Promise<void> {
+    await this.ready;
+    if (!this.get(id)) throw new IpcError('NOT_FOUND', 'That item is not in history.');
+    await this.store.update(id, { projectFile: true });
+    this.changed();
   }
 
   /** Deletes the editable project of an item; the exported image and the entry stay. */

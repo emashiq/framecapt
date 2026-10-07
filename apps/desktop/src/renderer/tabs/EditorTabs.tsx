@@ -21,6 +21,7 @@ import { shortPath } from '../lib/short-path';
 import { EditorView, type EditorShot } from '../views/editor/EditorView';
 import { FlowView } from '../views/flow/FlowView';
 import { VideoEditorView } from '../views/video-editor/VideoEditorView';
+import { ViewerView } from '../views/viewer/ViewerView';
 import {
   dirtyTabs,
   findByKey,
@@ -37,7 +38,9 @@ export type TabData =
   | { kind: 'home' }
   | { kind: 'shot'; shot: EditorShot }
   | { kind: 'video'; historyId: string }
-  | { kind: 'flow'; historyId: string };
+  | { kind: 'flow'; historyId: string }
+  /** A saved screenshot or recording shown as it is; Edit turns the same tab into its editor. */
+  | { kind: 'viewer'; media: 'image' | 'video'; historyId: string };
 
 /** What the window is asking the user right now (one question at a time). */
 type Ask =
@@ -208,7 +211,7 @@ export function useEditorTabs(): EditorTabs {
         else closeTab(id);
         return;
       }
-      if (data.kind === 'flow') {
+      if (data.kind === 'flow' || data.kind === 'viewer') {
         closeTab(id);
         return;
       }
@@ -283,7 +286,14 @@ export function useEditorTabs(): EditorTabs {
       if (event.kind === 'video') {
         const key = `video:${event.historyId}`;
         if (!known(key)) {
-          open(key, 'video', event.title, { kind: 'video', historyId: event.historyId });
+          open(
+            key,
+            'video',
+            event.title,
+            event.viewer
+              ? { kind: 'viewer', media: 'video', historyId: event.historyId }
+              : { kind: 'video', historyId: event.historyId },
+          );
         }
       } else if (event.kind === 'flow') {
         const key = `flow:${event.historyId}`;
@@ -293,6 +303,14 @@ export function useEditorTabs(): EditorTabs {
       } else if (event.kind === 'shot') {
         const key = `shot:${event.historyId}`;
         if (known(key)) return;
+        if (event.viewer) {
+          open(key, 'shot', event.title, {
+            kind: 'viewer',
+            media: 'image',
+            historyId: event.historyId,
+          });
+          return;
+        }
         const result = await openFromHistory(window.framecapt, event.historyId);
         if (!result.ok) notify.error(result.error);
         else openShot(key, event.title, result.shot);
@@ -326,6 +344,44 @@ export function useEditorTabs(): EditorTabs {
     },
     [open, openShot],
   );
+
+  /** Edit in a viewer tab: the same tab (id, place) becomes the editor of the item. */
+  const editViewer = useCallback(async (id: string): Promise<void> => {
+    const viewer = () => {
+      const tab = stateRef.current.tabs.find((candidate) => candidate.id === id);
+      return tab?.data.kind === 'viewer' ? tab : undefined;
+    };
+    const tab = viewer();
+    if (!tab || tab.data.kind !== 'viewer') return;
+    const { historyId, media } = tab.data;
+    if (media === 'video') {
+      dispatch({
+        type: 'replace',
+        id,
+        key: `video:${historyId}`,
+        kind: 'video',
+        data: { kind: 'video', historyId },
+      });
+      return;
+    }
+    const result = await openFromHistory(window.framecapt, historyId);
+    if (!result.ok) {
+      notify.error(result.error);
+      return;
+    }
+    // The tab was closed (or already turned into the editor) while the editor session loaded.
+    if (!viewer()) {
+      discardSession(result.shot.session.id);
+      return;
+    }
+    dispatch({
+      type: 'replace',
+      id,
+      key: `shot:${historyId}`,
+      kind: 'shot',
+      data: { kind: 'shot', shot: result.shot },
+    });
+  }, []);
 
   // Main sends what was asked for (also what was asked before this window was ready).
   useEffect(() => {
@@ -424,6 +480,17 @@ export function useEditorTabs(): EditorTabs {
           active={active}
           blocked={blocked}
           host={host}
+        />
+      );
+    }
+    if (data.kind === 'viewer') {
+      return (
+        <ViewerView
+          historyId={data.historyId}
+          media={data.media}
+          title={tab.title}
+          active={active}
+          onEdit={() => editViewer(tab.id)}
         />
       );
     }

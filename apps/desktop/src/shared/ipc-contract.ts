@@ -14,6 +14,9 @@ import {
   EditorOpenTabEventSchema,
   EditorResolveCloseRequestSchema,
   EditorStateSchema,
+  OpenVideoResponseSchema,
+  SplitSourcesRequestSchema,
+  SplitSourcesResponseSchema,
 } from './editor-ipc';
 import {
   FlowEndedEventSchema,
@@ -72,6 +75,9 @@ import {
   BulkExportRequestSchema,
   BulkExportResponseSchema,
   BulkProgressEventSchema,
+  DuplicateResponseSchema,
+  OpenProjectFileResponseSchema,
+  SaveProjectFileResponseSchema,
   ExportCancelRequestSchema,
   ExportCapabilitiesSchema,
   ExportDoneEventSchema,
@@ -96,6 +102,8 @@ import {
   VideoAddImageRequestSchema,
   VideoAddImageResponseSchema,
   VideoExportResponseSchema,
+  VideoAddRecordedAudioRequestSchema,
+  VideoAddRecordedAudioResponseSchema,
   VideoPickAudioRequestSchema,
   VideoPickAudioResponseSchema,
   VideoOpenRequestSchema,
@@ -301,6 +309,12 @@ export const ipcContract = {
   'editor:open': {
     request: EditorOpenRequestSchema,
     response: z.void(),
+    roles: ['main'],
+  },
+  /** File > Open video: a main-process dialog; the video is added to history and opens in a tab. */
+  'editor:openVideo': {
+    request: z.undefined(),
+    response: OpenVideoResponseSchema,
     roles: ['main'],
   },
   /** The main window's renderer is listening: main sends the tabs that were requested before. */
@@ -509,6 +523,24 @@ export const ipcContract = {
     response: z.union([z.object({ path: z.string() }), HistoryCancelledSchema]),
     roles: ['main'],
   },
+  /** Copies a screenshot or recording next to the original, with its edits, as a new item. */
+  'history:duplicate': {
+    request: HistoryIdRequestSchema,
+    response: DuplicateResponseSchema,
+    roles: ['main'],
+  },
+  /** Saves the item's edits as a `.fcimage` / `.fcvideo` project file (a save dialog in main). */
+  'history:saveProjectFile': {
+    request: HistoryIdRequestSchema,
+    response: SaveProjectFileResponseSchema,
+    roles: ['main'],
+  },
+  /** Opens a project file (an open dialog in main) and imports it into history. */
+  'history:openProjectFile': {
+    request: z.undefined(),
+    response: OpenProjectFileResponseSchema,
+    roles: ['main'],
+  },
   /** Drag-out: starts an OS file drag of an owned item's file (main resolves the path). */
   'history:startDrag': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
   /** Saves copies of owned items into one folder chosen in a main dialog; never overwrites. */
@@ -523,6 +555,12 @@ export const ipcContract = {
   'history:extractFcap': {
     request: ExtractFcapRequestSchema,
     response: ExtractFcapResponseSchema,
+    roles: ['main'],
+  },
+  /** Every source of a multi-source recording as its own video (extracts the missing ones). */
+  'history:splitSources': {
+    request: SplitSourcesRequestSchema,
+    response: SplitSourcesResponseSchema,
     roles: ['main'],
   },
   /** A recording saved as another format (WebM, MP4, MKV, GIF) with a compression level: a new item. */
@@ -602,6 +640,12 @@ export const ipcContract = {
   'video:pickAudio': {
     request: VideoPickAudioRequestSchema,
     response: VideoPickAudioResponseSchema,
+    roles: ['main'],
+  },
+  /** A voice-over recorded in the editor (WebM/Opus bytes): remuxed to Ogg and stored as an audio asset. */
+  'video:addRecordedAudio': {
+    request: VideoAddRecordedAudioRequestSchema,
+    response: VideoAddRecordedAudioResponseSchema,
     roles: ['main'],
   },
   /** Renders the edit into a new file next to the source (a queued job; cancel with export:cancel). */

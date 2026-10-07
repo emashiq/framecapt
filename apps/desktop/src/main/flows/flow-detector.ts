@@ -3,6 +3,8 @@ import type { Point } from '../../shared/geometry';
 /** One reading of the pointer: global DIP and a monotonic time in ms. */
 export interface CursorSample extends Point {
   t: number;
+  /** The display under the pointer, when known: resting on another display is always a new item. */
+  display?: string;
 }
 
 export interface DetectorOptions {
@@ -52,7 +54,8 @@ export class FlowDetector {
     }
     if (sample.t - this.anchor.t < dwellMs) return null;
     const last = this.lastStep;
-    if (last && distance(this.anchor, last) <= moveThreshold) return null;
+    const sameDisplay = last?.display === sample.display;
+    if (last && sameDisplay && distance(this.anchor, last) <= moveThreshold) return null;
     if (last && sample.t - last.t < minIntervalMs) return null;
     this.lastStep = sample;
     return sample;

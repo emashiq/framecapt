@@ -4,6 +4,7 @@ import {
   Check,
   ChevronDown,
   Copy,
+  FileBox,
   FileImage,
   FolderOpen,
   Images,
@@ -193,6 +194,8 @@ export interface EditorToolbarProps {
   reedit?: { format: ImageFormat } | undefined;
   /** Saves a copy (a new history item) in `format`. */
   onSaveCopy: (format: ImageFormat) => void;
+  /** Saves the edits as a `.fcimage` project file (only for an item in history). */
+  onSaveProject?: () => void;
   /** Saves over the history item the editor was opened from. */
   onSaveOver: () => void;
   /** Saves into the screenshots folder with no dialog (a new history item). */
@@ -455,6 +458,16 @@ export const EditorToolbar = memo(function EditorToolbar(props: EditorToolbarPro
                   <span className="flex-1">Quick save (no dialog)</span>
                   {quickKeys ? <Kbd keys={quickKeys} /> : null}
                 </DropdownMenu.Item>
+                {props.onSaveProject ? (
+                  <DropdownMenu.Item
+                    data-testid="editor-save-project"
+                    onSelect={() => props.onSaveProject?.()}
+                    className="flex cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 outline-none data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent-fg"
+                  >
+                    <FileBox className="size-4 text-fg-subtle" aria-hidden="true" />
+                    <span className="flex-1">Save as project file (.fcimage)…</span>
+                  </DropdownMenu.Item>
+                ) : null}
                 <p className="px-2.5 pt-1.5 pb-1 text-xs text-fg-subtle">
                   JPEG pads redactions to its 16 px blocks so they stay solid black.
                 </p>

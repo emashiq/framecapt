@@ -1,10 +1,12 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { notify } from '../lib/notify';
 import {
+  ArrowLeft,
   AudioLines,
   Clock,
   Copy,
   FolderOpen,
+  Film,
   HardDrive,
   History,
   Maximize2,
@@ -17,6 +19,7 @@ import { formatBytes, formatDuration } from '../../shared/recording';
 import { Mp4Export } from '../components/Mp4Export';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { useExportState } from '../history/export-store';
 import { revealDuration } from '../lib/reveal-duration';
 import { PageHeader } from '../components/PageHeader';
 
@@ -60,6 +63,8 @@ export interface RecordingResultViewProps {
   onNewRecording: () => void;
   /** Opens History: the recording is listed there with every action. */
   onOpenHistory: () => void;
+  /** "Edit as separate videos": every source of a multi-source recording opens as its own video. */
+  onSplitSources?: (historyId: string) => Promise<void>;
 }
 
 /**
@@ -71,7 +76,10 @@ export function RecordingResultView({
   result,
   onNewRecording,
   onOpenHistory,
+  onSplitSources,
 }: RecordingResultViewProps) {
+  const [splitting, setSplitting] = useState(false);
+  const extract = useExportState(result.historyId ?? '');
   const videoRef = useRef<HTMLVideoElement>(null);
   const headingRef = useRef<HTMLDivElement>(null);
   const notice = earlyStopNotice(snapshot);
@@ -97,6 +105,16 @@ export function RecordingResultView({
 
   return (
     <div data-testid="recording-result">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mb-3 -ml-2"
+        icon={<ArrowLeft className="size-4" aria-hidden="true" />}
+        data-testid="result-home"
+        onClick={onNewRecording}
+      >
+        Home
+      </Button>
       <div ref={headingRef} tabIndex={-1} className="outline-none">
         <PageHeader
           title={notice ? 'Recording saved (stopped early)' : 'Recording saved'}
@@ -172,11 +190,34 @@ export function RecordingResultView({
       </Card>
 
       {isFcap ? (
-        <p className="mt-4 max-w-xl text-[13px] text-fg-muted" data-testid="result-fcap-note">
-          This recording of several sources opens only in FrameCapt. Open it in History to watch
-          each source on its own, or to extract one source, or a part of it, as an MP4 or WebM
-          video.
-        </p>
+        <div className="mt-4 max-w-xl" data-testid="result-fcap-note">
+          <p className="text-[13px] text-fg-muted">
+            This recording of several sources opens only in FrameCapt. Each screen is also made as a
+            video of its own, so you can cut, trim, add audio or music, duplicate or delete each one
+            separately.
+          </p>
+          {result.historyId && onSplitSources ? (
+            <Button
+              variant="secondary"
+              className="mt-3"
+              icon={<Film className="size-4" aria-hidden="true" />}
+              loading={splitting}
+              data-testid="result-split"
+              onClick={() => {
+                const historyId = result.historyId;
+                if (!historyId) return;
+                setSplitting(true);
+                void onSplitSources(historyId).finally(() => setSplitting(false));
+              }}
+            >
+              {splitting
+                ? extract?.status === 'running' && extract.percent !== null
+                  ? `Extracting… ${extract.percent}%`
+                  : 'Extracting…'
+                : 'Edit as separate videos'}
+            </Button>
+          ) : null}
+        </div>
       ) : result.historyId ? (
         <Mp4Export historyId={result.historyId} className="mt-4 max-w-sm" />
       ) : null}

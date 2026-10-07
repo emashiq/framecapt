@@ -67,6 +67,10 @@ export interface CommandActions {
   editVideo: () => void;
   /** Same as the Open image button of Home (a picture file opens in the editor). */
   openImage: () => void;
+  /** Same as the Open video button of Home (a video file opens in the video editor). */
+  openVideo: () => void;
+  /** File > Open project: a .fcimage / .fcvideo file opens in its editor. */
+  openProject: () => void;
   toggleTheme: () => void;
   quit: () => void;
   openCommandCenter: () => void;
@@ -183,6 +187,20 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
     keywords: ['picture', 'photo', 'file', 'import', 'edit', 'png', 'jpg'],
     hint: { kind: 'editor', action: 'openImage' },
     run: actions.openImage,
+  });
+  add({
+    id: 'file.openVideo',
+    title: 'Open video…',
+    group: 'Capture',
+    keywords: ['movie', 'clip', 'file', 'import', 'edit', 'mp4', 'webm', 'mov', 'mkv'],
+    run: actions.openVideo,
+  });
+  add({
+    id: 'file.openProject',
+    title: 'Open project…',
+    group: 'Capture',
+    keywords: ['project', 'file', 'import', 'edit', 'fcimage', 'fcvideo', 'reopen'],
+    run: actions.openProject,
   });
   // Stop and pause belong to the recording that runs: they stay available while it runs.
   if (env.recorderStatus === 'recording' || env.recorderStatus === 'paused') {
@@ -393,6 +411,8 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
     label: 'File',
     items: [
       'file.openImage',
+      'file.openVideo',
+      'file.openProject',
       null,
       'shot.region',
       'shot.window',

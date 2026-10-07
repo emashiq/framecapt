@@ -8,6 +8,8 @@ import type { GuideStep } from './flow-store';
 
 /** How often the pointer is read while steps are captured. Idle costs nothing: no timer runs. */
 export const POLL_INTERVAL_MS = 100;
+/** The pill follows the pointer to another display at most this often (ms). */
+export const FOLLOW_THROTTLE_MS = 400;
 
 type StepsState = StepsSnapshot['state'];
 
@@ -33,10 +35,32 @@ export interface StepsDeps {
   /** True while the pointer is over the Steps pill (its own place is never a step). */
   isOverPill?: (point: Point) => boolean;
   /** Shows the pill and gets the main window out of the way / puts both back. */
-  ui: { open: () => void; close: () => void };
+  ui: {
+    open: () => void;
+    close: () => void;
+    /** The pointer is on another display: move the pill there. */
+    follow?: (displayId: string) => void;
+  };
   log?: { info: (message: string) => void; warn: (message: string) => void };
   intervalMs?: number;
   maxSteps?: number;
+}
+
+/** The display whose bounds are closest to a point that lies in none of them (DIP). */
+function nearestDisplay(point: Point, displays: readonly DisplayInfo[]): DisplayInfo | undefined {
+  let best: DisplayInfo | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const display of displays) {
+    const { x, y, width, height } = display.bounds;
+    const dx = Math.max(x - point.x, 0, point.x - (x + width));
+    const dy = Math.max(y - point.y, 0, point.y - (y + height));
+    const distance = Math.hypot(dx, dy);
+    if (distance < bestDistance) {
+      best = display;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }
 
 const toGeom = (display: DisplayInfo): DisplayGeom => ({
@@ -66,6 +90,9 @@ export class StepsController {
   private chain: Promise<void> = Promise.resolve();
   private queued = 0;
   private lastOutside: Point | null = null;
+  /** The display the pill was last placed on, and when (monotonic ms). */
+  private pillDisplay: string | null = null;
+  private pillMovedAt = Number.NEGATIVE_INFINITY;
   private readonly listeners = new Set<(snapshot: StepsSnapshot) => void>();
   private readonly max: number;
 
@@ -128,7 +155,11 @@ export class StepsController {
     this.lastOutside = null;
     this.startedAt = this.deps.now();
     this.detector.reset();
-    this.detector.start({ ...this.deps.cursor(), t: this.deps.monotonic() });
+    const origin = this.deps.cursor();
+    // The pill opens on the pointer's display; it only moves when the pointer leaves it.
+    this.pillDisplay = this.displayAt(origin)?.id ?? null;
+    this.pillMovedAt = Number.NEGATIVE_INFINITY;
+    this.detector.start({ ...origin, t: this.deps.monotonic(), ...this.displayTag(origin) });
     this.deps.log?.info('Step capture started');
     this.startTimer();
     this.deps.ui.open();
@@ -248,13 +279,47 @@ export class StepsController {
 
   /** One poll: the pointer is read, fed to the detector, and a step is taken when it rested. */
   tick(): void {
-    if (this.state !== 'active') return;
+    if (this.state !== 'active' && this.state !== 'paused') return;
     const point = this.deps.cursor();
     if (this.deps.isOverPill?.(point)) return;
     this.lastOutside = point;
-    if (!this.auto) return;
-    const hit = this.detector.feed({ ...point, t: this.deps.monotonic() });
+    this.followPointer(point);
+    if (this.state !== 'active' || !this.auto) return;
+    const hit = this.detector.feed({
+      ...point,
+      t: this.deps.monotonic(),
+      ...this.displayTag(point),
+    });
     if (hit && this.queued === 0) void this.enqueue(point, false);
+  }
+
+  /** The display under a global DIP point (the nearest one when it lies between displays). */
+  private displayAt(point: Point): DisplayInfo | undefined {
+    const displays = this.deps.displays();
+    const geom = displayForPoint(point, displays.map(toGeom));
+    return (
+      displays.find((candidate) => candidate.id === geom?.id) ??
+      nearestDisplay(point, displays) ??
+      displays.find((candidate) => candidate.isPrimary) ??
+      displays[0]
+    );
+  }
+
+  private displayTag(point: Point): { display?: string } {
+    const id = this.displayAt(point)?.id;
+    return id === undefined ? {} : { display: id };
+  }
+
+  /** Moves the pill to the pointer's display: only when that changed, and not faster than the throttle. */
+  private followPointer(point: Point): void {
+    if (!this.deps.ui.follow) return;
+    const id = this.displayAt(point)?.id;
+    if (id === undefined || id === this.pillDisplay) return;
+    const now = this.deps.monotonic();
+    if (now - this.pillMovedAt < FOLLOW_THROTTLE_MS) return;
+    this.pillDisplay = id;
+    this.pillMovedAt = now;
+    this.deps.ui.follow(id);
   }
 
   private enqueue(point: Point | null, manual: boolean): Promise<void> {
@@ -275,12 +340,9 @@ export class StepsController {
     }
     try {
       const displays = this.deps.displays();
-      const geoms = displays.map(toGeom);
-      const geom = point ? displayForPoint(point, geoms) : undefined;
-      const display =
-        displays.find((candidate) => candidate.id === geom?.id) ??
-        displays.find((candidate) => candidate.isPrimary) ??
-        displays[0];
+      const display = point
+        ? this.displayAt(point)
+        : (displays.find((candidate) => candidate.isPrimary) ?? displays[0]);
       if (!display) throw new Error('No display.');
       const frame = await this.deps.grab(display);
       // Cancelled or finished while the screen was being grabbed: nothing to keep.
@@ -295,7 +357,9 @@ export class StepsController {
         cursor: point ? cursorToFramePixels(point, toGeom(display), frame) : null,
         at: this.deps.now(),
       });
-      if (point) this.detector.noteManual({ ...point, t: this.deps.monotonic() });
+      if (point) {
+        this.detector.noteManual({ ...point, t: this.deps.monotonic(), display: display.id });
+      }
       if (this.steps.length >= this.max) this.limitReached();
       else this.emit();
     } catch (error) {

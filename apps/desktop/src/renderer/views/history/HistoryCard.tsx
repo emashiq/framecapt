@@ -2,6 +2,7 @@ import type { MouseEvent } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   Copy,
+  CopyPlus,
   ExternalLink,
   FileX2,
   Film,
@@ -23,7 +24,7 @@ import { formatExact, formatRelative } from '../../lib/time';
 import { TypeIcon } from '../../history/type-icon';
 import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/IconButton';
-import { canEditItem, editLabel, type ItemActions } from './actions';
+import { canDuplicateItem, canEditItem, editLabel, type ItemActions } from './actions';
 import { canSaveAs } from './SaveAs';
 import { Thumb } from './Thumb';
 
@@ -67,7 +68,7 @@ export const menuItemClass =
 export function TypeBadge({
   item,
 }: {
-  item: Pick<HistoryItemView, 'type' | 'format' | 'stepCount'>;
+  item: Pick<HistoryItemView, 'type' | 'format' | 'stepCount' | 'projectFile'>;
 }) {
   const text =
     item.type === 'flow'
@@ -78,7 +79,7 @@ export function TypeBadge({
       data-testid="history-type"
       className="inline-flex items-center gap-1 rounded-md bg-bg/85 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-fg-muted uppercase shadow-card backdrop-blur-sm"
     >
-      <TypeIcon type={item.type} className="size-3" aria-hidden="true" />
+      <TypeIcon type={item.type} project={item.projectFile} className="size-3" aria-hidden="true" />
       {text}
     </span>
   );
@@ -383,6 +384,16 @@ export function HistoryCard({
                   >
                     <Save className="size-4 text-fg-subtle" aria-hidden="true" />
                     Save a copy as…
+                  </DropdownMenu.Item>
+                ) : null}
+                {canDuplicateItem(item) ? (
+                  <DropdownMenu.Item
+                    data-testid="history-menu-duplicate"
+                    onSelect={() => actions.duplicate(item)}
+                    className={menuItemClass}
+                  >
+                    <CopyPlus className="size-4 text-fg-subtle" aria-hidden="true" />
+                    Duplicate
                   </DropdownMenu.Item>
                 ) : null}
                 {onMoveTo ? (

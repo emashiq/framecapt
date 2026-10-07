@@ -269,6 +269,15 @@ export class ProjectStore {
     };
   }
 
+  /** Copies a project (original, document and pictures) to another id; false when `fromId` has none. */
+  async copy(fromId: string, toId: string): Promise<boolean> {
+    const from = this.dirFor(fromId);
+    const to = this.dirFor(toId);
+    if (!from || !to || !this.has(fromId)) return false;
+    await fs.promises.cp(from, to, { recursive: true, errorOnExist: true, force: false });
+    return true;
+  }
+
   /** Deletes one project folder (idempotent). Only plain ids inside the root are ever touched. */
   async remove(id: string): Promise<void> {
     const dir = this.dirFor(id);

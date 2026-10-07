@@ -39,6 +39,8 @@ export const HistoryItemSchema = z.object({
   fps: z.number().min(1).max(240).optional(),
   /** Steps of a step guide (`flow`); absent for everything else. */
   stepCount: z.number().int().min(0).optional(),
+  /** Saved to or opened from a project file (`.fcimage` / `.fcvideo`): the Library shows a project badge. */
+  projectFile: z.boolean().optional(),
 });
 export type HistoryItem = z.infer<typeof HistoryItemSchema>;
 

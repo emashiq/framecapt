@@ -211,6 +211,7 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   'video:export': { historyId: UUID, project: VIDEO_PROJECT, format: 'mp4' },
   'video:addImage': { historyId: UUID, png: bytes(8) },
   'video:pickAudio': { historyId: UUID },
+  'video:addRecordedAudio': { historyId: UUID, bytes: bytes(8) },
   'settings:update': { patch: { general: { theme: 'dark' } } },
   'settings:reset': {},
   'settings:chooseOutputDir': { target: 'screenshots' },

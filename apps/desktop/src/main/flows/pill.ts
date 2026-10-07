@@ -15,6 +15,8 @@ export interface StepsPill {
   close(): void;
   /** True while `point` (global DIP) is over the pill: the pointer resting there is not a step. */
   isOver(point: Point): boolean;
+  /** Moves the pill to the bottom-center of a display (the pointer went there). */
+  follow(displayId: string): void;
   resize(width: number): void;
 }
 
@@ -28,21 +30,25 @@ export function createStepsPill(onUserClosed: () => void): StepsPill {
   let toolbar: ToolbarWindow | undefined;
   let mainWasShown = false;
 
+  /** Bottom-center of a display's work area, for a pill of this width. */
+  const placement = (width: number, displayId: string) =>
+    placeToolbar(
+      { width, height: TOOLBAR_HEIGHT },
+      { kind: 'display', displayId },
+      screen.getAllDisplays().map((display) => ({
+        id: String(display.id),
+        bounds: display.bounds,
+        workArea: display.workArea,
+      })),
+    );
+
   return {
     open() {
       const main = getMainWindow();
       mainWasShown = main !== undefined && main.isVisible() && !main.isMinimized();
       if (mainWasShown) main?.minimize();
       const pointer = screen.getCursorScreenPoint();
-      const where = placeToolbar(
-        { width: INITIAL_WIDTH, height: TOOLBAR_HEIGHT },
-        { kind: 'display', displayId: String(screen.getDisplayNearestPoint(pointer).id) },
-        screen.getAllDisplays().map((display) => ({
-          id: String(display.id),
-          bounds: display.bounds,
-          workArea: display.workArea,
-        })),
-      );
+      const where = placement(INITIAL_WIDTH, String(screen.getDisplayNearestPoint(pointer).id));
       toolbar = createToolbarWindow(
         where,
         INITIAL_WIDTH,
@@ -77,6 +83,15 @@ export function createStepsPill(onUserClosed: () => void): StepsPill {
         point.y >= bounds.y &&
         point.y < bounds.y + bounds.height
       );
+    },
+    follow(displayId) {
+      if (!toolbar || toolbar.win.isDestroyed()) return;
+      const { width } = toolbar.win.getBounds();
+      const where = placement(width, displayId);
+      const bounds = { x: where.x, y: where.y, width, height: TOOLBAR_HEIGHT };
+      toolbar.win.setBounds(bounds);
+      // Mixed-DPI displays: the first move can come out scaled; place again (as at creation).
+      toolbar.win.setBounds(bounds);
     },
     resize(width) {
       toolbar?.setWidth(Math.ceil(width));

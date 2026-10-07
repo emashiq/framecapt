@@ -33,6 +33,8 @@ function actions(): CommandActions {
     showKeyboardHelp: vi.fn(),
     editVideo: vi.fn(),
     openImage: vi.fn(),
+    openVideo: vi.fn(),
+    openProject: vi.fn(),
     toggleTheme: vi.fn(),
     quit: vi.fn(),
     openCommandCenter: vi.fn(),

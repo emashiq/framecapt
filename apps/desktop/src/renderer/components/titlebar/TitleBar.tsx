@@ -33,6 +33,8 @@ export interface TitleBarProps {
     | 'showKeyboardHelp'
     | 'editVideo'
     | 'openImage'
+    | 'openVideo'
+    | 'openProject'
     | 'startSteps'
   >;
   /** Opens a saved capture in the Library. */

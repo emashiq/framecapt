@@ -110,4 +110,21 @@ describe('FlowDetector', () => {
     detector.reset();
     expect(hold(detector, { x: 100, y: 100 }, 5000, 800)).toHaveLength(1);
   });
+
+  it('resting on another display is a step even a few DIP from the last one', () => {
+    const detector = new FlowDetector();
+    detector.start({ x: 1900, y: 500, t: 0, display: 'a' });
+    const at = { x: 1905, y: 500 };
+    // Same display: too close to the start, no step.
+    for (let t = 2000; t <= 3000; t += 100) {
+      expect(detector.feed({ ...at, t, display: 'a' })).toBeNull();
+    }
+    detector.noteManual({ ...at, t: 3000, display: 'a' });
+    // Another display: the move distance does not matter.
+    let hits = 0;
+    for (let t = 6000; t <= 7000; t += 100) {
+      if (detector.feed({ x: 1912, y: 500, t, display: 'b' })) hits += 1;
+    }
+    expect(hits).toBe(1);
+  });
 });

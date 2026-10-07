@@ -91,9 +91,10 @@ function resolveRequest(
   if (item.type === 'flow') {
     return { kind: 'flow', historyId: item.id, title: guideName(item.path) };
   }
-  if (item.type === 'screenshot') return { kind: 'shot', historyId: item.id, title };
+  const viewer = request.viewer ? { viewer: true as const } : {};
+  if (item.type === 'screenshot') return { kind: 'shot', historyId: item.id, title, ...viewer };
   if (item.type === 'recording' && EDITABLE_VIDEO_FORMATS.includes(item.format)) {
-    return { kind: 'video', historyId: item.id, title };
+    return { kind: 'video', historyId: item.id, title, ...viewer };
   }
   throw new IpcError('INVALID_PAYLOAD', 'That item cannot be edited.');
 }

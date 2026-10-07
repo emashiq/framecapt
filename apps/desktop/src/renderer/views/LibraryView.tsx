@@ -136,6 +136,9 @@ export function LibraryView({
   const gridRef = useRef<HTMLUListElement>(null);
   const pendingFocus = useRef<string | null>(null);
   const returnFocus = useRef<string | null>(null);
+  // A duplicate that was just made: selected and focused once the list has it.
+  const [duplicated, setDuplicated] = useState<string | null>(null);
+  const [focusCard, setFocusCard] = useState<string | null>(null);
   const now = useNow();
   const caps = useExportCapabilities();
 
@@ -212,7 +215,10 @@ export function LibraryView({
     setSelectedId(item.id);
   }, []);
   // A multi-source recording opens inside FrameCapt (its details view), never in another player.
-  const baseActions = useMemo(() => createItemActions(reload, onOpenFlow), [reload, onOpenFlow]);
+  const baseActions = useMemo(
+    () => createItemActions(reload, onOpenFlow, setDuplicated),
+    [reload, onOpenFlow],
+  );
   const actions = useMemo<ItemActions>(
     () => ({
       ...baseActions,
@@ -220,6 +226,17 @@ export function LibraryView({
     }),
     [baseActions, select],
   );
+
+  if (duplicated && order.includes(duplicated)) {
+    setDuplicated(null);
+    setTabStopId(duplicated);
+    setRawSelection(clickSelect(EMPTY_SELECTION, order, duplicated, { ctrl: false, shift: false }));
+    setFocusCard(duplicated);
+  }
+  useEffect(() => {
+    if (!focusCard) return;
+    gridRef.current?.querySelector<HTMLButtonElement>(`[data-id="${focusCard}"]`)?.focus();
+  }, [focusCard]);
 
   const selectClick = useCallback(
     (item: HistoryItemView, modifiers: { ctrl: boolean; shift: boolean }) => {

@@ -80,7 +80,9 @@ export function LibraryList(props: LibraryListProps) {
           const tabStop = item.id === props.activeId;
           const stem =
             item.type === 'flow' ? item.fileName : item.fileName.replace(/[.][^.]+$/, '');
-          const kind = TYPE_LABEL[item.type];
+          const kind = item.projectFile
+            ? `${TYPE_LABEL[item.type]} project`
+            : TYPE_LABEL[item.type];
           const openMenu = (event: MouseEvent<HTMLElement>): void => {
             event.preventDefault();
             const rect = event.currentTarget.getBoundingClientRect();
@@ -154,7 +156,12 @@ export function LibraryList(props: LibraryListProps) {
                   </span>
                 </span>
                 <span className={cn(COL.type, 'text-fg-muted')}>
-                  <TypeIcon type={item.type} className="size-3.5 shrink-0" aria-hidden="true" />
+                  <TypeIcon
+                    type={item.type}
+                    project={item.projectFile}
+                    className="size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
                   {kind}
                 </span>
                 <span className={cn(COL.size, 'text-fg-muted')}>{formatBytes(item.sizeBytes)}</span>

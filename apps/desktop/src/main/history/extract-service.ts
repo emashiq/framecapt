@@ -32,6 +32,12 @@ export interface ExtractDeps {
   extract?: typeof extractFromFcap;
 }
 
+/** How an extract ended: the new history item (null when it failed, with the reason). */
+export interface ExtractOutcome {
+  itemId: string | null;
+  error?: string;
+}
+
 /** A free `<name> - Screen 1.mp4` next to the recording (no dialog). */
 async function freeExtractPath(
   fcap: string,
@@ -55,9 +61,43 @@ async function freeExtractPath(
  * path), and the `.fcap` is only read. Progress and cancel use the export events and channel.
  */
 export class ExtractService {
-  constructor(private readonly deps: ExtractDeps) {}
+  /** Callers waiting for a job to end (`startAndWait`), by job id. */
+  private readonly waiters = new Map<string, (result: ExtractOutcome) => void>();
+  /** The deps' events, also telling whoever waits for the job that just ended. */
+  private readonly emit: ExtractDeps['emit'];
 
-  async start(request: ExtractFcapRequest): Promise<{ jobId: string }> {
+  constructor(private readonly deps: ExtractDeps) {
+    this.emit = {
+      progress: (event) => deps.emit.progress(event),
+      done: (event) => {
+        deps.emit.done(event);
+        this.settle(event.jobId, { itemId: event.itemId });
+      },
+      failed: (event) => {
+        deps.emit.failed(event);
+        this.settle(event.jobId, { itemId: null, error: event.message });
+      },
+    };
+  }
+
+  private settle(jobId: string, outcome: ExtractOutcome): void {
+    const waiter = this.waiters.get(jobId);
+    this.waiters.delete(jobId);
+    waiter?.(outcome);
+  }
+
+  /** Starts an extract and resolves when it has ended (the events are sent as usual). */
+  async startAndWait(request: ExtractFcapRequest): Promise<ExtractOutcome> {
+    let settled!: (outcome: ExtractOutcome) => void;
+    const ended = new Promise<ExtractOutcome>((resolve) => (settled = resolve));
+    await this.start(request, settled);
+    return ended;
+  }
+
+  async start(
+    request: ExtractFcapRequest,
+    onSettled?: (outcome: ExtractOutcome) => void,
+  ): Promise<{ jobId: string }> {
     const { runner, history } = this.deps;
     if (runner.busy) throw new IpcError('BUSY', 'An export is already running.');
     const item = history.get(request.id);
@@ -104,6 +144,7 @@ export class ExtractService {
     );
 
     const jobId = randomUUID();
+    if (onSettled) this.waiters.set(jobId, onSettled);
     const historyId = item.id;
     const sourceKind =
       request.sourceIndex === null
@@ -112,11 +153,10 @@ export class ExtractService {
     runner.enqueue({
       id: jobId,
       label: 'extract-fcap',
-      onProgress: (percent) =>
-        this.deps.emit.progress({ jobId, historyId, percent, kind: 'extract' }),
+      onProgress: (percent) => this.emit.progress({ jobId, historyId, percent, kind: 'extract' }),
       run: async ({ signal, onProgress }) => {
         const failed = (message: string, code = 'FAILED', cancelled = false): void =>
-          this.deps.emit.failed({ jobId, historyId, code, message, cancelled, kind: 'extract' });
+          this.emit.failed({ jobId, historyId, code, message, cancelled, kind: 'extract' });
         try {
           const result = await (this.deps.extract ?? extractFromFcap)({
             tools: this.deps.tools,
@@ -157,7 +197,7 @@ export class ExtractService {
             log.error('The extract was saved but could not be added to history', error);
           }
           log.info(`Extracted ${suffix}: ${result.bytes} bytes, ${result.durationMs} ms`);
-          this.deps.emit.done({ jobId, historyId, path: result.path, itemId, kind: 'extract' });
+          this.emit.done({ jobId, historyId, path: result.path, itemId, kind: 'extract' });
         } catch (error) {
           log.error('Extract failed unexpectedly', error);
           failed('The video could not be extracted.');

@@ -5,7 +5,7 @@ import { TypeIcon } from '../../history/type-icon';
 import { cn } from '../../lib/cn';
 
 export interface ThumbProps {
-  item: Pick<HistoryItemView, 'id' | 'type' | 'hasThumb' | 'createdAt' | 'exists'>;
+  item: Pick<HistoryItemView, 'id' | 'type' | 'hasThumb' | 'createdAt' | 'exists' | 'projectFile'>;
   className?: string;
 }
 
@@ -39,7 +39,12 @@ export function Thumb({ item, className }: ThumbProps) {
           className={cn('size-full object-contain', !item.exists && 'opacity-45 grayscale')}
         />
       ) : (
-        <TypeIcon type={item.type} className="size-8 text-fg-subtle/60" aria-hidden="true" />
+        <TypeIcon
+          type={item.type}
+          project={item.projectFile}
+          className="size-8 text-fg-subtle/60"
+          aria-hidden="true"
+        />
       )}
     </div>
   );

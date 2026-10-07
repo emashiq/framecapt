@@ -33,6 +33,9 @@ export function registerVideoHandlers(service: VideoEditService): void {
     service.addImage(request.historyId, new Uint8Array(request.png)),
   );
   handle('video:pickAudio', { roles: ['main'] }, (request) => service.pickAudio(request.historyId));
+  handle('video:addRecordedAudio', { roles: ['main'] }, (request) =>
+    service.addRecordedAudio(request.historyId, new Uint8Array(request.bytes)),
+  );
   handle('video:export', { roles: ['main'] }, (request) =>
     service.export(
       request.historyId,

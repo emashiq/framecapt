@@ -3,8 +3,10 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   CheckSquare,
   Copy,
+  CopyPlus,
   Download,
   ExternalLink,
+  FileBox,
   FileX2,
   Film,
   FolderInput,
@@ -17,7 +19,13 @@ import {
 } from 'lucide-react';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { cn } from '../../lib/cn';
-import { canEditItem, editLabel, type ItemActions } from './actions';
+import {
+  canDuplicateItem,
+  canEditItem,
+  canSaveProjectFile,
+  editLabel,
+  type ItemActions,
+} from './actions';
 import { menuItemClass } from './HistoryCard';
 import { canSaveAs } from './SaveAs';
 import { selectionLabel } from './selection';
@@ -227,6 +235,24 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                   label="Save in another format…"
                   reason={missing ? MISSING : null}
                   onSelect={() => actions.saveAs(item)}
+                />
+              ) : null}
+              {canDuplicateItem(item) ? (
+                <Entry
+                  testId="ctx-duplicate"
+                  icon={<CopyPlus className={ICON} />}
+                  label="Duplicate"
+                  reason={missing ? MISSING : null}
+                  onSelect={() => actions.duplicate(item)}
+                />
+              ) : null}
+              {canSaveProjectFile(item) ? (
+                <Entry
+                  testId="ctx-save-project"
+                  icon={<FileBox className={ICON} />}
+                  label="Save as project file…"
+                  reason={missing ? MISSING : null}
+                  onSelect={() => actions.saveProjectFile(item)}
                 />
               ) : null}
               {item.type === 'recording' && item.format === 'webm' ? (

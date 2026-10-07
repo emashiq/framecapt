@@ -134,10 +134,19 @@ export function App() {
     if (homeActive) homeRef.current?.focus({ preventScroll: true });
   }, [homeActive, section]);
 
+  const recorderStatus = useRef(recorder.status);
+  useEffect(() => {
+    recorderStatus.current = recorder.status;
+  }, [recorder.status]);
+
   /** Shows a section in the pinned tab (and the pinned tab itself). */
   const navigate = useCallback(
     (next: SectionId, settings?: SettingsSectionId) => {
       dispatch({ type: 'activate', id: HOME_ID });
+      // Home is always Home: a finished recording's summary is dismissed (it is in the Library).
+      if (next === 'home' && recorderStatus.current === 'completed') {
+        void window.framecapt.invoke('recorder:reset');
+      }
       if (next === 'guides') {
         setView('library');
         setLibraryScope(GUIDES);
@@ -162,11 +171,18 @@ export function App() {
     });
   }, []);
 
-  /** An item of history: a screenshot, an editable recording or a guide opens as a tab. */
+  /**
+   * An item of history opens as a tab: a screenshot or editable recording in a viewer first (its
+   * Edit button turns the tab into the editor), a guide as it is.
+   */
   const openItem = useCallback(
     (item: HistoryItemView) => {
       if (item.exists && (canEditItem(item) || item.type === 'flow')) {
-        openInEditor({ kind: 'history', historyId: item.id });
+        openInEditor({
+          kind: 'history',
+          historyId: item.id,
+          ...(item.type !== 'flow' && { viewer: true }),
+        });
         return;
       }
       setHistoryFocus(item.id);
@@ -218,6 +234,34 @@ export function App() {
     if (!response.ok) notify.error(response.error);
     else if ('bytes' in response.data) openPicture(new Blob([response.data.bytes]));
   }, [openPicture]);
+
+  /** File > Open video: the Open dialog; the video opens in a new video editor tab. */
+  const openVideo = useCallback(async () => {
+    const response = await window.framecapt.invoke('editor:openVideo');
+    if (!response.ok) notify.error(response.error);
+  }, []);
+
+  /** File > Open project: main's dialog imports a .fcimage / .fcvideo into history; it opens as a tab. */
+  const openProject = useCallback(async () => {
+    const response = await window.framecapt.invoke('history:openProjectFile');
+    if (!response.ok) notify.error(response.error);
+    else if ('historyId' in response.data) {
+      openInEditor({ kind: 'history', historyId: response.data.historyId });
+    }
+  }, [openInEditor]);
+
+  /** "Edit as separate videos": every source of a multi-source recording opens as its own tab. */
+  const splitRecording = useCallback(
+    async (historyId: string) => {
+      const response = await window.framecapt.invoke('history:splitSources', { id: historyId });
+      if (!response.ok) {
+        notify.error(response.error);
+        return;
+      }
+      for (const id of response.data.ids) openInEditor({ kind: 'history', historyId: id });
+    },
+    [openInEditor],
+  );
 
   /**
    * Starts a screenshot or recording through Home's own handlers (its buttons, with the window
@@ -362,6 +406,8 @@ export function App() {
         showKeyboardHelp: () => setHelpOpen(true),
         editVideo: editLatestVideo,
         openImage: () => void openImage(),
+        openVideo: () => void openVideo(),
+        openProject: () => void openProject(),
         startSteps: () =>
           void window.framecapt.invoke('steps:start').then((result) => {
             if (!result.ok) notify.error(result.error);
@@ -372,7 +418,7 @@ export function App() {
         navigate('library');
       },
     }),
-    [startRequest, navigate, editLatestVideo, openImage],
+    [startRequest, navigate, editLatestVideo, openImage, openVideo, openProject],
   );
 
   const showRecording = view === 'home' && recorder.status === 'completed';
@@ -387,12 +433,14 @@ export function App() {
           result={recorder.result}
           onNewRecording={() => void window.framecapt.invoke('recorder:reset')}
           onOpenHistory={() => navigate('library')}
+          onSplitSources={splitRecording}
         />
       </Scroller>
     ) : view === 'home' ? (
       <Scroller key="home">
         <HomeView
           onOpenImage={() => void openImage()}
+          onOpenVideo={() => void openVideo()}
           onOpenItem={openItem}
           onOpenLibrary={() => navigate('library')}
           onOpenSettings={(next) => navigate('settings', next)}

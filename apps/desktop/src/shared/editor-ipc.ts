@@ -18,8 +18,15 @@ export const EditorOpenRequestSchema = z.union([
     sessionId: SessionId,
     imported: z.boolean().optional(),
   }),
-  /** A saved screenshot, recording or step guide of history. */
-  z.strictObject({ kind: z.literal('history'), historyId: HistoryIdSchema }),
+  /**
+   * A saved screenshot, recording or step guide of history. `viewer`: a screenshot or recording
+   * opens in a viewer first (Edit turns the same tab into the editor); absent: straight to the editor.
+   */
+  z.strictObject({
+    kind: z.literal('history'),
+    historyId: HistoryIdSchema,
+    viewer: z.boolean().optional(),
+  }),
   /** One step of a saved step guide. */
   z.strictObject({ kind: z.literal('step'), historyId: HistoryIdSchema, index: StepIndex }),
 ]);
@@ -34,8 +41,19 @@ export const EditorOpenTabEventSchema = z.union([
     /** Set when "save after capture" already saved the capture: nothing is unsaved yet. */
     savedPath: z.string().optional(),
   }),
-  z.strictObject({ kind: z.literal('shot'), historyId: HistoryIdSchema, title: z.string() }),
-  z.strictObject({ kind: z.literal('video'), historyId: HistoryIdSchema, title: z.string() }),
+  z.strictObject({
+    kind: z.literal('shot'),
+    historyId: HistoryIdSchema,
+    title: z.string(),
+    /** Show the picture first; Edit makes the same tab the editor. */
+    viewer: z.boolean().optional(),
+  }),
+  z.strictObject({
+    kind: z.literal('video'),
+    historyId: HistoryIdSchema,
+    title: z.string(),
+    viewer: z.boolean().optional(),
+  }),
   z.strictObject({ kind: z.literal('flow'), historyId: HistoryIdSchema, title: z.string() }),
   z.strictObject({
     kind: z.literal('step'),
@@ -52,3 +70,16 @@ export type EditorState = z.infer<typeof EditorStateSchema>;
 
 /** The user's answer to `editor:confirmClose`: discard (close now) or keep editing. */
 export const EditorResolveCloseRequestSchema = z.strictObject({ discard: z.boolean() });
+
+/** `editor:openVideo`: the Open dialog (main) for a video file; it opens in the video editor. */
+export const OpenVideoResponseSchema = z.union([
+  z.strictObject({ cancelled: z.literal(true) }),
+  z.strictObject({ opened: z.literal(true) }),
+]);
+
+/** `history:splitSources`: every source of a multi-source recording as its own video. */
+export const SplitSourcesRequestSchema = z.strictObject({ id: HistoryIdSchema });
+export const SplitSourcesResponseSchema = z.strictObject({
+  /** The history items of the sources, in the recording's order. */
+  ids: z.array(HistoryIdSchema),
+});

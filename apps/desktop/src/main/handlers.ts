@@ -6,7 +6,10 @@ import { AutoCopy } from './clipboard/auto-copy';
 import { FinalizeService } from './history/finalize-service';
 import { ExportService } from './history/export-service';
 import { ExtractService } from './history/extract-service';
+import { OpenVideoService, registerOpenVideoHandler } from './history/open-video';
+import { registerSplitHandler, SplitService, splitAndOpen } from './history/split-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
+import { ProjectFileService, registerProjectFileHandlers } from './history/project-files';
 import { rescanLibrary } from './history/rescan';
 import { registerLibraryHandlers } from './library/handlers';
 import { LibraryService } from './library/service';
@@ -285,6 +288,22 @@ export function registerHandlers(
       failed: (event) => emitToMain('export:failed', event),
     },
   });
+  const splitter = new SplitService({
+    history,
+    extracts,
+    capability: () => mp4Capability,
+  });
+  registerSplitHandler(splitter);
+  registerOpenVideoHandler(
+    new OpenVideoService({
+      history,
+      tools,
+      runner,
+      recordingsDir: outputDir,
+      encoders: () => encoders,
+      openTab: openEditorTab,
+    }),
+  );
   // The clipboard rule: a confirmation goes to the recording toolbar while recording, else to the
   // main window, else (it is hidden in the tray) to the OS when notifications are on.
   const autoCopy = new AutoCopy({
@@ -398,6 +417,8 @@ export function registerHandlers(
     if (recording.autoExportMp4 && recording.saveFormat !== 'mp4')
       await exports.startAuto(historyId);
     await finalize.startAfterSave(historyId);
+    // Several screens in one file: each screen becomes a video of its own, opened for editing.
+    if (item?.format === 'fcap') void splitAndOpen(splitter, history, historyId, openEditorTab);
   }
   const saveDirect = createSaveCaptureDirect(captureSaving);
   const recorder: RecorderController = new RecorderController({
@@ -474,7 +495,11 @@ export function registerHandlers(
     },
     isBlocked: () => recorder.busy || flow.state.active,
     isOverPill: (point) => pill.isOver(point),
-    ui: { open: () => pill.open(), close: () => pill.close() },
+    ui: {
+      open: () => pill.open(),
+      close: () => pill.close(),
+      follow: (displayId) => pill.follow(displayId),
+    },
     log,
   });
   const pill = createStepsPill(() => {
@@ -529,6 +554,16 @@ export function registerHandlers(
     rescan,
     finalize,
     () => encoders,
+  );
+  registerProjectFileHandlers(
+    history,
+    new ProjectFileService({
+      history,
+      projects,
+      videoProjects,
+      screenshotsDir: () => library.saveDir('screenshots'),
+      appVersion: app.getVersion(),
+    }),
   );
   registerRecorderHandlers(recorder, sessions, media, (width) => pill.resize(width));
   registerRecoveryHandlers(recovery, recorder, media);

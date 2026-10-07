@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
   AppWindow,
+  FileVideo,
   Fullscreen,
   ImagePlus,
   Keyboard,
@@ -229,6 +230,8 @@ function Banner({
 export interface HomeViewProps {
   /** Opens a picture file in the editor (File > Open image). */
   onOpenImage: () => void;
+  /** Opens a video file in the video editor (File > Open video). */
+  onOpenVideo: () => void;
   /** Opens a capture: a tab for what the editors take, the Library's details for the rest. */
   onOpenItem: (item: HistoryItemView) => void;
   /** The Library section of the pinned tab. */
@@ -237,11 +240,12 @@ export interface HomeViewProps {
 }
 
 /**
- * The Home section of the pinned tab: the capture dashboard. Screenshot and Record tiles, Steps and
- * Open image, the recording options and the latest captures.
+ * The Home section of the pinned tab: the capture dashboard. Screenshot and Record tiles, Steps,
+ * Open image and Open video, the recording options and the latest captures.
  */
 export function HomeView({
   onOpenImage,
+  onOpenVideo,
   onOpenItem,
   onOpenLibrary,
   onOpenSettings,
@@ -580,6 +584,13 @@ export function HomeView({
             }
             keyShortcuts={openImageShortcut}
             onClick={onOpenImage}
+          />
+          <Tile
+            label="Open video"
+            icon={FileVideo}
+            testId="open-video"
+            note="MP4, WebM, MOV, MKV"
+            onClick={onOpenVideo}
           />
         </Group>
       </div>

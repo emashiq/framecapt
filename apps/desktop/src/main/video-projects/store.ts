@@ -212,6 +212,25 @@ export class VideoProjectStore {
     return removed;
   }
 
+  /**
+   * Copies a project and its assets to another history id (the copy's `sourceId` is rewritten).
+   * False when `fromId` has no usable project.
+   */
+  async copy(fromId: string, toId: string): Promise<boolean> {
+    const from = this.dirFor(fromId);
+    const to = this.dirFor(toId);
+    if (!from || !to) return false;
+    const current = await this.read(fromId);
+    if (!current.ok) return false;
+    await fs.promises
+      .cp(path.join(from, VIDEO_ASSET_DIR), path.join(to, VIDEO_ASSET_DIR), {
+        recursive: true,
+      })
+      .catch(() => undefined);
+    await this.write(toId, { ...current.project, sourceId: toId });
+    return true;
+  }
+
   /** Deletes one project folder (idempotent). Only plain ids inside the root are ever touched. */
   async remove(id: string): Promise<void> {
     const dir = this.dirFor(id);

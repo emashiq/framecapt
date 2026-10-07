@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
   Copy,
+  CopyPlus,
   ExternalLink,
+  FileBox,
   FileX2,
   FolderOpen,
   Link2,
@@ -19,7 +21,13 @@ import { fileUrl, newNonce, thumbUrl } from '../../history/media-url';
 import { cn } from '../../lib/cn';
 import { revealDuration } from '../../lib/reveal-duration';
 import { formatExact, formatRelative } from '../../lib/time';
-import { canEditItem, editLabel, type ItemActions } from './actions';
+import {
+  canDuplicateItem,
+  canEditItem,
+  canSaveProjectFile,
+  editLabel,
+  type ItemActions,
+} from './actions';
 import { dimensionsText, TypeBadge } from './HistoryCard';
 import { FcapExtract } from './FcapExtract';
 import { FcapPlayer } from './FcapPlayer';
@@ -329,6 +337,26 @@ export function HistoryDetails({
                     onClick={() => actions.saveCopy(item)}
                   >
                     Save a copy as…
+                  </Button>
+                ) : null}
+                {canDuplicateItem(item) ? (
+                  <Button
+                    variant="secondary"
+                    data-testid="details-duplicate"
+                    icon={<CopyPlus className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.duplicate(item)}
+                  >
+                    Duplicate
+                  </Button>
+                ) : null}
+                {canSaveProjectFile(item) ? (
+                  <Button
+                    variant="secondary"
+                    data-testid="details-save-project"
+                    icon={<FileBox className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.saveProjectFile(item)}
+                  >
+                    Save as project file…
                   </Button>
                 ) : null}
                 {item.editable && onAskDeleteProject ? (

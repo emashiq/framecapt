@@ -32,6 +32,8 @@ export interface TabsState<D = unknown> {
 export type TabsAction<D = unknown> =
   | { type: 'open'; tab: Omit<Tab<D>, 'dirty'> }
   | { type: 'activate'; id: string }
+  /** The tab becomes another thing in place (a viewer turns into the editor): same id and position. */
+  | { type: 'replace'; id: string; key: string; kind: TabKind; data: D }
   | { type: 'close'; id: string }
   | { type: 'move'; id: string; toIndex: number }
   | { type: 'dirty'; id: string; dirty: boolean }
@@ -74,6 +76,15 @@ export function tabsReducer<D>(state: TabsState<D>, action: TabsAction<D>): Tabs
       return state.tabs.some((tab) => tab.id === action.id) && state.activeId !== action.id
         ? { ...state, activeId: action.id }
         : state;
+    case 'replace': {
+      // Another tab already shows the new thing: that one is the tab for it.
+      if (state.tabs.some((tab) => tab.key === action.key && tab.id !== action.id)) return state;
+      return update(state, action.id, (tab) =>
+        tab.pinned
+          ? tab
+          : { ...tab, key: action.key, kind: action.kind, data: action.data, dirty: false },
+      );
+    }
     case 'close': {
       const index = state.tabs.findIndex((tab) => tab.id === action.id);
       if (index < 0 || state.tabs[index]?.pinned) return state;

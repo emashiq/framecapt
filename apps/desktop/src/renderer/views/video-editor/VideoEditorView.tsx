@@ -11,9 +11,12 @@ import {
   AlertTriangle,
   Check,
   Crop,
+  FileBox,
+  Mic,
   Pause,
   Play,
   Redo2,
+  Square,
   StepBack,
   StepForward,
   Undo2,
@@ -39,6 +42,7 @@ import { Kbd } from '../../components/ui/Kbd';
 import { Loader } from '../../components/Loader';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { announce, notify } from '../../lib/notify';
+import { getSettings } from '../../settings/store';
 import { cn } from '../../lib/cn';
 import {
   cancelVideoExport,
@@ -52,6 +56,7 @@ import { Player } from './player';
 import { clipSpecs } from './clip-spec';
 import { PreviewStage, type DrawTool } from './PreviewStage';
 import { rasterizeText } from './text-draw';
+import { startVoiceRecorder, type VoiceRecorder } from './voice-over';
 import { ASPECTS, type AspectId } from './rect-drag';
 import { Timeline, type TimeRange, type TimelineSelection } from './Timeline';
 import { formatTimecode } from './timeline-math';
@@ -111,6 +116,34 @@ function TimeReadout({
       <span className="text-fg-subtle">
         Result {formatTimecode(output)} / {formatTimecode(totalMs)}
       </span>
+    </div>
+  );
+}
+
+/** The voice-over recording indicator: a pulsing dot, the time, and the Stop button. */
+function VoiceIndicator({ startedAt, onStop }: { startedAt: number; onStop: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <div
+      role="status"
+      data-testid="voice-recording"
+      className="mr-1 flex items-center gap-2 rounded-lg bg-danger-soft py-0.5 pr-0.5 pl-2.5 text-[13px] text-danger"
+    >
+      <span className="size-2 animate-pulse rounded-full bg-danger-solid" aria-hidden="true" />
+      <span className="tabular-nums">Recording {formatTimecode(now - startedAt)}</span>
+      <Button
+        size="sm"
+        variant="danger"
+        data-testid="voice-stop"
+        icon={<Square className="size-3.5 fill-current" aria-hidden="true" />}
+        onClick={onStop}
+      >
+        Stop (Esc)
+      </Button>
     </div>
   );
 }
@@ -314,6 +347,8 @@ export function VideoEditorView({
     [addPicture],
   );
 
+  const playing = useSyncExternalStore(player.subscribe, () => player.getSnapshot().playing);
+
   /** Add audio: a file dialog in main, then a clip at the playhead (it can be moved and trimmed). */
   const addAudio = useCallback(async () => {
     const response = await window.framecapt.invoke('video:pickAudio', { historyId });
@@ -338,11 +373,111 @@ export function VideoEditorView({
     announce('Audio clip added');
   }, [commit, historyId, player]);
 
+  /** Voice-over: records the microphone while the video plays from the playhead. */
+  const [voice, setVoice] = useState<{ startedAt: number } | null>(null);
+  const voiceRef = useRef<{ recorder: VoiceRecorder; at: number } | null>(null);
+  const voiceStarting = useRef(false);
+  const voiceSawPlaying = useRef(false);
+
+  const restorePreviewAudio = useCallback(() => {
+    const audio = projectRef.current?.audio;
+    if (audio) player.applyAudio(audio.volume, audio.muted);
+  }, [player]);
+
+  const startVoice = useCallback(async () => {
+    if (!projectRef.current || voiceRef.current || voiceStarting.current) return;
+    voiceStarting.current = true;
+    try {
+      const recorder = await startVoiceRecorder(getSettings().recording.micDeviceId);
+      const current = projectRef.current;
+      if (!current) {
+        void recorder.stop();
+        return;
+      }
+      // The preview is muted so the speakers do not leak into the microphone.
+      player.applyAudio(0, true);
+      player.play();
+      const at = Math.min(
+        current.source.durationMs - MIN_ITEM_MS,
+        Math.max(current.trim.startMs, player.getSnapshot().timeMs),
+      );
+      voiceRef.current = { recorder, at };
+      voiceSawPlaying.current = false;
+      setVoice({ startedAt: Date.now() });
+      announce('Recording voice-over');
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : 'The microphone could not be opened.');
+    } finally {
+      voiceStarting.current = false;
+    }
+  }, [player]);
+
+  const stopVoice = useCallback(async () => {
+    const active = voiceRef.current;
+    if (!active) return;
+    voiceRef.current = null;
+    setVoice(null);
+    player.pause();
+    restorePreviewAudio();
+    const bytes = await active.recorder.stop();
+    if (!bytes) {
+      notify.error('Nothing was recorded.');
+      return;
+    }
+    const response = await window.framecapt.invoke('video:addRecordedAudio', { historyId, bytes });
+    if (!response.ok) {
+      notify.error(response.error);
+      return;
+    }
+    const current = projectRef.current;
+    if (!current) return;
+    const count = current.items.filter(
+      (item) => item.kind === 'audio' && /^Voice-over d+$/.test(item.name),
+    ).length;
+    const id = newId();
+    commit({
+      type: 'addItem',
+      item: newAudio(
+        id,
+        {
+          assetId: response.data.assetId,
+          ext: response.data.ext,
+          name: `Voice-over ${count + 1}`,
+          clipMs: response.data.durationMs,
+        },
+        active.at,
+      ),
+    });
+    setSelection({ kind: 'item', id });
+    announce('Voice-over added');
+  }, [commit, historyId, player, restorePreviewAudio]);
+
+  // Pausing, reaching the end or hiding the tab ends the take.
+  useEffect(() => {
+    if (!voice) return;
+    if (playing) voiceSawPlaying.current = true;
+    else if (voiceSawPlaying.current) void stopVoice();
+  }, [voice, playing, stopVoice]);
+
+  // Closing the editor mid-take throws the take away and releases the microphone.
+  useEffect(
+    () => () => {
+      voiceRef.current?.recorder.cancel();
+      voiceRef.current = null;
+    },
+    [],
+  );
+
   // Keyboard.
   useEffect(() => {
     if (blocked || historyPicker || !loaded) return;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented || event.isComposing) return;
+      if (event.key === 'Escape' && voiceRef.current) {
+        event.preventDefault();
+        void stopVoice();
+        return;
+      }
       const typing = ownsKeys(event.target);
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
@@ -409,6 +544,7 @@ export function VideoEditorView({
     cropMode,
     removeSelection,
     cutRange,
+    stopVoice,
   ]);
 
   // A pointer click on a button must not leave it holding the keyboard (Space would press it again).
@@ -420,8 +556,6 @@ export function VideoEditorView({
         button.blur();
     }
   };
-
-  const playing = useSyncExternalStore(player.subscribe, () => player.getSnapshot().playing);
 
   if (api.load.status !== 'ready' || !project) {
     return (
@@ -489,7 +623,25 @@ export function VideoEditorView({
           ) : null}
           {SAVE_TEXT[api.save]}
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<FileBox className="size-4" aria-hidden="true" />}
+            data-testid="video-save-project"
+            title="Save the edits as a .fcvideo project file you can open again"
+            onClick={() =>
+              void api.flush().then(async () => {
+                const response = await window.framecapt.invoke('history:saveProjectFile', {
+                  id: historyId,
+                });
+                if (!response.ok) notify.error(response.error);
+                else if ('path' in response.data) notify.success('Project file saved');
+              })
+            }
+          >
+            Save project
+          </Button>
           <ExportControls
             project={project}
             state={exportState}
@@ -561,6 +713,9 @@ export function VideoEditorView({
               aria-label="Editing tools"
               className="ml-auto flex items-center gap-1"
             >
+              {voice ? (
+                <VoiceIndicator startedAt={voice.startedAt} onStop={() => void stopVoice()} />
+              ) : null}
               {toolDefs.map(({ kind, label, hint, icon: Icon }) => (
                 <Tooltip key={kind} content={hint} side="top">
                   <Button
@@ -626,6 +781,19 @@ export function VideoEditorView({
                   onClick={() => void addAudio()}
                 >
                   <span className="hidden 2xl:inline">Audio</span>
+                </Button>
+              </Tooltip>
+              <Tooltip content="Record your voice from the playhead as an audio clip" side="top">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="tool-voice-over"
+                  aria-label="Record voice-over"
+                  disabled={voice !== null}
+                  icon={<Mic className="size-4" aria-hidden="true" />}
+                  onClick={() => void startVoice()}
+                >
+                  <span className="hidden 2xl:inline">Voice-over</span>
                 </Button>
               </Tooltip>
               <Tooltip content="Crop the picture" side="top">

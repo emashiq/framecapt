@@ -78,6 +78,18 @@ export const VideoPickAudioResponseSchema = z.union([
     durationMs: z.number().int().min(1).max(MAX_CLIP_MS),
   }),
 ]);
+
+/** A voice-over recorded in the editor (MediaRecorder WebM/Opus bytes), added as an audio asset. */
+export const MAX_RECORDED_AUDIO_BYTES = 100 * 1024 * 1024;
+export const VideoAddRecordedAudioRequestSchema = z.strictObject({
+  historyId: HistoryIdSchema,
+  bytes: bytes(MAX_RECORDED_AUDIO_BYTES),
+});
+export const VideoAddRecordedAudioResponseSchema = z.strictObject({
+  assetId: AssetIdSchema,
+  ext: z.enum(AUDIO_EXTENSIONS),
+  durationMs: z.number().int().min(1).max(MAX_CLIP_MS),
+});
 export const VideoExportResponseSchema = z.strictObject({ jobId: z.string().min(1).max(64) });
 
 export const VideoExportProgressEventSchema = z.object({
