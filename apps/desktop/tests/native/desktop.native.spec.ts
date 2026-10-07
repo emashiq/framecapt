@@ -22,6 +22,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from '../e2e/app-exit';
+import { editorPage, expectEditorClosed } from '../e2e/editor-window';
 import { writeEvidenceJson, evidenceDirFor } from './evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -229,14 +230,19 @@ test('(b) keyboard-only region capture on the real display (arrow keys, Enter) o
   await overlay.keyboard.press('Alt+ArrowLeft');
   const label = await overlay.getByTestId('size-label').textContent();
   await pressClosing(overlay, 'Enter');
-  await expect(page.getByTestId('editor-view')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId('editor-canvas')).toBeFocused();
-  const dimensions = await page.getByTestId('editor-dimensions').textContent();
+  await expect((await editorPage(app)).getByTestId('editor-view')).toBeVisible({ timeout: 20_000 });
+  await expect((await editorPage(app)).getByTestId('editor-canvas')).toBeFocused();
+  const dimensions = await (await editorPage(app)).getByTestId('editor-dimensions').textContent();
   expect(dimensions).toBe(label);
   record('keyboardRegionCapture', { selectionLabel: label, editorDimensions: dimensions });
   // Discard it: nothing is saved.
-  await page.getByTestId('editor-discard').click();
-  await page.getByTestId('confirm-yes').click();
+  const editor = await editorPage(app);
+  await editor.getByTestId('editor-discard').click();
+  await editor
+    .getByTestId('confirm-yes')
+    .click()
+    .catch(() => undefined); // the window closes under the click
+  await expectEditorClosed(app);
 });
 
 test('(c) a hotkey another process holds (RegisterHotKey) is reported as a conflict', async () => {

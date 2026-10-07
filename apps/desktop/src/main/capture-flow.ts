@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { nativeImage, screen } from 'electron';
+import type { EditorOpenTabEvent } from '../shared/editor-ipc';
 import { overlayRectToFramePixels, type DisplayGeom } from '../shared/geometry';
 import type { Rect } from '../shared/rect';
 import { stitchBitmaps, StitchError } from '../shared/stitch';
@@ -50,6 +51,8 @@ export interface CaptureFlowDeps {
     height: number;
     png: Buffer;
   }) => Promise<{ savedPath?: string }>;
+  /** Opens the finished capture as a tab of the Editor window (after the main window is restored). */
+  openEditor?: (event: EditorOpenTabEvent) => void;
 }
 
 class FlowFailure extends Error {
@@ -488,15 +491,13 @@ export class CaptureFlow {
     log.info(`Screenshot captured: ${shot.kind} ${shot.width}x${shot.height}`);
     const after = await this.deps.afterCapture?.(shot).catch(() => ({}) as { savedPath?: string });
     if (!this.state.isCurrent(flowId)) return;
-    this.finish(flowId, { outcome: 'completed' }, () => {
-      const main = getMainWindow();
-      if (main) {
-        sendEvent(main.webContents, 'shot:ready', {
-          session: this.deps.store.meta(session),
-          ...(after?.savedPath && { savedPath: after.savedPath }),
-        });
-      }
-    });
+    this.finish(flowId, { outcome: 'completed' }, () =>
+      this.deps.openEditor?.({
+        kind: 'session',
+        sessionId: session.id,
+        ...(after?.savedPath && { savedPath: after.savedPath }),
+      }),
+    );
   }
 
   /** During a recording: no session, no editor; the file goes straight to the screenshots folder. */

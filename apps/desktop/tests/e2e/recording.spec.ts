@@ -19,6 +19,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { hasEditorPage } from './editor-window';
 import { hasCues, probeFile } from './media-fixtures';
 import { evidenceDirFor } from '../native/evidence';
 
@@ -392,7 +393,7 @@ test.describe('one display', () => {
     // The recording carries on; the main window never came back and no editor was opened.
     expect((await state()).status).toBe('recording');
     expect(await mainIsMinimized()).toBe(true);
-    await expect(page.getByTestId('editor-view')).toHaveCount(0);
+    expect(hasEditorPage(app)).toBe(false);
 
     // A shortcut-style screen screenshot behaves the same (a window one is refused).
     await app.evaluate(() => {

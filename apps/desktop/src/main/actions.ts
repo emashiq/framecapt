@@ -27,8 +27,6 @@ export interface ActionDeps {
     captureStep: () => Promise<void>;
   };
   startScreenshot: (request: StartScreenshotRequest) => Promise<void>;
-  /** The editor holds a screenshot (and whether leaving it would lose work). */
-  editor: () => { open: boolean; dirty: boolean };
   /** Shows the main window and tells its renderer to start something (it asks first when needed). */
   askMain: (request: StartRequestEvent) => void;
   toast: (event: ToastEvent) => void;
@@ -64,8 +62,8 @@ function errorToast(error: unknown): ToastEvent {
  * things. Rules: a screenshot while anything runs is refused (BUSY, said in the UI), except while a
  * recording is live: then screen and region screenshots are saved directly and a window one is
  * refused (its picker needs the main window, which must stay out of the video); a record
- * shortcut while recording stops it; pause toggles; window targets and an open editor go through
- * the main window, which needs a picker or the "discard this screenshot?" question. While a step
+ * shortcut while recording stops it; pause toggles; window targets go through the main window,
+ * which needs its picker (the editor is a window of its own and never stands in the way). While a step
  * guide is captured nothing else starts (the pointer and the screen belong to the guide); its own
  * shortcut finishes it.
  */
@@ -86,7 +84,7 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
             "Window screenshots can't be taken while recording. Use the camera button on the recording toolbar instead.",
         });
       }
-    } else if (request.target === 'window' || deps.editor().dirty) {
+    } else if (request.target === 'window') {
       return deps.askMain({ kind: 'screenshot', ...request });
     }
     void deps.startScreenshot(request).catch((error: unknown) => deps.toast(errorToast(error)));
@@ -104,7 +102,7 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
     if (status === 'stopping' || status === 'processing' || deps.screenshotBusy()) {
       return busyToast();
     }
-    if (target === 'window' || deps.editor().open) {
+    if (target === 'window') {
       return deps.askMain({ kind: 'record', target });
     }
     void deps.recorder

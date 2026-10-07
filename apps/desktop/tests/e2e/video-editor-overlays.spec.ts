@@ -17,6 +17,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage } from './editor-window';
 import { makeWebm, newId, seedHistory } from './history-fixtures';
 import { FFMPEG, probeFile } from './media-fixtures';
 
@@ -27,6 +28,8 @@ let dir: string;
 let clip: string;
 let tone: string;
 let app: ElectronApplication;
+/** The main window; `page` is the Editor window once the recording is opened. */
+let main: Page;
 let page: Page;
 
 function ffmpeg(args: string[]): { status: number | null; stderr: string; stdout: Buffer } {
@@ -104,9 +107,9 @@ test.beforeAll(async () => {
       FRAMECAPT_E2E_FAKE_SHORTCUTS: '1',
     },
   });
-  page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-  await expect(page.getByTestId('shot-region')).toBeVisible();
+  main = await app.firstWindow();
+  await main.waitForLoadState('domcontentloaded');
+  await expect(main.getByTestId('shot-region')).toBeVisible();
   // The Open dialog of main answers with the WAV; nothing native opens.
   await app.evaluate(({ dialog }, file) => {
     dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [file] });
@@ -119,12 +122,13 @@ test.afterAll(async () => {
 });
 
 test('a text box and an audio clip are added from the tool bar', async () => {
-  await page
+  await main
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('button', { name: 'History' })
     .click();
-  await page.getByTestId('history-item').first().locator('[data-card-main]').click();
-  await page.getByTestId('details-edit').click();
+  await main.getByTestId('history-item').first().locator('[data-card-main]').click();
+  await main.getByTestId('details-edit').click();
+  page = await editorPage(app);
   await expect(page.getByTestId('video-timeline')).toBeVisible();
   await expect
     .poll(() => page.getByTestId('video-preview').evaluate((v: HTMLVideoElement) => v.readyState))

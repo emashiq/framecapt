@@ -16,6 +16,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 
@@ -200,18 +201,21 @@ test('Open in editor on one step: Save changes writes over that step alone, the 
   const secondBefore = fs.readFileSync(second);
 
   await page.getByTestId('flow-step-edit').first().click();
-  await expect(page.getByTestId('editor-view')).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId('editor-save')).toHaveText(/Save changes/);
-  await page.getByTestId('tool-rect').click();
-  const box = await page.getByTestId('editor-canvas').boundingBox();
+  // The step opens as a tab of the Editor window.
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible({ timeout: 20_000 });
+  await expect(editor.getByTestId('editor-save')).toHaveText(/Save changes/);
+  await expect(editor.getByTestId('tab-title')).toContainText('(step 1)');
+  await editor.getByTestId('tool-rect').click();
+  const box = await editor.getByTestId('editor-canvas').boundingBox();
   if (!box) throw new Error('the editor canvas has no box');
-  await page.mouse.move(box.x + 80, box.y + 80);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 260, box.y + 200, { steps: 6 });
-  await page.mouse.up();
-  await page.getByTestId('editor-save').click();
-  await page.getByTestId('confirm-yes').click();
-  await expect(page.getByText(/Changes saved/).first()).toBeVisible();
+  await editor.mouse.move(box.x + 80, box.y + 80);
+  await editor.mouse.down();
+  await editor.mouse.move(box.x + 260, box.y + 200, { steps: 6 });
+  await editor.mouse.up();
+  await editor.getByTestId('editor-save').click();
+  await editor.getByTestId('confirm-yes').click();
+  await expect(editor.getByText(/Changes saved/).first()).toBeVisible();
   await expect.poll(() => fs.readFileSync(first).equals(firstBefore)).toBe(false);
   expect(fs.readFileSync(second).equals(secondBefore)).toBe(true);
   expect(readFlow(folder).steps.map((s) => s.file)).toEqual(['step-01.png', 'step-02.png']);
@@ -222,8 +226,8 @@ test('Open in editor on one step: Save changes writes over that step alone, the 
   ]);
 
   // Back out of the editor: History still has the one guide and nothing else.
-  await page.getByTestId('editor-done').click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
+  await editor.getByTestId('editor-done').click();
+  await expectEditorClosed(app);
   const listed = await page.evaluate(() => window.framecapt.invoke('history:list', {}));
   if (!listed.ok) throw new Error('history:list failed');
   expect(listed.data.items.map((item) => item.type)).toEqual(['flow']);

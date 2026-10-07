@@ -149,8 +149,12 @@ async function migrateLegacyRecordOptions(): Promise<void> {
   }
 }
 
-/** Loads the settings and follows main's changes. Call once from the app root; returns the cleanup. */
-export function startSettingsSync(): () => void {
+/**
+ * Loads the settings and follows main's changes. Call once from the window root; returns the
+ * cleanup. Only the main window (`primary`) migrates old browser-storage options and reports a
+ * damaged settings file; the Editor window just follows.
+ */
+export function startSettingsSync(primary = true): () => void {
   let live = true;
   const offs = [
     window.framecapt.on('settings:changed', (next) => setState(next)),
@@ -163,7 +167,7 @@ export function startSettingsSync(): () => void {
     if (!live) return;
     if (!response.ok) return failed(response.error);
     setState(response.data);
-    await migrateLegacyRecordOptions();
+    if (primary) await migrateLegacyRecordOptions();
   });
   void window.framecapt.invoke('shortcuts:status').then((response) => {
     if (live && response.ok) {
@@ -171,13 +175,15 @@ export function startSettingsSync(): () => void {
       emit();
     }
   });
-  void window.framecapt.invoke('settings:consumeNotice').then((response) => {
-    if (live && response.ok && response.data.reset) {
-      toast('Settings were reset because the file was damaged. Your captures were not touched.', {
-        duration: 10_000,
-      });
-    }
-  });
+  if (primary) {
+    void window.framecapt.invoke('settings:consumeNotice').then((response) => {
+      if (live && response.ok && response.data.reset) {
+        toast('Settings were reset because the file was damaged. Your captures were not touched.', {
+          duration: 10_000,
+        });
+      }
+    });
+  }
   return () => {
     live = false;
     offs.forEach((off) => off());

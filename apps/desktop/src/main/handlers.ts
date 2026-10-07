@@ -38,6 +38,7 @@ import { createStepsPill } from './flows/pill';
 import { FlowService } from './flows/service';
 import { guideThumbnail } from './flows/thumbnail';
 import { isMockCaptureEnabled } from './capture';
+import { openEditorTab, registerEditorHandlers } from './editor-host';
 import { registerShotHandlers } from './shot-handlers';
 import { ProjectStore } from './projects/store';
 import { VideoEditService, editedDestination } from './video-projects/service';
@@ -106,16 +107,17 @@ function withE2eRemuxDelay(tools: MediaTools): MediaTools {
 }
 
 function emitToMain<
-  E extends
-    | 'export:progress'
-    | 'export:done'
-    | 'export:failed'
-    | 'history:bulkProgress'
-    | 'video:exportProgress'
-    | 'video:exportDone'
-    | 'video:exportFailed',
+  E extends 'export:progress' | 'export:done' | 'export:failed' | 'history:bulkProgress',
 >(event: E, payload: IpcEventPayload<E>): void {
   for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
+}
+
+/** Video exports are started from the Editor window, which shows their progress and result. */
+function emitToEditor<E extends 'video:exportProgress' | 'video:exportDone' | 'video:exportFailed'>(
+  event: E,
+  payload: IpcEventPayload<E>,
+): void {
+  for (const contents of webContentsWithRoles(['editor'])) sendEvent(contents, event, payload);
 }
 
 /** A free `<name><suffix><extension>` next to the recording (no dialog). */
@@ -168,7 +170,7 @@ export function registerHandlers(
 
   handle(
     'app:reportError',
-    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] },
+    { roles: ['main', 'editor', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] },
     (report, ctx) => {
       const parts = [`Renderer error (${ctx.role}, ${report.source}): ${report.message}`];
       if (report.stack) parts.push(report.stack);
@@ -217,7 +219,7 @@ export function registerHandlers(
     trashItem: (file) => shell.trashItem(file),
     folderOf: (dir) => library.folderOfDir(dir),
     onChange: () => {
-      for (const contents of webContentsWithRoles(['main']))
+      for (const contents of webContentsWithRoles(['main', 'editor']))
         sendEvent(contents, 'history:changed', {});
     },
   });
@@ -329,12 +331,12 @@ export function registerHandlers(
       runner,
       destination: (source, extension) => editedDestination(source, extension, freeFileName),
       emit: {
-        progress: (event) => emitToMain('video:exportProgress', event),
+        progress: (event) => emitToEditor('video:exportProgress', event),
         done: (event) => {
-          emitToMain('video:exportDone', event);
+          emitToEditor('video:exportDone', event);
           void autoCopy.file(event.path);
         },
-        failed: (event) => emitToMain('video:exportFailed', event),
+        failed: (event) => emitToEditor('video:exportFailed', event),
       },
     }),
   );
@@ -446,6 +448,7 @@ export function registerHandlers(
     saveDirect,
     toast: (event) => recorder.toastToolbar(event),
     afterCapture: createAfterCapture(captureSaving),
+    openEditor: openEditorTab,
   });
   // The recording ended (or was stopped) while a screenshot selection was open: drop the selection.
   recorder.onChange(() => {
@@ -498,6 +501,7 @@ export function registerHandlers(
     { store: projects, appVersion: app.getVersion() },
     flows,
   );
+  registerEditorHandlers(store, history);
   const bulk = new BulkExportService({
     history,
     pickFolder: () => pickCopiesFolder(settings.dirs().screenshotsDir),

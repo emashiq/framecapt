@@ -78,14 +78,72 @@ describe('IPC: every channel is closed to roles the contract does not name', () 
     expect(defOf('recorder:screenshot').request.safeParse({ path: 'x.png' }).success).toBe(false);
   });
 
-  it('privileged actions belong to the main window alone (files, folders, settings, history, export)', () => {
-    const mainOnly = IPC_CHANNELS.filter((channel) =>
-      /^(history|library|export|settings|shortcuts|recovery|diagnostics|shot|editor|shell):/.test(
+  it('privileged actions belong to the main and Editor windows alone (files, folders, settings, history, export)', () => {
+    const privileged = IPC_CHANNELS.filter((channel) =>
+      /^(history|export|settings|library|shortcuts|recovery|diagnostics|shot|editor|video|shell):/.test(
         channel,
       ),
     );
-    expect(mainOnly.length).toBeGreaterThan(30);
-    for (const channel of mainOnly) expect(defOf(channel).roles, channel).toEqual(['main']);
+    expect(privileged.length).toBeGreaterThan(30);
+    for (const channel of privileged) {
+      for (const role of defOf(channel).roles) {
+        expect(['main', 'editor'], `${role} reaches ${channel}`).toContain(role);
+      }
+    }
+  });
+
+  it('the Editor window may call exactly these channels, and nothing that starts a capture or reaches a folder', () => {
+    const editor = IPC_CHANNELS.filter((channel) => defOf(channel).roles.includes('editor'));
+    expect(editor.sort()).toEqual([
+      'app:reportError',
+      'editor:historyImage',
+      'editor:pickImage',
+      'editor:ready',
+      'editor:resolveClose',
+      'editor:setState',
+      'export:cancel',
+      'flow:openStepInEditor',
+      'history:deleteFile',
+      'history:list',
+      'history:reveal',
+      'settings:get',
+      'settings:update',
+      'shell:showItemInFolder',
+      'shortcuts:status',
+      'shot:copy',
+      'shot:discard',
+      'shot:export',
+      'shot:get',
+      'shot:importImage',
+      'shot:openFromHistory',
+      'shot:openImage',
+      'shot:quickSave',
+      'shot:saveOver',
+      'video:addImage',
+      'video:export',
+      'video:open',
+      'video:pickAudio',
+      'video:save',
+    ]);
+    // Opening a tab, showing the window and reading its state are the main window's.
+    for (const channel of ['editor:open', 'editor:show', 'editor:getState'] as const) {
+      expect(defOf(channel).roles).toEqual(['main']);
+    }
+  });
+
+  it('only the Editor window reports its own state or answers its close question', () => {
+    for (const channel of ['editor:ready', 'editor:setState', 'editor:resolveClose'] as const) {
+      expect(defOf(channel).roles).toEqual(['editor']);
+    }
+    // A forged count or answer from another window is refused outright.
+    for (const role of ROLES.filter((candidate) => candidate !== 'editor')) {
+      const result = checkSender(
+        { role, frameUrl: goodUrl, isTopFrame: true },
+        defOf('editor:setState').roles,
+        origin,
+      );
+      expect(result?.error.code, role).toBe('FORBIDDEN');
+    }
     // The hidden recorder window may write chunks and nothing that reaches a path.
     for (const channel of ['session:appendChunk', 'session:finish'] as const) {
       expect(defOf(channel).roles).toEqual(['recorder']);
@@ -154,7 +212,9 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   'shot:copy': { sessionId: 'abc', bytes: bytes(8) },
   'shot:importImage': { png: bytes(8) },
   'editor:historyImage': { historyId: UUID },
-  'editor:setDirty': { dirty: true },
+  'editor:open': { kind: 'history', historyId: UUID },
+  'editor:setState': { tabs: 2, dirty: true },
+  'editor:resolveClose': { discard: true },
   'shell:showItemInFolder': { path: 'C:\\x.png' },
   'overlay:confirm': { displayId: '1', rect: { x: 0, y: 0, width: 10, height: 10 } },
   'worker:frameError': { requestId: 'r', code: 'c', message: 'm' },

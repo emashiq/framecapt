@@ -9,7 +9,6 @@ import {
 } from 'react';
 import {
   AlertTriangle,
-  ArrowLeft,
   Check,
   Crop,
   Pause,
@@ -60,10 +59,12 @@ import { useVideoProject, type SaveState } from './use-video-project';
 
 export interface VideoEditorViewProps {
   historyId: string;
-  /** True while a dialog is open over the editor: shortcuts are ignored. */
+  /** True while a dialog is open over the editor, or its tab is hidden: shortcuts are ignored. */
   blocked: boolean;
-  /** Back to History. */
-  onBack: () => void;
+  /** This tab is the one showing; a hidden tab pauses the video. */
+  active: boolean;
+  /** Closes this tab (the recording could not be opened). */
+  onClose: () => void;
   /** Hands the app a function that writes pending changes (it asks before the editor is left). */
   registerFlush: (flush: (() => Promise<boolean>) | null) => void;
 }
@@ -122,7 +123,8 @@ function TimeReadout({
 export function VideoEditorView({
   historyId,
   blocked,
-  onBack,
+  active,
+  onClose,
   registerFlush,
 }: VideoEditorViewProps) {
   const api = useVideoProject(historyId);
@@ -146,6 +148,11 @@ export function VideoEditorView({
       durationMs: project?.source.durationMs ?? 0,
     });
   }, [project, segments, player]);
+
+  // A hidden tab does not play on in the background.
+  useEffect(() => {
+    if (!active) player.pause();
+  }, [active, player]);
 
   useEffect(() => {
     registerFlush(api.flush);
@@ -424,7 +431,7 @@ export function VideoEditorView({
             icon={<AlertTriangle className="size-6" aria-hidden="true" />}
             title="This recording can't be edited"
             description={api.load.message}
-            action={<Button onClick={onBack}>Back to History</Button>}
+            action={<Button onClick={onClose}>Close tab</Button>}
           />
         ) : (
           <Loader size="md" label="Opening the recording" showLabel />
@@ -448,15 +455,6 @@ export function VideoEditorView({
       onClick={releaseFocus}
     >
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-3">
-        <Button
-          size="sm"
-          variant="ghost"
-          data-testid="video-back"
-          icon={<ArrowLeft className="size-4" aria-hidden="true" />}
-          onClick={onBack}
-        >
-          History
-        </Button>
         <h1 className="min-w-0 truncate text-sm font-semibold text-fg" data-testid="video-title">
           {api.fileName}
         </h1>

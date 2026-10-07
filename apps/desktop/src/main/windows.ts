@@ -1,9 +1,17 @@
+import fs from 'node:fs';
 import path from 'node:path';
-import { app, BrowserWindow, nativeTheme, webContents, type WebContents } from 'electron';
+import { app, BrowserWindow, nativeTheme, screen, webContents, type WebContents } from 'electron';
 import { APP_ENTRY_URL } from './app-asset';
 import type { AppOriginConfig } from './app-origin';
+import type { EditorState } from '../shared/editor-ipc';
 import type { Role } from '../shared/types';
 import { CloseGuard } from './close-guard';
+import {
+  EDITOR_DEFAULT_SIZE,
+  EDITOR_MIN_SIZE,
+  isReachable,
+  parseEditorBounds,
+} from './editor-bounds';
 import { sendEvent } from './events';
 import { hasTitleBarOverlay, titleBarOverlay, titleBarWindowOptions } from './title-bar';
 import { windowIconFor } from './window-icon';
@@ -14,6 +22,7 @@ const BACKGROUND = { light: '#f8fafc', dark: '#0b0f1a' } as const;
 /** One renderer entry serves every role; the role is picked by location hash (see main.tsx). */
 const ROLE_HASH: Record<Role, string> = {
   main: '/',
+  editor: '/editor',
   overlay: '/overlay',
   toolbar: '/toolbar',
   recorder: '/recorder',
@@ -24,13 +33,16 @@ const ROLE_HASH: Record<Role, string> = {
 const roles = new Map<number, Role>();
 let mainWindow: BrowserWindow | undefined;
 
-/** Asks before the main window closes over unsaved editor work (see close-guard.ts). */
-export const closeGuard = new CloseGuard();
-const mainClosedListeners: (() => void)[] = [];
+let editorWindow: BrowserWindow | undefined;
+/** Asks before the Editor window closes over unsaved tabs (one per window; see close-guard.ts). */
+let editorGuard = new CloseGuard();
+const editorClosedListeners: (() => void)[] = [];
+/** The main window was asked to close while the Editor window is open: it closes after that one. */
+let mainCloseWaitsForEditor = false;
 
-/** Runs when the main window is gone (the editor's session directory is deleted then). */
-export function onMainWindowClosed(listener: () => void): void {
-  mainClosedListeners.push(listener);
+/** Runs when the Editor window is gone (the screenshot sessions it held are deleted then). */
+export function onEditorWindowClosed(listener: () => void): void {
+  editorClosedListeners.push(listener);
 }
 
 /** Registers a webContents under a role; removed again when it is destroyed. */
@@ -78,13 +90,29 @@ export function isQuitting(): boolean {
   return quitting;
 }
 
-/** What the editor holds, reported by the renderer: used to decide how a shortcut must start. */
-let editorState = { open: false, dirty: false };
-export function setEditorState(state: { open: boolean; dirty: boolean }): void {
+/** What the Editor window holds, reported by its renderer (the main window's button shows it). */
+let editorState: EditorState = { tabs: 0, dirty: false };
+export function setEditorState(state: EditorState): void {
   editorState = state;
+  editorGuard.setDirty(state.dirty);
+  for (const contents of webContentsWithRoles(['main'])) {
+    sendEvent(contents, 'editor:stateChanged', state);
+  }
 }
-export function getEditorState(): { open: boolean; dirty: boolean } {
+export function getEditorState(): EditorState {
   return editorState;
+}
+
+/** The answer to the "close with unsaved tabs?" question. Returns whether the window closes now. */
+export function resolveEditorClose(discard: boolean): boolean {
+  if (!editorGuard.resolve(discard)) {
+    // "Keep editing" also withdraws a quit (or a main window close) that was waiting on this answer.
+    quitting = false;
+    mainCloseWaitsForEditor = false;
+    return false;
+  }
+  getEditorWindow()?.close();
+  return true;
 }
 
 /**
@@ -161,15 +189,7 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
     webPreferences: securePreferences(),
   });
 
-  // The window buttons follow the theme (the setting drives nativeTheme.themeSource).
-  if (hasTitleBarOverlay(process.platform)) {
-    const followTheme = (): void => {
-      if (!win.isDestroyed())
-        win.setTitleBarOverlay(titleBarOverlay(nativeTheme.shouldUseDarkColors));
-    };
-    nativeTheme.on('updated', followTheme);
-    win.once('closed', () => nativeTheme.off('updated', followTheme));
-  }
+  followThemeWithButtons(win);
 
   registerWebContents(win.webContents, 'main');
   mainWindow = win;
@@ -188,18 +208,19 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
       win.minimize();
       return;
     }
-    if (win.webContents.isDestroyed() || closeGuard.onCloseRequested() === 'close') return;
-    event.preventDefault();
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-    sendEvent(win.webContents, 'app:confirmClose', {});
+    // Closing the main window ends the app, so the Editor window goes first: it asks about
+    // unsaved tabs, and this window closes once it is gone.
+    const editor = getEditorWindow();
+    if (editor) {
+      event.preventDefault();
+      mainCloseWaitsForEditor = true;
+      // A quit closes every window itself (the Editor window asks on that attempt); a second
+      // attempt from here would count as the "close anyway" of the guard.
+      if (!quitting) editor.close();
+    }
   });
-  // A logoff or shutdown must never wait for the discard question.
-  win.on('session-end', () => closeGuard.allowClose());
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = undefined;
-    for (const listener of mainClosedListeners) listener();
     // The hidden worker would otherwise keep the app alive after the main window is closed.
     closeWorkerWindow();
   });
@@ -215,6 +236,128 @@ export function showMainWindow(): BrowserWindow {
   win.show();
   win.focus();
   return win;
+}
+
+/** The window buttons (the title bar overlay) follow the theme; the setting drives nativeTheme.themeSource. */
+function followThemeWithButtons(win: BrowserWindow): void {
+  if (!hasTitleBarOverlay(process.platform)) return;
+  const followTheme = (): void => {
+    if (!win.isDestroyed())
+      win.setTitleBarOverlay(titleBarOverlay(nativeTheme.shouldUseDarkColors));
+  };
+  nativeTheme.on('updated', followTheme);
+  win.once('closed', () => nativeTheme.off('updated', followTheme));
+}
+
+export function getEditorWindow(): BrowserWindow | undefined {
+  return editorWindow && !editorWindow.isDestroyed() ? editorWindow : undefined;
+}
+
+const editorBoundsFile = (): string => path.join(app.getPath('userData'), 'editor-window.json');
+
+/** The remembered bounds, only when the window would still be reachable on a connected display. */
+function readEditorBounds(): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+} | null {
+  try {
+    const bounds = parseEditorBounds(fs.readFileSync(editorBoundsFile(), 'utf8'));
+    const areas = screen.getAllDisplays().map((display) => display.workArea);
+    return bounds && isReachable(bounds, areas) ? bounds : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeEditorBounds(win: BrowserWindow): void {
+  try {
+    const { x, y, width, height } = win.getNormalBounds();
+    fs.writeFileSync(
+      editorBoundsFile(),
+      JSON.stringify({ x, y, width, height, maximized: win.isMaximized() }),
+    );
+  } catch {
+    // not remembered: fine
+  }
+}
+
+/**
+ * The Editor window: every screenshot and video being edited is a tab of this one window. It
+ * has the app's title bar style (the tab strip is the bar; the OS draws only the window buttons),
+ * remembers its size and position, and asks before closing over unsaved tabs.
+ */
+export function createEditorWindow(): BrowserWindow {
+  const remembered = readEditorBounds();
+  const win = new BrowserWindow({
+    title: 'FrameCapt Editor',
+    ...(remembered
+      ? { x: remembered.x, y: remembered.y, width: remembered.width, height: remembered.height }
+      : EDITOR_DEFAULT_SIZE),
+    minWidth: EDITOR_MIN_SIZE.width,
+    minHeight: EDITOR_MIN_SIZE.height,
+    show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? BACKGROUND.dark : BACKGROUND.light,
+    ...devWindowIcon(),
+    ...titleBarWindowOptions(process.platform, nativeTheme.shouldUseDarkColors),
+    webPreferences: securePreferences(),
+  });
+  followThemeWithButtons(win);
+  // No default menu: its Ctrl+W (Close Window) would close the window instead of the tab.
+  win.removeMenu();
+  registerWebContents(win.webContents, 'editor');
+  editorWindow = win;
+  editorGuard = new CloseGuard();
+  editorState = { tabs: 0, dirty: false };
+  win.once('ready-to-show', () => {
+    if (remembered?.maximized) win.maximize();
+    win.show();
+    win.focus();
+  });
+  win.on('close', (event) => {
+    writeEditorBounds(win);
+    if (win.webContents.isDestroyed() || editorGuard.onCloseRequested() === 'close') return;
+    event.preventDefault();
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    sendEvent(win.webContents, 'editor:confirmClose', {});
+  });
+  // A logoff or shutdown must never wait for the discard question.
+  win.on('session-end', () => editorGuard.allowClose());
+  win.on('closed', () => {
+    if (editorWindow === win) editorWindow = undefined;
+    setEditorState({ tabs: 0, dirty: false });
+    for (const listener of editorClosedListeners) listener();
+    // A main window close or a quit was waiting for this window: carry on.
+    if (mainCloseWaitsForEditor) {
+      mainCloseWaitsForEditor = false;
+      getMainWindow()?.close();
+    }
+    // A quit that the question had stopped starts again (it also ends an app that would stay in the tray).
+    if (quitting) app.quit();
+  });
+  void loadRenderer(win, 'editor');
+  return win;
+}
+
+/** Brings the Editor window to the front; undefined when there is none (it is made on the first open). */
+export function showEditorWindow(): BrowserWindow | undefined {
+  const win = getEditorWindow();
+  if (!win) return undefined;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  return win;
+}
+
+/** The window a dialog belongs to: the focused app window, else the main window, else the editor. */
+export function dialogParent(): BrowserWindow | undefined {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && (focused === editorWindow || focused === mainWindow)) return focused;
+  return getMainWindow() ?? getEditorWindow();
 }
 
 let workerWindow: BrowserWindow | undefined;

@@ -18,6 +18,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 
@@ -365,8 +366,9 @@ test.describe('settings', () => {
     await overlay.mouse.move(700, 450, { steps: 5 });
     await overlay.mouse.up();
     await overlay.keyboard.press('Enter').catch(() => undefined);
-    await expect(page.getByTestId('editor-view')).toBeVisible();
-    await page.getByTestId('editor-save').click();
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-view')).toBeVisible();
+    await editor.getByTestId('editor-save').click();
     await expect
       .poll(() => fs.readdirSync(out).filter((name) => name.endsWith('.png')).length)
       .toBe(1);
@@ -388,14 +390,15 @@ test.describe('settings', () => {
     await overlay.mouse.move(800, 500, { steps: 5 });
     await overlay.mouse.up();
     await overlay.keyboard.press('Enter').catch(() => undefined);
-    await expect(page.getByTestId('editor-view')).toBeVisible();
-    await expect(page.getByText('Saved to', { exact: false })).toBeVisible();
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-view')).toBeVisible();
+    await expect(editor.getByText('Saved to', { exact: false })).toBeVisible();
     const folder = path.join(dir, 'pictures', 'FrameCapt');
     await expect.poll(() => fs.existsSync(folder) && fs.readdirSync(folder).length).toBe(1);
     expect(fs.readdirSync(folder)[0]).toMatch(/\.jpg$/);
     // Nothing is unsaved yet: leaving the editor does not ask.
-    await page.getByTestId('editor-done').click();
-    await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
+    await editor.getByTestId('editor-done').click();
+    await expectEditorClosed(app); // closed on its own: nothing was asked
     await expect(page.getByTestId('shot-region')).toBeVisible();
     await goTo(page, 'History');
     await expect(page.getByTestId('history-grid').locator('li')).toHaveCount(1);
@@ -748,15 +751,16 @@ test.describe('keyboard and focus', () => {
     await expect(overlay.getByTestId('size-label')).toHaveText('1279 × 710');
     await pressClosing(overlay, 'Enter');
 
-    await expect(page.getByTestId('editor-view')).toBeVisible();
-    await expect(page.getByTestId('editor-dimensions')).toHaveText('1279 × 710');
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-view')).toBeVisible();
+    await expect(editor.getByTestId('editor-dimensions')).toHaveText('1279 × 710');
     // The canvas has the focus, so the keyboard works without a click.
-    await expect(page.getByTestId('editor-canvas')).toBeFocused();
-    await page.keyboard.press('Control+s');
+    await expect(editor.getByTestId('editor-canvas')).toBeFocused();
+    await editor.keyboard.press('Control+s');
     // Normally well under a second; about one run in twenty the export (OffscreenCanvas
     // convertToBlob) stalls for about 6 s (measured), so the default 5 s poll was too tight.
     await expect.poll(() => fs.existsSync(out), { timeout: 20_000 }).toBe(true);
-    await expect(page.getByText('Saved to', { exact: false })).toBeVisible();
+    await expect(editor.getByText('Saved to', { exact: false })).toBeVisible();
   });
 
   test('Esc on the overlay returns focus to the trigger; the main window is focused again', async () => {
@@ -787,7 +791,7 @@ test.describe('keyboard and focus', () => {
     await second.keyboard.press('ArrowRight');
     await pressClosing(second, 'Enter');
     await expect.poll(async () => (await mainWindowState(app, page)).visible).toBe(true);
-    await expect(page.getByTestId('editor-view')).toBeVisible();
+    await expect((await editorPage(app)).getByTestId('editor-view')).toBeVisible();
   });
 
   test('the overlay ignores the pointer until it is on screen (data-ready)', async () => {

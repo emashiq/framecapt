@@ -31,11 +31,8 @@ vi.mock('../../src/main/logger', () => ({
   log: { info: () => undefined, warn: () => undefined, error: () => undefined },
 }));
 vi.mock('../../src/main/windows', () => ({
-  closeGuard: { setDirty: () => undefined, resolve: () => false },
-  getMainWindow: () => undefined,
-  onMainWindowClosed: () => undefined,
-  setEditorState: () => undefined,
-  setQuitting: () => undefined,
+  dialogParent: () => undefined,
+  onEditorWindowClosed: () => undefined,
 }));
 vi.mock('../../src/main/shots/after-capture', () => ({
   writePngToClipboard: async () => undefined,

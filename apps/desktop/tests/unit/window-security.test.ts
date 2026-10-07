@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 const hoisted = vi.hoisted(() => ({
   created: [] as ((event: unknown, contents: unknown) => void)[],
   isPackaged: { value: false },
+  windows: [] as { options: Record<string, unknown>; menuRemoved: boolean; url: string }[],
 }));
 
 vi.mock('electron', () => ({
@@ -18,9 +19,31 @@ vi.mock('electron', () => ({
     on: (event: string, listener: (event: unknown, contents: unknown) => void) => {
       if (event === 'web-contents-created') hoisted.created.push(listener);
     },
+    getPath: () => '/nonexistent',
+    getAppPath: () => '/app',
   },
-  BrowserWindow: class {},
-  nativeTheme: {},
+  BrowserWindow: class {
+    webContents = { id: 41, once: () => undefined, isDestroyed: () => false };
+    record = { options: {} as Record<string, unknown>, menuRemoved: false, url: '' };
+    constructor(options: Record<string, unknown>) {
+      this.record.options = options;
+      hoisted.windows.push(this.record);
+    }
+    on() {}
+    once() {}
+    removeMenu() {
+      this.record.menuRemoved = true;
+    }
+    loadURL(url: string) {
+      this.record.url = url;
+      return Promise.resolve();
+    }
+    isDestroyed() {
+      return false;
+    }
+  },
+  nativeTheme: { shouldUseDarkColors: false, on: () => undefined, off: () => undefined },
+  screen: { getAllDisplays: () => [] },
   webContents: {},
 }));
 vi.mock('../../src/main/logger', () => ({
@@ -34,7 +57,7 @@ import {
 } from '../../src/main/security';
 import type { AppOriginConfig } from '../../src/main/app-origin';
 import type { Role } from '../../src/shared/types';
-import { securePreferences } from '../../src/main/windows';
+import { createEditorWindow, getRole, securePreferences } from '../../src/main/windows';
 
 const config: AppOriginConfig = {};
 
@@ -70,6 +93,31 @@ describe('securePreferences: what every window gets', () => {
     expect(securePreferences().devTools).toBe(true);
     hoisted.isPackaged.value = true;
     expect(securePreferences().devTools).toBe(false);
+  });
+});
+
+describe('the Editor window', () => {
+  it('gets the secure preferences, its own role and no default menu', () => {
+    hoisted.isPackaged.value = true;
+    const win = createEditorWindow();
+    const { options, menuRemoved, url } = hoisted.windows.at(-1) ?? {
+      options: {},
+      menuRemoved: false,
+      url: '',
+    };
+    expect(options.webPreferences).toMatchObject({
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      webviewTag: false,
+      devTools: false,
+    });
+    expect(options).toMatchObject({ show: false, minWidth: 900, minHeight: 600 });
+    // The app's own origin and the editor's hash: nothing remote, nothing from file://.
+    expect(url).toMatch(/^(app:\/\/framecapt\/|http:\/\/localhost)[^#]*#\/editor$/);
+    expect(menuRemoved).toBe(true);
+    expect(getRole(win.webContents.id)).toBe('editor');
   });
 });
 
@@ -223,7 +271,7 @@ describe('session policies', () => {
       expect(ask('media', app, ['video']), role).toBe(true);
       expect(ask('media', 'https://evil.example/', ['video']), role).toBe(false);
     }
-    for (const role of ['overlay', 'toolbar', 'countdown'] as const) {
+    for (const role of ['editor', 'overlay', 'toolbar', 'countdown'] as const) {
       roleOfContents.value = role;
       expect(ask('media', app, ['video']), role).toBe(false);
       expect(check({}, 'media', app, { requestingUrl: app, mediaType: 'video' }), role).toBe(false);

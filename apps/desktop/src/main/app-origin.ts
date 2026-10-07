@@ -67,7 +67,7 @@ const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write', 'full
  * Windows whose pages may go fullscreen (the History video player's fullscreen button). Add the
  * editor role here when it exists; the capture overlays, toolbar and camera never need it.
  */
-const FULLSCREEN_ROLES: readonly Role[] = ['main'];
+const FULLSCREEN_ROLES: readonly Role[] = ['main', 'editor'];
 
 /** Windows that may ask for the camera (getUserMedia video): the recorder and the camera bubble. */
 const CAMERA_REQUEST_ROLES: readonly Role[] = ['recorder', 'camera'];

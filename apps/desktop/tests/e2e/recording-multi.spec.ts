@@ -20,6 +20,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { probeFile } from './media-fixtures';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -441,32 +442,36 @@ test('Edit video: the .fcap opens in the video editor, Source crops to one windo
     .locator('[data-card-main]')
     .click();
   await page.getByTestId('details-edit').click();
-  await expect(page.getByTestId('video-editor')).toBeVisible();
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('video-editor')).toBeVisible();
   // The preview plays the payload through the same media route as the History player.
   await expect
-    .poll(() => page.getByTestId('video-preview').evaluate((v: HTMLVideoElement) => v.readyState), {
-      timeout: 15_000,
-    })
+    .poll(
+      () => editor.getByTestId('video-preview').evaluate((v: HTMLVideoElement) => v.readyState),
+      {
+        timeout: 15_000,
+      },
+    )
     .toBeGreaterThanOrEqual(2);
-  await expect(page.getByTestId('output-size')).toHaveText(
+  await expect(editor.getByTestId('output-size')).toHaveText(
     new RegExp(`^Output ${header.width} × ${header.height}`),
   );
 
   // Source: All, Screen 1, Window 2 (from the layout); choosing one sets the crop to its tile.
-  const source = page.getByTestId('source-select');
+  const source = editor.getByTestId('source-select');
   await expect(source.locator('option:not([hidden])')).toHaveText(['All', 'Screen 1', 'Window 2']);
   await source.selectOption({ label: 'Window 2' });
-  await expect(page.getByTestId('output-size')).toHaveText(
+  await expect(editor.getByTestId('output-size')).toHaveText(
     `Output ${window2.width} × ${window2.height} (cropped from ${header.width} × ${header.height})`,
   );
   await source.selectOption({ label: 'All' });
-  await expect(page.getByTestId('output-size')).toHaveText(
+  await expect(editor.getByTestId('output-size')).toHaveText(
     `Output ${header.width} × ${header.height}`,
   );
   await source.selectOption({ label: 'Window 2' });
 
-  await page.getByTestId('video-export').click();
-  await expect(page.locator('[data-sonner-toast]', { hasText: 'MP4 exported' })).toBeVisible({
+  await editor.getByTestId('video-export').click();
+  await expect(editor.locator('[data-sonner-toast]', { hasText: 'MP4 exported' })).toBeVisible({
     timeout: 90_000,
   });
   const out = path.join(videosDir(), `${(name ?? '').replace(/.fcap$/, '')} (edited).mp4`);
@@ -481,7 +486,8 @@ test('Edit video: the .fcap opens in the video editor, Source crops to one windo
     derivedFrom: fcap?.id,
   });
 
-  await page.getByTestId('video-back').click();
+  await editor.getByTestId('tab-close').click();
+  await expectEditorClosed(app);
   await page.getByTestId('history-back').click();
 });
 

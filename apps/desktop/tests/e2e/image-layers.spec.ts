@@ -18,6 +18,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { activePanel, editorPage, expectEditorClosed, hasEditorPage } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 const FRAME = { width: 2560, height: 1440 };
@@ -147,19 +148,32 @@ async function drag(
   await page.mouse.up();
 }
 
-async function openShot(page: Page): Promise<void> {
-  await page.getByTestId('shot-screen').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await expect(page.getByTestId('editor-dimensions')).toHaveText(
+/** Takes a screenshot in the main window; it opens as a tab of the Editor window, which is returned. */
+async function openShot(main: Page, app: ElectronApplication): Promise<Page> {
+  // The main window stays where it was (History after an Edit): go back to the Capture view.
+  if (!(await main.getByTestId('shot-screen').isVisible())) {
+    await main
+      .getByRole('navigation', { name: 'Primary' })
+      .getByRole('button', { name: 'Capture', exact: true })
+      .click();
+  }
+  await main.getByTestId('shot-screen').click();
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-dimensions')).toHaveText(
     `${FRAME.width} × ${FRAME.height}`,
   );
+  return editor;
 }
 
-async function leaveEditor(page: Page): Promise<void> {
-  await page.getByTestId('editor-done').click();
-  const confirm = page.getByTestId('confirm-yes');
-  if (await confirm.isVisible().catch(() => false)) await confirm.click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
+/** Closes the only tab (Done), answering "Don't save" if it asks; the Editor window closes with it. */
+async function leaveEditor(editor: Page, app: ElectronApplication): Promise<void> {
+  await editor.getByTestId('editor-done').click();
+  await editor
+    .getByTestId('confirm-yes')
+    .click({ timeout: 1500 })
+    .catch(() => undefined);
+  await expectEditorClosed(app);
 }
 
 interface Rect {
@@ -264,14 +278,14 @@ test('Open image opens a picture in the editor without saving anything', async (
   await stubOpenDialog(app, writePicture(dir, 'photo.png', picture(640, 360, '#00aa44')));
   await expect(page.getByTestId('open-image-card')).toBeVisible();
   await page.getByTestId('open-image').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('640 × 360');
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-dimensions')).toHaveText('640 × 360');
   expect(await historyItems(page)).toHaveLength(0);
 
   // Nothing was edited: leaving asks nothing.
-  await page.getByTestId('editor-done').click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
-  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
+  await editor.getByTestId('editor-done').click();
+  await expectEditorClosed(app); // closed on its own: nothing was asked
   expect(await historyItems(page)).toHaveLength(0);
 });
 
@@ -283,8 +297,9 @@ test('JPEG and WebP files open too (the renderer decodes them)', async () => {
       writePicture(dir, `pic.${format}`, picture(300, 200, '#cc3300', format)),
     );
     await page.getByTestId('open-image').click();
-    await expect(page.getByTestId('editor-dimensions')).toHaveText('300 × 200');
-    await leaveEditor(page);
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-dimensions')).toHaveText('300 × 200');
+    await leaveEditor(editor, app);
   }
 });
 
@@ -292,49 +307,60 @@ test('Ctrl+O, a dropped file and a pasted picture open the editor; a file that i
   const { app, page, dir } = session as Session;
   await stubOpenDialog(app, writePicture(dir, 'key.png', picture(120, 80, '#112233')));
   await page.keyboard.press('Control+o');
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('120 × 80');
-  await leaveEditor(page);
+  const first = await editorPage(app);
+  await expect(first.getByTestId('editor-dimensions')).toHaveText('120 × 80');
+  await leaveEditor(first, app);
 
   await dropPicture(page, null, picture(200, 100, '#445566'));
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('200 × 100');
-  await leaveEditor(page);
+  const dropped = await editorPage(app);
+  await expect(dropped.getByTestId('editor-dimensions')).toHaveText('200 × 100');
+  await leaveEditor(dropped, app);
 
   await pastePicture(page, picture(90, 60, '#778899'));
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('90 × 60');
-  await leaveEditor(page);
+  const pasted = await editorPage(app);
+  await expect(pasted.getByTestId('editor-dimensions')).toHaveText('90 × 60');
+  await leaveEditor(pasted, app);
 
   await stubOpenDialog(app, writePicture(dir, 'fake.png', Buffer.from('MZ not a picture at all')));
   await page.getByTestId('open-image').click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
   await expect(page.getByText(/not a PNG, JPEG, WebP, GIF or BMP/)).toBeVisible();
+  expect(hasEditorPage(app)).toBe(false);
 });
 
-test('opening a picture over an edited editor asks first, and keeping the edits keeps the editor', async () => {
-  const { app, page, dir } = session as Session;
-  await openShot(page);
+test('opening a picture while a screenshot has edits adds a tab and keeps the edits', async () => {
+  const { app, page: mainWin, dir } = session as Session;
+  const page = await openShot(mainWin, app);
   await page.getByTestId('tool-rect').click();
   await drag(page, { x: 100, y: 100 }, { x: 500, y: 400 });
   await expect.poll(() => annotationCount(page)).toBe(1);
   await stubOpenDialog(app, writePicture(dir, 'other.png', picture(64, 64, '#abcdef')));
+  // Ctrl+O works in the Editor window too: the picture is a second tab, nothing is asked.
   await page.keyboard.press('Escape');
   await page.keyboard.press('Control+o');
-  await expect(page.getByTestId('confirm-dialog')).toBeVisible();
-  await page.getByTestId('confirm-no').click();
-  await expect(page.getByTestId('editor-dimensions')).toHaveText(
+  await expect(page.getByTestId('editor-tab')).toHaveCount(2);
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
+  await expect(activePanel(page)).toHaveCount(1);
+  await expect(activePanel(page).getByTestId('editor-dimensions')).toHaveText('64 × 64');
+
+  // Back on the first tab: its edit is still there (each tab keeps its own state).
+  await page.getByTestId('editor-tab').first().getByRole('button').first().click();
+  await expect(activePanel(page).getByTestId('editor-dimensions')).toHaveText(
     `${FRAME.width} × ${FRAME.height}`,
   );
-  expect(await annotationCount(page)).toBe(1);
-  await page.keyboard.press('Control+o');
-  await page.getByTestId('confirm-yes').click();
-  await expect(page.getByTestId('editor-dimensions')).toHaveText('64 × 64');
-  await leaveEditor(page);
+  await expect(activePanel(page).getByTestId('editor-canvas')).toHaveAttribute(
+    'data-annotations',
+    '1',
+  );
+  await page.getByTestId('editor-tab').last().getByTestId('tab-close').click(); // the clean picture
+  await expect(page.getByTestId('editor-tab')).toHaveCount(1);
+  await leaveEditor(page, app);
 });
 
 // --- image layers -------------------------------------------------------------------------------
 
 test('Insert image from a file: centered, selected, undoable, and in the exported pixels under a redaction', async () => {
-  const { app, page, dir } = session as Session;
-  await openShot(page);
+  const { app, page: mainWin, dir } = session as Session;
+  const page = await openShot(mainWin, app);
   await stubOpenDialog(app, writePicture(dir, 'logo.png', picture(400, 200, '#ff0000')));
   await page.getByTestId('editor-insert-image').click();
   await page.getByTestId('editor-insert-file').click();
@@ -386,17 +412,17 @@ test('Insert image from a file: centered, selected, undoable, and in the exporte
   const assets = path.join(dir, 'projects', item?.id ?? 'x', 'assets');
   expect(fs.readdirSync(assets)).toHaveLength(1);
   expect(fs.readdirSync(assets)[0]).toMatch(/^[0-9a-f]{64}\.png$/);
-  await leaveEditor(page);
+  await leaveEditor(page, app);
 });
 
 test('the saved screenshot opens again with its image layer, and editing it keeps the picture', async () => {
-  const { page, dir } = session as Session;
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'History' })
-    .click();
-  await page.getByTestId('history-item').first().getByRole('button').first().click();
-  await page.getByTestId('details-edit').click();
+  const { app, page: mainWin, dir } = session as Session;
+  const nav = mainWin.getByRole('navigation', { name: 'Primary' });
+  await nav.getByRole('button', { name: 'Capture', exact: true }).click();
+  await nav.getByRole('button', { name: 'History' }).click();
+  await mainWin.getByTestId('history-item').first().getByRole('button').first().click();
+  await mainWin.getByTestId('details-edit').click();
+  const page = await editorPage(app);
   await expect(page.getByTestId('editor-view')).toBeVisible();
   await expect.poll(() => annotationCount(page)).toBe(2);
 
@@ -419,12 +445,12 @@ test('the saved screenshot opens again with its image layer, and editing it keep
   expect(r).toBeLessThan(255);
   expect(g! + b!).toBeGreaterThan(0);
   expect(fs.readdirSync(path.join(dir, 'projects', item?.id ?? 'x', 'assets'))).toHaveLength(1);
-  await leaveEditor(page);
+  await leaveEditor(page, app);
 });
 
 test('Insert image by paste and by dropping on the canvas, and from History', async () => {
-  const { page, dir } = session as Session;
-  await openShot(page);
+  const { app, page: mainWin, dir } = session as Session;
+  const page = await openShot(mainWin, app);
   await canvasOf(page).focus();
 
   await pastePicture(page, picture(300, 150, '#00ff00'));
@@ -459,12 +485,12 @@ test('Insert image by paste and by dropping on the canvas, and from History', as
   await expect.poll(() => fs.existsSync(file), { timeout: 15_000 }).toBe(true);
   const exported = await decode(file);
   expect(pixelAt(exported, 400, 300)).toEqual([0, 0, 255]);
-  await leaveEditor(page);
+  await leaveEditor(page, app);
 });
 
 test('a picture that is not a PNG, or too many pictures, are refused with a message', async () => {
-  const { page } = session as Session;
-  await openShot(page);
+  const { app, page: mainWin } = session as Session;
+  const page = await openShot(mainWin, app);
   await canvasOf(page).focus();
   await page.evaluate(async () => {
     const data = new DataTransfer();
@@ -484,5 +510,5 @@ test('a picture that is not a PNG, or too many pictures, are refused with a mess
   await pastePicture(page, picture(80, 10, '#123456'));
   await expect(page.getByText(/up to 32 inserted pictures/).first()).toBeVisible();
   expect(await annotationCount(page)).toBe(32);
-  await leaveEditor(page);
+  await leaveEditor(page, app);
 });

@@ -21,6 +21,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { makeWebm, newId, seedHistory } from './history-fixtures';
 import { probeFile } from './media-fixtures';
 
@@ -151,8 +152,12 @@ async function canvasView(target: Page = page): Promise<CanvasView> {
   };
 }
 
-async function dragImage(from: { x: number; y: number }, to: { x: number; y: number }) {
-  const view = await canvasView();
+async function dragImage(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  target: Page = page,
+) {
+  const view = await canvasView(target);
   const scale = view.zoom / view.dpr;
   const at = (p: { x: number; y: number }) => ({
     x: view.left + view.panX + p.x * scale,
@@ -160,11 +165,11 @@ async function dragImage(from: { x: number; y: number }, to: { x: number; y: num
   });
   const a = at(from);
   const b = at(to);
-  await page.mouse.move(a.x, a.y);
-  await page.mouse.down();
-  await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 4 });
-  await page.mouse.move(b.x, b.y, { steps: 4 });
-  await page.mouse.up();
+  await target.mouse.move(a.x, a.y);
+  await target.mouse.down();
+  await target.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 4 });
+  await target.mouse.move(b.x, b.y, { steps: 4 });
+  await target.mouse.up();
 }
 
 async function decode(file: string) {
@@ -230,22 +235,24 @@ let shotId: string;
 test('a saved screenshot appears in history with a thumbnail of the flattened image', async () => {
   await goTo('Capture');
   await page.getByTestId('shot-screen').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await expect(page.getByTestId('editor-dimensions')).toHaveText(
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-dimensions')).toHaveText(
     `${FRAME.width} × ${FRAME.height}`,
   );
   // A redaction over the middle of the picture: the history thumbnail must show it black.
-  await page.getByTestId('tool-redact').click();
-  await dragImage({ x: 900, y: 500 }, { x: 1500, y: 900 });
-  await expect(page.getByTestId('editor-canvas')).toHaveAttribute('data-annotations', '1');
+  await editor.getByTestId('tool-redact').click();
+  await dragImage({ x: 900, y: 500 }, { x: 1500, y: 900 }, editor);
+  await expect(editor.getByTestId('editor-canvas')).toHaveAttribute('data-annotations', '1');
 
   shotFile = path.join(outDir, 'Login screen.png');
   await stubSaveDialog(shotFile);
-  await page.getByTestId('editor-save').click();
+  await editor.getByTestId('editor-save').click();
   await expect.poll(() => fs.existsSync(shotFile), { timeout: 15_000 }).toBe(true);
-  await expect(page.getByText(/Saved to/).first()).toBeVisible();
+  await expect(editor.getByText(/Saved to/).first()).toBeVisible();
 
-  await page.getByTestId('editor-done').click();
+  await editor.getByTestId('editor-done').click();
+  await expectEditorClosed(app);
   await goTo('History');
   await expect(cards()).toHaveCount(1);
   const card = cards().first();

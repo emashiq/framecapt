@@ -30,13 +30,7 @@ import { freeFileName } from './shots/free-name';
 import type { ShotSessionStore } from './shots/session-store';
 import type { Settings } from '../shared/settings';
 import { rememberExported, wasExported } from './shots/exported-paths';
-import {
-  closeGuard,
-  getMainWindow,
-  onMainWindowClosed,
-  setEditorState,
-  setQuitting,
-} from './windows';
+import { dialogParent, onEditorWindowClosed } from './windows';
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(
@@ -81,9 +75,9 @@ async function pickImage(title: string) {
     filters: IMAGE_OPEN_FILTERS,
     properties: ['openFile'],
   };
-  const main = getMainWindow();
-  const result = main
-    ? await dialog.showOpenDialog(main, options)
+  const parent = dialogParent();
+  const result = parent
+    ? await dialog.showOpenDialog(parent, options)
     : await dialog.showOpenDialog(options);
   const file = result.filePaths[0];
   if (result.canceled || !file) return { cancelled: true as const };
@@ -141,11 +135,11 @@ export function registerShotHandlers(
   const stepLinks = new Map<string, { historyId: string; index: number }>();
   /** The overlays belong to the recorder (record-region, pick a screen) or to the screenshot flow. */
   const host = (): SelectionHost => (recorder.selecting ? recorder : flow);
-  /** The session the editor has open. Its original is deleted when the app window closes. */
-  let editorSessionId: string | undefined;
-  onMainWindowClosed(() => {
-    if (editorSessionId) store.discardSync(editorSessionId);
-    editorSessionId = undefined;
+  /** The sessions the Editor window has open. Their originals are deleted when that window closes. */
+  const editorSessions = new Set<string>();
+  onEditorWindowClosed(() => {
+    for (const id of editorSessions) store.discardSync(id);
+    editorSessions.clear();
     links.clear();
     stepLinks.clear();
   });
@@ -155,12 +149,12 @@ export function registerShotHandlers(
     return { started: true as const };
   });
 
-  handle('shot:get', { roles: ['main'] }, async (request) => {
+  handle('shot:get', { roles: ['editor'] }, async (request) => {
     const session = sessionOf(request.sessionId);
     const png = session && (await store.readOriginal(session.id));
     if (!session || !png)
       throw new IpcError('NOT_FOUND', 'That screenshot is no longer available.');
-    editorSessionId = session.id;
+    editorSessions.add(session.id);
     return { session: store.meta(session), png: toArrayBuffer(png) };
   });
 
@@ -238,7 +232,7 @@ export function registerShotHandlers(
     };
   }
 
-  handle('shot:export', { roles: ['main'] }, async (request) => {
+  handle('shot:export', { roles: ['editor'] }, async (request) => {
     const saved = await exportShot(request, async () => {
       const folder = settings.screenshotsDir();
       await fs.promises.mkdir(folder, { recursive: true });
@@ -248,9 +242,9 @@ export function registerShotHandlers(
         filters: dialogFilters(request.format),
         properties: ['showOverwriteConfirmation'],
       };
-      const main = getMainWindow();
-      const result = main
-        ? await dialog.showSaveDialog(main, options)
+      const parent = dialogParent();
+      const result = parent
+        ? await dialog.showSaveDialog(parent, options)
         : await dialog.showSaveDialog(options);
       return result.canceled || !result.filePath ? null : result.filePath;
     });
@@ -259,7 +253,7 @@ export function registerShotHandlers(
   });
 
   // Quick save: the same save with no dialog, into the screenshots folder under a free name.
-  handle('shot:quickSave', { roles: ['main'] }, async (request) => {
+  handle('shot:quickSave', { roles: ['editor'] }, async (request) => {
     const saved = await exportShot(request, async () => {
       const folder = settings.screenshotsDir();
       await fs.promises.mkdir(folder, { recursive: true });
@@ -281,7 +275,7 @@ export function registerShotHandlers(
     await settings.copyImage(png, { quiet: true });
   }
 
-  handle('shot:openFromHistory', { roles: ['main'] }, async (request) => {
+  handle('shot:openFromHistory', { roles: ['editor'] }, async (request) => {
     const item = history.get(request.historyId);
     if (!item || item.type !== 'screenshot') {
       throw new IpcError('NOT_FOUND', 'That screenshot is not in history.');
@@ -314,7 +308,7 @@ export function registerShotHandlers(
       item.source === 'unknown' || item.source === 'multi' ? 'import' : item.source;
     const session = await store.create({ kind, width: size.width, height: size.height, png });
     links.set(session.id, item.id);
-    editorSessionId = session.id;
+    editorSessions.add(session.id);
     return {
       session: store.meta(session),
       png: toArrayBuffer(png),
@@ -330,7 +324,7 @@ export function registerShotHandlers(
   });
 
   // One step of a step guide in the editor: Save writes the edited picture over that step's image.
-  handle('flow:openStepInEditor', { roles: ['main'] }, async (request) => {
+  handle('flow:openStepInEditor', { roles: ['editor'] }, async (request) => {
     if (!flows) throw new IpcError('INTERNAL', 'Step guides are not available.');
     const step = await flows.readStep(request.historyId, request.index);
     const session = await store.create({
@@ -340,7 +334,7 @@ export function registerShotHandlers(
       png: step.png,
     });
     stepLinks.set(session.id, { historyId: request.historyId, index: request.index });
-    editorSessionId = session.id;
+    editorSessions.add(session.id);
     return {
       session: store.meta(session),
       png: toArrayBuffer(step.png),
@@ -355,23 +349,23 @@ export function registerShotHandlers(
     };
   });
 
-  handle('shot:openImage', { roles: ['main'] }, () => pickImage('Open image'));
-  handle('editor:pickImage', { roles: ['main'] }, () => pickImage('Insert image'));
+  handle('shot:openImage', { roles: ['main', 'editor'] }, () => pickImage('Open image'));
+  handle('editor:pickImage', { roles: ['editor'] }, () => pickImage('Insert image'));
 
   // A picture the user opened, dropped or pasted, already decoded and re-encoded as PNG by the
   // renderer: validated again here, then an editor session of its own. It is NOT saved anywhere
   // (the after-capture settings are for captures only).
-  handle('shot:importImage', { roles: ['main'] }, async (request) => {
+  handle('shot:importImage', { roles: ['main', 'editor'] }, async (request) => {
     const png = Buffer.from(request.png);
     const check = validateImageBytes('png', png, MAX_FRAME_PNG_BYTES);
     if (!check.ok) throw new IpcError('INVALID_PAYLOAD', check.reason);
     const size = checkedSize(png);
     const session = await store.create({ kind: 'import', ...size, png });
-    editorSessionId = session.id;
+    editorSessions.add(session.id);
     return { session: store.meta(session) };
   });
 
-  handle('editor:historyImage', { roles: ['main'] }, async (request) => {
+  handle('editor:historyImage', { roles: ['editor'] }, async (request) => {
     const item = history.get(request.historyId);
     if (!item || item.type !== 'screenshot') {
       throw new IpcError('NOT_FOUND', 'That screenshot is not in history.');
@@ -385,7 +379,7 @@ export function registerShotHandlers(
     return { png: toArrayBuffer(png) };
   });
 
-  handle('shot:saveOver', { roles: ['main'] }, async (request) => {
+  handle('shot:saveOver', { roles: ['editor'] }, async (request) => {
     const session = sessionOf(request.sessionId);
     const stepLink = stepLinks.get(request.sessionId);
     if (session && stepLink && flows) {
@@ -453,7 +447,7 @@ export function registerShotHandlers(
     return { historyId: item.id, path: result.path, editable: result.editable };
   });
 
-  handle('shot:copy', { roles: ['main'] }, async (request) => {
+  handle('shot:copy', { roles: ['editor'] }, async (request) => {
     if (!sessionOf(request.sessionId)) {
       throw new IpcError('NOT_FOUND', 'That screenshot is no longer available.');
     }
@@ -468,24 +462,14 @@ export function registerShotHandlers(
     ]);
   });
 
-  handle('shot:discard', { roles: ['main'] }, async (request) => {
-    if (editorSessionId === request.sessionId) editorSessionId = undefined;
+  handle('shot:discard', { roles: ['main', 'editor'] }, async (request) => {
+    editorSessions.delete(request.sessionId);
     links.delete(request.sessionId);
     stepLinks.delete(request.sessionId);
     await store.discard(request.sessionId);
   });
 
-  handle('editor:setDirty', { roles: ['main'] }, (request) => {
-    closeGuard.setDirty(request.dirty);
-    setEditorState({ open: request.open ?? request.dirty, dirty: request.dirty });
-  });
-  handle('editor:resolveClose', { roles: ['main'] }, (request) => {
-    // "Keep editing" also withdraws a quit that was waiting on this answer.
-    if (!request.discard) setQuitting(false);
-    if (closeGuard.resolve(request.discard)) getMainWindow()?.close();
-  });
-
-  handle('shell:showItemInFolder', { roles: ['main'] }, (request) => {
+  handle('shell:showItemInFolder', { roles: ['main', 'editor'] }, (request) => {
     const resolved = path.resolve(request.path);
     if (!wasExported(resolved)) {
       throw new IpcError('FORBIDDEN', 'Only files saved by FrameCapt can be shown.');
