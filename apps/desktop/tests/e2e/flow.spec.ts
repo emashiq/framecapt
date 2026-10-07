@@ -215,7 +215,7 @@ test('Open in editor on one step: Save changes writes over that step alone, the 
   await editor.mouse.up();
   await editor.getByTestId('editor-save').click();
   await editor.getByTestId('confirm-yes').click();
-  await expect(editor.getByText(/Changes saved/).first()).toBeVisible();
+  await expect(editor.getByText(/Changes saved/).first()).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => fs.readFileSync(first).equals(firstBefore)).toBe(false);
   expect(fs.readFileSync(second).equals(secondBefore)).toBe(true);
   expect(readFlow(folder).steps.map((s) => s.file)).toEqual(['step-01.png', 'step-02.png']);

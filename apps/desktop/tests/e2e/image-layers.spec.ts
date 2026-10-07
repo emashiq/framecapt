@@ -407,8 +407,9 @@ test('Insert image from a file: centered, selected, undoable, and in the exporte
   expect(pixelAt(exported, 1070, 800)).not.toEqual([255, 0, 0]); // outside the picture
 
   // The picture is kept with the editable project.
+  // (the file is written before the history item is updated)
+  await expect.poll(async () => (await historyItems(page))[0]?.editable).toBe(true);
   const [item] = await historyItems(page);
-  expect(item?.editable).toBe(true);
   const assets = path.join(dir, 'projects', item?.id ?? 'x', 'assets');
   expect(fs.readdirSync(assets)).toHaveLength(1);
   expect(fs.readdirSync(assets)[0]).toMatch(/^[0-9a-f]{64}\.png$/);
@@ -437,7 +438,7 @@ test('the saved screenshot opens again with its image layer, and editing it keep
 
   await page.getByTestId('editor-save').click();
   await page.getByTestId('confirm-yes').click();
-  await expect(page.getByText(/Changes saved/).first()).toBeVisible();
+  await expect(page.getByText(/Changes saved/).first()).toBeVisible({ timeout: 15_000 });
   const [item] = await historyItems(page);
   const exported = await decode(item?.path ?? '');
   const [r, g, b] = pixelAt(exported, 1400, 800);

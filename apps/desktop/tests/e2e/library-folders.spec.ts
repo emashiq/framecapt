@@ -16,6 +16,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { mockScreenshotPng, newId, seedHistory, type SeedFile } from './history-fixtures';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -274,12 +275,14 @@ test('a save location sends the next screenshot into that folder', async () => {
   expect(saved()).toEqual([]);
 
   await page.getByTestId('shot-screen').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await page.getByTestId('editor-canvas').click({ position: { x: 40, y: 40 } });
-  await page.keyboard.press('Control+Shift+S');
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await editor.getByTestId('editor-canvas').click({ position: { x: 40, y: 40 } });
+  await editor.keyboard.press('Control+Shift+S');
   await expect.poll(() => saved().length).toBe(1);
   expect(fs.readdirSync(shots).filter((name) => name.startsWith('FrameCapt '))).toEqual([]);
-  await page.getByTestId('editor-done').click();
+  await editor.getByTestId('editor-done').click();
+  await expectEditorClosed(app);
 
   // Clearing the save location puts new captures back in the main folder.
   await nav('History');

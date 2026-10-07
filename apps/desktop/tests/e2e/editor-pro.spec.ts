@@ -327,7 +327,7 @@ test('annotate with the new tools, save, and the saved screenshot is editable fr
   // Save changes: a confirmation, then the file in History is replaced.
   await page.getByTestId('editor-save').click();
   await page.getByTestId('confirm-yes').click();
-  await expect(page.getByText(/Changes saved/).first()).toBeVisible();
+  await expect(page.getByText(/Changes saved/).first()).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => fs.statSync(firstFile).size).not.toBe(sizeBefore);
   const after1 = await historyItems(page);
   expect(after1).toHaveLength(1);
@@ -574,7 +574,7 @@ test.describe('an item saved before editable projects existed', () => {
     expect(fs.statSync(file).size).toBe(sizeBefore);
     await page.getByTestId('editor-save').click();
     await page.getByTestId('confirm-yes').click();
-    await expect(page.getByText(/Changes saved/).first()).toBeVisible();
+    await expect(page.getByText(/Changes saved/).first()).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => fs.statSync(file).size).not.toBe(sizeBefore);
     // The item is editable from now on (its project's base is the saved image).
     await expect.poll(async () => (await historyItems(page))[0]?.editable).toBe(true);

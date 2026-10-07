@@ -14,6 +14,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage } from './editor-window';
 import { makeWebm, newId, seedHistory } from './history-fixtures';
 import { probeFile } from './media-fixtures';
 
@@ -432,7 +433,8 @@ test.describe('screenshots', () => {
     const { app, page } = await launch();
     await app.evaluate(({ clipboard }) => clipboard.writeText('before'));
     await page.getByTestId('shot-screen').click();
-    await expect(page.getByTestId('editor-dimensions')).toHaveText('2560 × 1440');
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-dimensions')).toHaveText('2560 × 1440');
     await expect
       .poll(() => clipboardImageSize(app), { timeout: 10_000 })
       .toEqual({
@@ -447,7 +449,8 @@ test.describe('screenshots', () => {
     });
     await app.evaluate(({ clipboard }) => clipboard.writeText('my own copy'));
     await page.getByTestId('shot-screen').click();
-    await expect(page.getByTestId('editor-dimensions')).toHaveText('2560 × 1440');
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-dimensions')).toHaveText('2560 × 1440');
     await page.waitForTimeout(500);
     expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe('my own copy');
   });
@@ -457,7 +460,8 @@ test.describe('screenshots', () => {
       settings: { version: 1, screenshots: { afterCapture: 'copy-and-editor' } },
     });
     await page.getByTestId('shot-screen').click();
-    await expect(page.getByTestId('editor-dimensions')).toHaveText('2560 × 1440');
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-dimensions')).toHaveText('2560 × 1440');
     await expect
       .poll(() => clipboardImageSize(app), { timeout: 10_000 })
       .toEqual({
