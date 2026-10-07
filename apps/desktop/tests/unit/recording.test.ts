@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COMPRESSED_BITRATE_FACTOR,
   AUDIO_BITRATE,
   defaultRecordingFileName,
   fitWithin,
@@ -88,6 +89,18 @@ describe('videoBitrate', () => {
     expect(videoBitrate({ width: 320, height: 240 }, 30)).toBe(2_500_000);
     expect(videoBitrate({ width: 7680, height: 4320 }, 60)).toBe(30_000_000);
     expect(AUDIO_BITRATE).toBe(128_000);
+  });
+
+  it('compressed storage records at 0.6 of the bitrate, bounds scaled with it', () => {
+    const full = { width: 1920, height: 1080 };
+    expect(videoBitrate(full, 30, COMPRESSED_BITRATE_FACTOR)).toBe(4_800_000);
+    expect(videoBitrate({ width: 320, height: 240 }, 30, COMPRESSED_BITRATE_FACTOR)).toBe(
+      1_500_000,
+    );
+    expect(videoBitrate({ width: 7680, height: 4320 }, 60, COMPRESSED_BITRATE_FACTOR)).toBe(
+      18_000_000,
+    );
+    expect(videoBitrate(full, 30, 1)).toBe(videoBitrate(full, 30));
   });
 });
 

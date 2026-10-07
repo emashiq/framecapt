@@ -1,54 +1,24 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import { Camera, History, Keyboard, Settings, type LucideIcon } from 'lucide-react';
-import { cn } from '../lib/cn';
+import { useRef, type ReactNode } from 'react';
 import { TitleBar, type TitleBarProps } from './titlebar/TitleBar';
 
-export type ViewId = 'capture' | 'history' | 'settings';
-
-const NAV_ITEMS: { id: ViewId; label: string; icon: LucideIcon }[] = [
-  { id: 'capture', label: 'Capture', icon: Camera },
-  { id: 'history', label: 'History', icon: History },
-  { id: 'settings', label: 'Settings', icon: Settings },
-];
-
 export interface AppShellProps {
-  view: ViewId;
-  onNavigate: (view: ViewId) => void;
+  /** The icon rail (left, full height under the title bar). */
+  rail: ReactNode;
+  /** The strip of tabs above the content. */
+  strip: ReactNode;
+  /** The panels: the pinned Home tab and one per edited item, each filling the content area. */
   children: ReactNode;
-  /**
-   * Editor mode: the sidebar shrinks to icons and the content area is edge to edge, because the
-   * screenshot editor needs the room.
-   */
-  editor?: boolean;
-  /** A wider content column (the History grid). */
-  wide?: boolean;
-  /** Opens the keyboard shortcuts help. */
-  onHelp?: () => void;
   /** The title bar's menus and command center (what a command does is up to the app, see App.tsx). */
   titleBar: TitleBarProps;
 }
 
-export function AppShell({
-  view,
-  onNavigate,
-  children,
-  editor = false,
-  wide = false,
-  onHelp,
-  titleBar,
-}: AppShellProps) {
+/**
+ * The window layout: the title bar on top; below it the icon rail on the left and, to its right,
+ * the tab strip over the content. The content holds one absolutely positioned panel per tab so
+ * switching tabs never moves anything.
+ */
+export function AppShell({ rail, strip, children, titleBar }: AppShellProps) {
   const mainRef = useRef<HTMLElement>(null);
-  const firstRender = useRef(true);
-
-  // After navigating, move focus into the content so keyboard and screen reader users land there.
-  useEffect(() => {
-    if (firstRender.current) {
-      firstRender.current = false;
-      return;
-    }
-    mainRef.current?.focus({ preventScroll: true });
-  }, [view]);
-
   return (
     <div className="flex h-full flex-col">
       <button
@@ -61,76 +31,18 @@ export function AppShell({
       </button>
       <TitleBar {...titleBar} />
       <div className="flex min-h-0 flex-1">
-        <aside
-          className={cn(
-            'flex shrink-0 flex-col border-r border-line bg-surface-2 py-3',
-            editor ? 'w-16 items-center px-2' : 'w-60 px-3',
-          )}
-        >
-          <nav aria-label="Primary" className={cn('flex flex-col gap-1', editor && 'items-center')}>
-            {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
-              const active = id === view;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  aria-current={active ? 'page' : undefined}
-                  aria-label={editor ? label : undefined}
-                  title={editor ? label : undefined}
-                  onClick={() => onNavigate(id)}
-                  className={cn(
-                    'flex h-10 items-center gap-3 rounded-lg text-sm font-medium transition-colors duration-150',
-                    editor ? 'w-10 justify-center' : 'px-3',
-                    active
-                      ? 'bg-accent-soft text-accent-fg'
-                      : 'text-fg-muted hover:bg-surface-3 hover:text-fg',
-                  )}
-                >
-                  <Icon className="size-[18px]" aria-hidden="true" />
-                  {!editor && label}
-                </button>
-              );
-            })}
-          </nav>
-          <div className={cn('mt-auto flex flex-col gap-2', editor && 'items-center')}>
-            {onHelp ? (
-              <button
-                type="button"
-                onClick={onHelp}
-                data-testid="help-button"
-                aria-label={editor ? 'Keyboard shortcuts' : undefined}
-                title="Keyboard shortcuts (?)"
-                className={cn(
-                  'flex h-10 items-center gap-3 rounded-lg text-sm font-medium text-fg-muted transition-colors duration-150 hover:bg-surface-3 hover:text-fg',
-                  editor ? 'w-10 justify-center' : 'px-3',
-                )}
-              >
-                <Keyboard className="size-[18px]" aria-hidden="true" />
-                {!editor && 'Keyboard shortcuts'}
-              </button>
-            ) : null}
-            {!editor && <p className="px-2 text-xs text-fg-muted">Captures stay on this device.</p>}
-          </div>
-        </aside>
-        <main
-          id="main-content"
-          ref={mainRef}
-          tabIndex={-1}
-          className={cn(
-            'min-w-0 flex-1 bg-bg outline-none focus-visible:outline-none',
-            editor ? 'overflow-hidden' : 'overflow-y-auto',
-          )}
-        >
-          <div
-            key={view}
-            className={cn(
-              'view-in',
-              editor ? 'h-full' : cn('mx-auto px-8 py-8', wide ? 'max-w-6xl' : 'max-w-4xl'),
-            )}
+        {rail}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {strip}
+          <main
+            id="main-content"
+            ref={mainRef}
+            tabIndex={-1}
+            className="relative min-h-0 flex-1 bg-bg outline-none focus-visible:outline-none"
           >
             {children}
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
     </div>
   );

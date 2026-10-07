@@ -14,6 +14,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { makeWebm, mockScreenshotPng, newId, seedHistory } from './history-fixtures';
 import { evidenceDirFor } from '../native/evidence';
 
@@ -53,7 +54,7 @@ async function shootPage(name: string): Promise<void> {
   await both(name, (file) => page.screenshot({ path: file }));
 }
 
-async function go(name: 'Capture' | 'History' | 'Settings'): Promise<void> {
+async function go(name: 'Home' | 'Library' | 'Settings'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 }
 
@@ -201,11 +202,11 @@ test('settings: every section', async () => {
 });
 
 test('history', async () => {
-  await go('History');
+  await go('Library');
   await expect(page.getByTestId('history-grid').locator('li').first()).toBeVisible();
   await page.waitForTimeout(600);
   await shootPage('history');
-  await go('Capture');
+  await go('Home');
 });
 
 test('keyboard selection overlay and the editor', async () => {
@@ -229,13 +230,20 @@ test('keyboard selection overlay and the editor', async () => {
   await o.waitForTimeout(500);
   await both('overlay-keyboard', (file) => o.screenshot({ path: file }));
   await o.keyboard.press('Enter').catch(() => undefined);
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await expect(page.getByTestId('editor-canvas')).toBeFocused();
-  await page.waitForTimeout(500);
-  await shootPage('editor');
-  await page.getByTestId('editor-discard').click();
-  await both('discard-dialog', (file) => page.screenshot({ path: file }));
-  await page.getByTestId('confirm-yes').click();
+  // The editor is a window of its own: its pictures are taken of that window.
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-canvas')).toBeFocused();
+  await editor.waitForTimeout(500);
+  await expect(editor.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 12_000 });
+  await both('editor', (file) => editor.screenshot({ path: file }));
+  await editor.getByTestId('editor-discard').click();
+  await both('discard-dialog', (file) => editor.screenshot({ path: file }));
+  await editor
+    .getByTestId('confirm-yes')
+    .click()
+    .catch(() => undefined); // the window closes under the click
+  await expectEditorClosed(app);
   await expect(page.getByTestId('shot-region')).toBeVisible();
 });
 
@@ -252,7 +260,7 @@ test('help, window picker', async () => {
 });
 
 test('recording: the toolbar fits its content in every state, quit question, result', async () => {
-  await go('Capture');
+  await go('Home');
   const toggle = async (id: string, on: boolean): Promise<void> => {
     const control = page.getByTestId(id);
     if ((await control.getAttribute('aria-checked')) !== String(on)) await control.click();

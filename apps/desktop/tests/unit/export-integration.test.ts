@@ -202,7 +202,8 @@ describe.skipIf(paths === null)('real ffmpeg: MP4 export', () => {
     expect(result).toMatchObject({ ok: false, code: 'CANCELLED' });
     expect(fs.existsSync(dest)).toBe(false);
     expect(fs.readdirSync(work).filter((name) => name.includes('.partial.'))).toEqual([]);
-    expect(runningEncodersFor('framecapt-export-')).toBe(false);
+    // Only this test's own folder: other test files may be encoding at the same time.
+    expect(runningEncodersFor(path.basename(work))).toBe(false);
     expect(sha(long)).toBe(before);
 
     // Retry (not cancelled this time) works.

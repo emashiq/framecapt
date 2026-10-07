@@ -6,13 +6,17 @@ import type { ProjectFailure, ProjectStore } from './projects/store';
 import {
   defaultShotFileName,
   detectImageFormat,
+  isImportableImage,
   MAX_FRAME_DIMENSION,
+  MAX_FRAME_PNG_BYTES,
+  MAX_IMPORT_BYTES,
   readImageSize,
   type ShotKind,
   validateImageBytes,
   type ImageFormat,
 } from '../shared/shots';
 import type { CaptureFlow } from './capture-flow';
+import type { FlowService } from './flows/service';
 import type { HistoryService } from './history/service';
 import { validThumbnail } from './history/service';
 import type { RecorderController } from './recorder/controller';
@@ -26,20 +30,66 @@ import { freeFileName } from './shots/free-name';
 import type { ShotSessionStore } from './shots/session-store';
 import type { Settings } from '../shared/settings';
 import { rememberExported, wasExported } from './shots/exported-paths';
-import { writePngToClipboard } from './shots/after-capture';
-import {
-  closeGuard,
-  getMainWindow,
-  onMainWindowClosed,
-  setEditorState,
-  setQuitting,
-} from './windows';
+import { dialogParent, onMainWindowClosed } from './windows';
 
 function toArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(
     buffer.byteOffset,
     buffer.byteOffset + buffer.byteLength,
   ) as ArrayBuffer;
+}
+
+const IMAGE_OPEN_FILTERS: Electron.FileFilter[] = [
+  { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
+];
+
+/** A PNG for a PNG or JPEG file (a JPEG is decoded and re-encoded). Throws for anything else. */
+function pngOf(bytes: Buffer): Buffer {
+  const format = detectImageFormat(bytes);
+  if (format === null)
+    throw new IpcError('INVALID_PAYLOAD', 'The file is not a PNG or JPEG image.');
+  return format === 'png' ? bytes : nativeImage.createFromBuffer(bytes, { scaleFactor: 1 }).toPNG();
+}
+
+/** The size of a PNG whose sides are within the frame limit, or throws. */
+function checkedSize(png: Buffer): { width: number; height: number } {
+  const size = readImageSize(png);
+  if (!size || size.width > MAX_FRAME_DIMENSION || size.height > MAX_FRAME_DIMENSION) {
+    throw new IpcError('INVALID_PAYLOAD', 'The image could not be read.');
+  }
+  return size;
+}
+
+/** The image-layer pictures of a project payload as buffers (the store verifies their hashes). */
+function assetsOf(project: { assets?: { id: string; png: ArrayBuffer }[] | undefined }) {
+  return (project.assets ?? []).map((asset) => ({ id: asset.id, png: Buffer.from(asset.png) }));
+}
+
+/**
+ * Shows the Open dialog for a picture and returns its bytes, checked for size and magic bytes (the
+ * extension is not trusted). The path never leaves main; the renderer decodes the picture.
+ */
+async function pickImage(title: string) {
+  const options: Electron.OpenDialogOptions = {
+    title,
+    filters: IMAGE_OPEN_FILTERS,
+    properties: ['openFile'],
+  };
+  const parent = dialogParent();
+  const result = parent
+    ? await dialog.showOpenDialog(parent, options)
+    : await dialog.showOpenDialog(options);
+  const file = result.filePaths[0];
+  if (result.canceled || !file) return { cancelled: true as const };
+  const stat = await fs.promises.stat(file).catch(() => null);
+  if (!stat?.isFile()) throw new IpcError('NOT_FOUND', 'The file could not be opened.');
+  if (stat.size > MAX_IMPORT_BYTES)
+    throw new IpcError('INVALID_PAYLOAD', 'The image is too large.');
+  const bytes = await fs.promises.readFile(file);
+  if (!isImportableImage(bytes)) {
+    throw new IpcError('INVALID_PAYLOAD', 'The file is not a PNG, JPEG, WebP, GIF or BMP image.');
+  }
+  return { name: path.basename(file), bytes: toArrayBuffer(bytes) };
 }
 
 function dialogFilters(format: ImageFormat): Electron.FileFilter[] {
@@ -65,8 +115,14 @@ export function registerShotHandlers(
   store: ShotSessionStore,
   recorder: RecorderController,
   history: Pick<HistoryService, 'addScreenshot' | 'get' | 'overwriteScreenshot'>,
-  settings: { get(): Settings; screenshotsDir(): string },
+  settings: {
+    get(): Settings;
+    screenshotsDir(): string;
+    /** The auto-copy rule (`AutoCopy.screenshot`): copies the PNG when the setting is on. */
+    copyImage(png: Uint8Array, options?: { quiet?: boolean }): Promise<boolean>;
+  },
   projects?: { store: ProjectStore; appVersion: string },
+  flows?: Pick<FlowService, 'readStep' | 'replaceStep'>,
 ): void {
   /** A screenshot session of this run. */
   const sessionOf = (id: string) => store.get(id);
@@ -75,14 +131,17 @@ export function registerShotHandlers(
    * never sent by the renderer.
    */
   const links = new Map<string, string>();
+  /** Editor sessions opened on one step of a step guide: session id -> the guide and the step. Main-owned. */
+  const stepLinks = new Map<string, { historyId: string; index: number }>();
   /** The overlays belong to the recorder (record-region, pick a screen) or to the screenshot flow. */
   const host = (): SelectionHost => (recorder.selecting ? recorder : flow);
-  /** The session the editor has open. Its original is deleted when the app window closes. */
-  let editorSessionId: string | undefined;
+  /** The sessions the editor tabs have open. Their originals are deleted when the main window closes. */
+  const editorSessions = new Set<string>();
   onMainWindowClosed(() => {
-    if (editorSessionId) store.discardSync(editorSessionId);
-    editorSessionId = undefined;
+    for (const id of editorSessions) store.discardSync(id);
+    editorSessions.clear();
     links.clear();
+    stepLinks.clear();
   });
 
   handle('capture:startScreenshot', { roles: ['main'] }, async (request) => {
@@ -95,7 +154,7 @@ export function registerShotHandlers(
     const png = session && (await store.readOriginal(session.id));
     if (!session || !png)
       throw new IpcError('NOT_FOUND', 'That screenshot is no longer available.');
-    editorSessionId = session.id;
+    editorSessions.add(session.id);
     return { session: store.meta(session), png: toArrayBuffer(png) };
   });
 
@@ -145,7 +204,7 @@ export function registerShotHandlers(
         height: size.height,
         sizeBytes: bytes.byteLength,
         format: request.format,
-        source: session.kind,
+        source: session.kind === 'import' ? 'unknown' : session.kind,
         thumbnail,
         ...(sourceId && { derivedFrom: sourceId }),
         ...(original &&
@@ -153,6 +212,7 @@ export function registerShotHandlers(
             project: {
               png: original,
               doc: request.project.doc,
+              assets: assetsOf(request.project),
               width: session.width,
               height: session.height,
               appVersion: projects?.appVersion ?? '',
@@ -182,9 +242,9 @@ export function registerShotHandlers(
         filters: dialogFilters(request.format),
         properties: ['showOverwriteConfirmation'],
       };
-      const main = getMainWindow();
-      const result = main
-        ? await dialog.showSaveDialog(main, options)
+      const parent = dialogParent();
+      const result = parent
+        ? await dialog.showSaveDialog(parent, options)
         : await dialog.showSaveDialog(options);
       return result.canceled || !result.filePath ? null : result.filePath;
     });
@@ -195,6 +255,13 @@ export function registerShotHandlers(
   // Quick save: the same save with no dialog, into the screenshots folder under a free name.
   handle('shot:quickSave', { roles: ['main'] }, async (request) => {
     const saved = await exportShot(request, async () => {
+      // "Keep original and save new": a free "<name> (edited)" next to the item it was opened from.
+      const source = request.beside ? history.get(links.get(request.sessionId) ?? '') : undefined;
+      if (source) {
+        const base = path.basename(source.path, path.extname(source.path));
+        const extension = request.format === 'jpeg' ? 'jpg' : 'png';
+        return freeFileName(path.dirname(source.path), `${base} (edited).${extension}`);
+      }
       const folder = settings.screenshotsDir();
       await fs.promises.mkdir(folder, { recursive: true });
       return freeFileName(folder, defaultShotFileName(new Date(), request.format));
@@ -203,14 +270,16 @@ export function registerShotHandlers(
     return { path: saved.path, ...(saved.itemId && { historyId: saved.itemId }) };
   });
 
-  /** The "copy to clipboard on save" setting; the clipboard takes PNG (a JPEG is decoded and re-encoded). */
+  /**
+   * The auto-copy rule after an edit is saved: the exported bytes (flattened, redactions in the
+   * pixels), never the unredacted original. The clipboard takes PNG (a JPEG is decoded and
+   * re-encoded). The editor says "Saved" itself, so this one is quiet.
+   */
   async function copyOnSave(bytes: Buffer, format: ImageFormat): Promise<void> {
-    if (!settings.get().screenshots.copyToClipboardOnSave) return;
+    if (!settings.get().screenshots.autoCopy) return;
     const png =
       format === 'png' ? bytes : nativeImage.createFromBuffer(bytes, { scaleFactor: 1 }).toPNG();
-    await writePngToClipboard(png).catch((error: unknown) =>
-      log.warn(`Copy on save failed: ${String(error)}`),
-    );
+    await settings.copyImage(png, { quiet: true });
   }
 
   handle('shot:openFromHistory', { roles: ['main'] }, async (request) => {
@@ -226,6 +295,7 @@ export function registerShotHandlers(
     let png: Buffer | undefined;
     let doc: Record<string, unknown> | null = null;
     let notice: string | null = null;
+    let assets: { id: string; png: ArrayBuffer }[] = [];
     // The project is looked up by the ITEM's id (never by a stored name), so it is only ever the
     // one that belongs to this item.
     if (item.projectId !== undefined && projects && request.flattened !== true) {
@@ -233,27 +303,19 @@ export function registerShotHandlers(
       if (project.ok) {
         png = project.png;
         doc = project.doc;
+        assets = project.assets.map((asset) => ({ id: asset.id, png: toArrayBuffer(asset.png) }));
       } else {
         notice = projectNotice(project.reason);
       }
     }
-    if (!png) {
-      const bytes = await fs.promises.readFile(item.path);
-      const format = detectImageFormat(bytes);
-      if (format === null) {
-        throw new IpcError('INVALID_PAYLOAD', 'The file is not a PNG or JPEG image.');
-      }
-      png =
-        format === 'png' ? bytes : nativeImage.createFromBuffer(bytes, { scaleFactor: 1 }).toPNG();
-    }
-    const size = readImageSize(png);
-    if (!size || size.width > MAX_FRAME_DIMENSION || size.height > MAX_FRAME_DIMENSION) {
-      throw new IpcError('INVALID_PAYLOAD', 'The image could not be read.');
-    }
-    const kind: ShotKind = item.source === 'unknown' ? 'region' : item.source;
+    png ??= pngOf(await fs.promises.readFile(item.path));
+    const size = checkedSize(png);
+    // A screenshot is never a multi-source item; anything not a plain capture opens as an import.
+    const kind: ShotKind =
+      item.source === 'unknown' || item.source === 'multi' ? 'import' : item.source;
     const session = await store.create({ kind, width: size.width, height: size.height, png });
     links.set(session.id, item.id);
-    editorSessionId = session.id;
+    editorSessions.add(session.id);
     return {
       session: store.meta(session),
       png: toArrayBuffer(png),
@@ -263,12 +325,82 @@ export function registerShotHandlers(
         mode: doc ? ('project' as const) : ('flattened' as const),
         doc,
         notice,
+        assets,
       },
     };
   });
 
+  // One step of a step guide in the editor: Save writes the edited picture over that step's image.
+  handle('flow:openStepInEditor', { roles: ['main'] }, async (request) => {
+    if (!flows) throw new IpcError('INTERNAL', 'Step guides are not available.');
+    const step = await flows.readStep(request.historyId, request.index);
+    const session = await store.create({
+      kind: 'screen',
+      width: step.width,
+      height: step.height,
+      png: step.png,
+    });
+    stepLinks.set(session.id, { historyId: request.historyId, index: request.index });
+    editorSessions.add(session.id);
+    return {
+      session: store.meta(session),
+      png: toArrayBuffer(step.png),
+      edit: {
+        historyId: request.historyId,
+        format: 'png' as const,
+        mode: 'flattened' as const,
+        doc: null,
+        notice: null,
+        assets: [],
+      },
+    };
+  });
+
+  handle('shot:openImage', { roles: ['main'] }, () => pickImage('Open image'));
+  handle('editor:pickImage', { roles: ['main'] }, () => pickImage('Insert image'));
+
+  // A picture the user opened, dropped or pasted, already decoded and re-encoded as PNG by the
+  // renderer: validated again here, then an editor session of its own. It is NOT saved anywhere
+  // (the after-capture settings are for captures only).
+  handle('shot:importImage', { roles: ['main'] }, async (request) => {
+    const png = Buffer.from(request.png);
+    const check = validateImageBytes('png', png, MAX_FRAME_PNG_BYTES);
+    if (!check.ok) throw new IpcError('INVALID_PAYLOAD', check.reason);
+    const size = checkedSize(png);
+    const session = await store.create({ kind: 'import', ...size, png });
+    editorSessions.add(session.id);
+    return { session: store.meta(session) };
+  });
+
+  handle('editor:historyImage', { roles: ['main'] }, async (request) => {
+    const item = history.get(request.historyId);
+    if (!item || item.type !== 'screenshot') {
+      throw new IpcError('NOT_FOUND', 'That screenshot is not in history.');
+    }
+    const stat = await fs.promises.stat(item.path).catch(() => null);
+    if (!stat?.isFile()) throw new IpcError('NOT_FOUND', 'The file was moved or deleted.');
+    if (stat.size > MAX_IMPORT_BYTES)
+      throw new IpcError('INVALID_PAYLOAD', 'The image is too large.');
+    const png = pngOf(await fs.promises.readFile(item.path));
+    checkedSize(png);
+    return { png: toArrayBuffer(png) };
+  });
+
   handle('shot:saveOver', { roles: ['main'] }, async (request) => {
     const session = sessionOf(request.sessionId);
+    const stepLink = stepLinks.get(request.sessionId);
+    if (session && stepLink && flows) {
+      if (request.format !== 'png') {
+        throw new IpcError('INVALID_PAYLOAD', 'A step of a guide is saved as PNG.');
+      }
+      const saved = await flows.replaceStep(
+        stepLink.historyId,
+        stepLink.index,
+        new Uint8Array(request.bytes),
+      );
+      rememberExported(saved.path);
+      return { historyId: stepLink.historyId, path: saved.path, editable: false };
+    }
     const sourceId = links.get(request.sessionId);
     if (!session || !sourceId) {
       throw new IpcError('NOT_FOUND', 'That screenshot is no longer available.');
@@ -306,6 +438,7 @@ export function registerShotHandlers(
       ...(wanted && {
         project: {
           doc: wanted.doc,
+          assets: assetsOf(wanted),
           appVersion: projects?.appVersion ?? '',
           ...(original && {
             base: { png: original, width: session.width, height: session.height },
@@ -337,19 +470,10 @@ export function registerShotHandlers(
   });
 
   handle('shot:discard', { roles: ['main'] }, async (request) => {
-    if (editorSessionId === request.sessionId) editorSessionId = undefined;
+    editorSessions.delete(request.sessionId);
     links.delete(request.sessionId);
+    stepLinks.delete(request.sessionId);
     await store.discard(request.sessionId);
-  });
-
-  handle('editor:setDirty', { roles: ['main'] }, (request) => {
-    closeGuard.setDirty(request.dirty);
-    setEditorState({ open: request.open ?? request.dirty, dirty: request.dirty });
-  });
-  handle('editor:resolveClose', { roles: ['main'] }, (request) => {
-    // "Keep editing" also withdraws a quit that was waiting on this answer.
-    if (!request.discard) setQuitting(false);
-    if (closeGuard.resolve(request.discard)) getMainWindow()?.close();
   });
 
   handle('shell:showItemInFolder', { roles: ['main'] }, (request) => {

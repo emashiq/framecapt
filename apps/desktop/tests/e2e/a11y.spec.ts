@@ -16,6 +16,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { makeWebm, mockScreenshotPng, newId, seedHistory } from './history-fixtures';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -97,8 +98,8 @@ async function setTheme(theme: (typeof THEMES)[number]): Promise<void> {
   await page.waitForTimeout(400);
 }
 
-async function scan(name: string, scope?: string): Promise<void> {
-  let builder = new AxeBuilder({ page })
+async function scan(name: string, scope?: string, target: Page = page): Promise<void> {
+  let builder = new AxeBuilder({ page: target })
     .setLegacyMode()
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']);
   if (scope) builder = builder.include(scope);
@@ -116,19 +117,19 @@ async function scan(name: string, scope?: string): Promise<void> {
   expect(summary, `${name}: serious or critical accessibility violations`).toEqual([]);
 }
 
-async function go(name: 'Capture' | 'History' | 'Settings'): Promise<void> {
+async function go(name: 'Home' | 'Library' | 'Settings'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 }
 
 for (const theme of THEMES) {
   test(`Home, History and every Settings section (${theme})`, async () => {
     await setTheme(theme);
-    await go('Capture');
+    await go('Home');
     await expect(page.getByTestId('shot-region')).toBeVisible();
     await expect(page.getByTestId('home-tip')).toBeVisible();
     await scan(`Home ${theme}`);
 
-    await go('History');
+    await go('Library');
     await expect(page.getByTestId('history-grid').locator('li').first()).toBeVisible();
     await page.waitForTimeout(500); // thumbnails
     await scan(`History ${theme}`);
@@ -155,7 +156,7 @@ for (const theme of THEMES) {
 
   test(`Title bar (${theme})`, async () => {
     await setTheme(theme);
-    await go('Capture');
+    await go('Home');
     await expect(page.getByTestId('shot-region')).toBeVisible();
     await page.waitForTimeout(400); // the view's entry animation
     await expect(page.getByTestId('title-bar')).toBeVisible();
@@ -164,7 +165,7 @@ for (const theme of THEMES) {
 
   test(`Editor, dialogs and the window picker (${theme})`, async () => {
     await setTheme(theme);
-    await go('Capture');
+    await go('Home');
     // The editor, from a real region capture on the mock display.
     await page.getByTestId('shot-region').click();
     const overlay = await (async () => {
@@ -185,15 +186,28 @@ for (const theme of THEMES) {
     })();
     await overlay.keyboard.press('ArrowRight');
     await overlay.keyboard.press('Enter').catch(() => undefined);
-    await expect(page.getByTestId('editor-view')).toBeVisible();
-    await page.waitForTimeout(500);
-    await scan(`Editor ${theme}`);
+    // The editor is a window of its own now (its tab strip is the title bar).
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-view')).toBeVisible();
+    await expect(editor.locator('html')).toHaveAttribute('data-theme', theme);
+    await editor.waitForTimeout(500);
+    await scan(`Editor ${theme}`, undefined, editor);
 
-    // Dialogs over the editor: the discard question and the keyboard help.
-    await page.getByTestId('editor-discard').click();
-    await expect(page.getByTestId('confirm-dialog')).toBeVisible();
-    await scan(`Discard dialog ${theme}`);
-    await page.getByTestId('confirm-yes').click();
+    // Dialogs over the editor: the save question and the keyboard help.
+    await editor.getByTestId('editor-discard').click();
+    await expect(editor.getByTestId('confirm-dialog')).toBeVisible();
+    await scan(`Save question ${theme}`, undefined, editor);
+    await editor.getByTestId('confirm-no').click();
+    await editor.keyboard.press('?');
+    await expect(editor.getByTestId('keyboard-help')).toBeVisible();
+    await scan(`Editor keyboard help ${theme}`, undefined, editor);
+    await editor.keyboard.press('Escape');
+    await editor.getByTestId('editor-discard').click();
+    await editor
+      .getByTestId('confirm-yes')
+      .click()
+      .catch(() => undefined); // Don't save: the window closes under the click
+    await expectEditorClosed(app);
     await expect(page.getByTestId('shot-region')).toBeVisible();
 
     await page.keyboard.press('?');

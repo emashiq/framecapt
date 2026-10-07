@@ -5,6 +5,7 @@ import {
   isPermissionAllowed,
   type AppOriginConfig,
 } from '../../src/main/app-origin';
+import { ROLES } from '../../src/shared/types';
 
 const prod: AppOriginConfig = {};
 const dev: AppOriginConfig = { devServerUrl: 'http://localhost:5173' };
@@ -67,10 +68,53 @@ describe('isPermissionAllowed', () => {
     expect(isPermissionAllowed('clipboard-sanitized-write', url, prod)).toBe(true);
   });
 
-  it('allows the microphone but denies any media request that includes video', () => {
+  it('allows the microphone for every window', () => {
     expect(isPermissionAllowed('media', url, prod, ['audio'])).toBe(true);
+    for (const role of ROLES) {
+      expect(isPermissionAllowed('media', url, prod, ['audio'], role, 'request')).toBe(true);
+    }
+  });
+
+  it('video requests (getUserMedia) are for the recorder and camera windows only', () => {
+    for (const role of ROLES) {
+      const expected = role === 'recorder' || role === 'camera';
+      for (const types of [['video'], ['audio', 'video']]) {
+        expect(isPermissionAllowed('media', url, prod, types, role, 'request'), role).toBe(
+          expected,
+        );
+      }
+    }
+    // No role (an unregistered window), or no role given: denied.
     expect(isPermissionAllowed('media', url, prod, ['video'])).toBe(false);
-    expect(isPermissionAllowed('media', url, prod, ['audio', 'video'])).toBe(false);
+    expect(isPermissionAllowed('media', url, prod, ['video'], undefined, 'request')).toBe(false);
+  });
+
+  it('video checks (device labels) are also allowed for the main window, no other', () => {
+    for (const role of ROLES) {
+      const expected = role === 'main' || role === 'recorder' || role === 'camera';
+      expect(isPermissionAllowed('media', url, prod, ['video'], role, 'check'), role).toBe(
+        expected,
+      );
+    }
+    expect(isPermissionAllowed('media', url, prod, ['video'], undefined, 'check')).toBe(false);
+  });
+
+  it('a camera permission is still only for the app origin', () => {
+    expect(
+      isPermissionAllowed('media', 'http://evil.example/', prod, ['video'], 'camera', 'request'),
+    ).toBe(false);
+  });
+
+  it('fullscreen (the video player) is for the main window only, and only for the app origin', () => {
+    for (const role of ROLES) {
+      expect(isPermissionAllowed('fullscreen', url, prod, undefined, role, 'request'), role).toBe(
+        role === 'main',
+      );
+    }
+    expect(isPermissionAllowed('fullscreen', url, prod)).toBe(false);
+    expect(isPermissionAllowed('fullscreen', 'http://evil.example/', prod, undefined, 'main')).toBe(
+      false,
+    );
   });
 
   it('denies other permissions and foreign origins', () => {

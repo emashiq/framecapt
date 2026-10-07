@@ -184,7 +184,7 @@ export function startSettingsSync(): () => void {
   };
 }
 
-/** How many shortcuts that are set could not be registered (the warning on the home view). */
+/** How many shortcuts that are set could not be registered (the warning on Home). */
 export function problemCount(states: ShortcutStates | null): number {
   if (!states) return 0;
   return SHORTCUT_ACTIONS.filter(

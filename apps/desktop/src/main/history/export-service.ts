@@ -9,6 +9,7 @@ import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import { exportMp4 as realExportMp4, type Mp4Capability } from '../media/export';
 import type { MediaTools } from '../media/ffmpeg';
+import { JobRunner } from '../media/job-runner';
 import type { HistoryService } from './service';
 
 export interface ExportDeps {
@@ -24,15 +25,10 @@ export interface ExportDeps {
     done: (event: ExportDoneEvent) => void;
     failed: (event: ExportFailedEvent) => void;
   };
+  /** Shared with the compression service so only one ffmpeg job runs at a time. */
+  runner?: JobRunner;
   /** Replaceable in tests. */
   exportMp4?: typeof realExportMp4;
-}
-
-interface Job {
-  jobId: string;
-  historyId: string;
-  controller: AbortController;
-  finished: Promise<void>;
 }
 
 /**
@@ -41,14 +37,16 @@ interface Job {
  * core, and a second job on the same source would only fight the first for the same file.
  */
 export class ExportService {
-  private job: Job | null = null;
+  private readonly runner: JobRunner;
   /** True from the request until the dialog answered, so two clicks open one dialog. */
   private choosing = false;
 
-  constructor(private readonly deps: ExportDeps) {}
+  constructor(private readonly deps: ExportDeps) {
+    this.runner = deps.runner ?? new JobRunner();
+  }
 
   get active(): boolean {
-    return this.job !== null || this.choosing;
+    return this.runner.busy || this.choosing;
   }
 
   async start(historyId: string): Promise<{ jobId: string } | { cancelled: true }> {
@@ -101,29 +99,31 @@ export class ExportService {
     if (destPath === null) return { cancelled: true };
 
     const jobId = randomUUID();
-    const controller = new AbortController();
-    const job: Job = { jobId, historyId, controller, finished: Promise.resolve() };
-    this.job = job;
-    job.finished = this.run(job, item, destPath).finally(() => {
-      if (this.job === job) this.job = null;
+    this.runner.enqueue({
+      id: jobId,
+      label: 'export-mp4',
+      onProgress: (percent) => this.deps.emit.progress({ jobId, historyId, percent }),
+      run: ({ signal, onProgress }) => this.run(jobId, item, destPath, signal, onProgress),
     });
     return { jobId };
   }
 
   private async run(
-    job: Job,
+    jobId: string,
     item: NonNullable<ReturnType<ExportDeps['history']['get']>>,
     destPath: string,
+    signal: AbortSignal,
+    onProgress: (percent: number | null) => void,
   ): Promise<void> {
-    const { jobId, historyId } = job;
+    const historyId = item.id;
     const exportMp4 = this.deps.exportMp4 ?? realExportMp4;
     try {
       const result = await exportMp4({
         tools: this.deps.tools,
         sourcePath: item.path,
         destPath,
-        signal: job.controller.signal,
-        onProgress: (percent) => this.deps.emit.progress({ jobId, historyId, percent }),
+        signal,
+        onProgress,
       });
       if (!result.ok) {
         log.warn(`MP4 export ended: ${result.code}`);
@@ -170,20 +170,16 @@ export class ExportService {
   }
 
   cancel(jobId: string): void {
-    if (this.job?.jobId !== jobId) throw new IpcError('NOT_FOUND', 'That export is not running.');
-    this.job.controller.abort();
+    if (!this.runner.cancel(jobId)) throw new IpcError('NOT_FOUND', 'That export is not running.');
   }
 
   /** Aborts the running export and waits until its partial file is gone (quit path). */
-  async cancelAll(): Promise<void> {
-    const job = this.job;
-    if (!job) return;
-    job.controller.abort();
-    await job.finished;
+  cancelAll(): Promise<void> {
+    return this.runner.cancelAll();
   }
 
   /** Resolves when the running job (if any) has finished; for tests. */
-  async settled(): Promise<void> {
-    await this.job?.finished;
+  settled(): Promise<void> {
+    return this.runner.idle();
   }
 }

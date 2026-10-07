@@ -97,18 +97,48 @@ describe('HistoryStore', () => {
     expect(JSON.parse(fs.readFileSync(path.join(dir, HISTORY_FILE), 'utf8')).items).toHaveLength(1);
   });
 
-  it('treats a wrong version or a bad item as damage, not as data to trust', async () => {
-    for (const body of [
-      { version: 2, items: [] },
-      { version: 1, items: [{ id: 'not-a-uuid' }] },
-      { version: 1, items: [{ ...item(), thumbnail: '../../escape.png' }] },
-      [],
-    ]) {
+  it('treats a wrong version or a damaged top level as damage', async () => {
+    for (const body of [{ version: 2, items: [] }, { version: 1 }, { version: 1, items: {} }, []]) {
       fs.writeFileSync(path.join(dir, HISTORY_FILE), JSON.stringify(body));
       const store = new HistoryStore(dir);
       expect((await store.load()).reset).toBe(true);
       expect(store.items()).toEqual([]);
     }
+  });
+
+  it('keeps items it does not understand, unlisted, and writes them back unchanged', async () => {
+    const good = item({ createdAt: 5 });
+    const flow = { id: id(), type: 'flow', createdAt: 9, extra: { steps: [1, 2] } };
+    const future = { ...item(), format: 'avif-from-a-future-version' };
+    const escape = { ...item(), thumbnail: '../../escape.png' };
+    fs.writeFileSync(
+      path.join(dir, HISTORY_FILE),
+      JSON.stringify({ version: 1, items: [flow, good, future, escape, 7] }),
+    );
+    const store = new HistoryStore(dir);
+    expect(await store.load()).toEqual({ existed: true, reset: false });
+    expect(store.items()).toEqual([good]);
+    expect(store.get(flow.id)).toBeUndefined();
+
+    const newer = item({ createdAt: 6 });
+    await store.put(newer);
+    await store.remove([good.id]);
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dir, HISTORY_FILE), 'utf8'));
+    expect(onDisk.items).toEqual([newer, flow, future, escape, 7]);
+    expect(fs.readdirSync(dir)).toEqual([HISTORY_FILE]);
+  });
+
+  it('counts unknown items toward the cap', async () => {
+    const unknown = [{ type: 'flow' }, { type: 'flow' }];
+    fs.writeFileSync(path.join(dir, HISTORY_FILE), JSON.stringify({ version: 1, items: unknown }));
+    const store = new HistoryStore(dir, 3);
+    await store.load();
+    await store.put(item({ createdAt: 1 }));
+    const dropped = await store.put(item({ createdAt: 2 }));
+    expect(dropped.map((entry) => entry.createdAt)).toEqual([1]);
+    expect(store.count).toBe(1);
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dir, HISTORY_FILE), 'utf8'));
+    expect(onDisk.items).toHaveLength(3);
   });
 
   it('drops the oldest entries beyond the cap from the list only', async () => {

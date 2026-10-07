@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
   Copy,
+  CopyPlus,
   ExternalLink,
+  FileBox,
   FileX2,
   FolderOpen,
   Link2,
@@ -15,12 +17,21 @@ import { formatBytes, formatDuration } from '../../../shared/recording';
 import { Mp4Export } from '../../components/Mp4Export';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { fileUrl, newNonce } from '../../history/media-url';
+import { fileUrl, newNonce, thumbUrl } from '../../history/media-url';
 import { cn } from '../../lib/cn';
 import { revealDuration } from '../../lib/reveal-duration';
 import { formatExact, formatRelative } from '../../lib/time';
-import type { ItemActions } from './actions';
+import {
+  canDuplicateItem,
+  canEditItem,
+  canSaveProjectFile,
+  editLabel,
+  type ItemActions,
+} from './actions';
 import { dimensionsText, TypeBadge } from './HistoryCard';
+import { FcapExtract } from './FcapExtract';
+import { FcapPlayer } from './FcapPlayer';
+import { SaveAsButton, SaveAsProgress, canSaveAs } from './SaveAs';
 import { Thumb } from './Thumb';
 
 export interface HistoryDetailsProps {
@@ -42,6 +53,7 @@ const SOURCE_LABEL: Record<HistoryItemView['source'], string> = {
   screen: 'Whole screen',
   window: 'Window',
   region: 'Region',
+  multi: 'Multiple sources',
   unknown: 'Unknown',
 };
 
@@ -64,22 +76,56 @@ function Row({ label, children, testId }: { label: string; children: ReactNode; 
  */
 function Preview({ item }: { item: HistoryItemView }) {
   const [nonce] = useState(newNonce);
-  const src = fileUrl(item.id, nonce);
-  return item.type === 'recording' ? (
-    <video
-      data-testid="history-video"
-      src={src}
-      controls
-      preload="metadata"
-      onLoadedMetadata={(event) => revealDuration(event.currentTarget)}
-      className="max-h-[min(58vh,520px)] w-full rounded-lg bg-black"
-    />
-  ) : (
+  const [failed, setFailed] = useState(false);
+  // A guide has no single file to show: its first step (the thumbnail) stands for it.
+  const src = item.type === 'flow' ? thumbUrl(item.id, nonce) : fileUrl(item.id, nonce);
+  // A multi-source recording plays only here: tabs choose the whole picture or one source.
+  if (item.format === 'fcap') {
+    return item.layout ? (
+      <FcapPlayer item={item} layout={item.layout} />
+    ) : (
+      <p
+        role="alert"
+        data-testid="fcap-unreadable"
+        className="rounded-lg bg-danger-soft px-3 py-6 text-center text-[13px] text-danger"
+      >
+        FrameCapt cannot read this recording. The file may be damaged or incomplete.
+      </p>
+    );
+  }
+  // A GIF is a recording (it came from one) but an <img> plays it.
+  if (item.type === 'recording' && item.format !== 'gif') {
+    return failed ? (
+      <p
+        role="alert"
+        data-testid="history-video-unplayable"
+        className="rounded-lg bg-surface-2 px-3 py-6 text-center text-[13px] text-fg-muted"
+      >
+        FrameCapt cannot play this {item.format.toUpperCase()} file here (its video or audio format
+        is not one the built-in player supports). Use Open to play it in your video player.
+      </p>
+    ) : (
+      <video
+        data-testid="history-video"
+        src={src}
+        controls
+        preload="metadata"
+        onLoadedMetadata={(event) => revealDuration(event.currentTarget)}
+        onError={() => setFailed(true)}
+        className="max-h-[min(58vh,520px)] w-full rounded-lg bg-black"
+      />
+    );
+  }
+  return (
     <div className="checkerboard flex items-center justify-center rounded-lg">
       <img
         data-testid="history-image"
         src={src}
-        alt={`Screenshot ${item.fileName}`}
+        alt={
+          item.type === 'flow'
+            ? `Step guide ${item.fileName}`
+            : `${item.type === 'recording' ? 'Animation' : 'Screenshot'} ${item.fileName}`
+        }
         className="max-h-[min(58vh,520px)] w-full object-contain"
       />
     </div>
@@ -157,6 +203,14 @@ export function HistoryDetails({
           {isVideo && item.format === 'webm' && !missing ? (
             <Mp4Export historyId={item.id} className="w-full" />
           ) : null}
+          {canSaveAs(item) && !missing ? <SaveAsProgress item={item} /> : null}
+          {item.format === 'fcap' && item.layout && !missing ? (
+            <p className="text-[13px] text-fg-muted" data-testid="fcap-note">
+              This recording opens only in FrameCapt. Use Extract to save one source, or a part of
+              it, as an MP4 or WebM video that plays anywhere, or Edit video to cut, crop and export
+              it.
+            </p>
+          ) : null}
           <p className="selectable text-xs break-all text-fg-subtle" data-testid="history-path">
             {item.path}
           </p>
@@ -166,7 +220,9 @@ export function HistoryDetails({
           <Card padding="md" className="p-4">
             <dl className="divide-y divide-line">
               <Row label="Type">
-                {isVideo ? 'Recording' : 'Screenshot'} · {item.format.toUpperCase()}
+                {item.type === 'flow'
+                  ? `Step guide · ${item.stepCount ?? 0} ${item.stepCount === 1 ? 'step' : 'steps'}`
+                  : `${isVideo ? 'Recording' : 'Screenshot'} · ${item.format.toUpperCase()}`}
               </Row>
               <Row label="Created">
                 <span title={formatExact(item.createdAt)}>
@@ -182,6 +238,11 @@ export function HistoryDetails({
                 <Row label="Audio">{item.hasAudio ? 'With audio' : 'No audio'}</Row>
               ) : null}
               <Row label="Captured">{SOURCE_LABEL[item.source]}</Row>
+              {item.layout ? (
+                <Row label="Sources" testId="fcap-sources">
+                  {item.layout.sources.map((source) => source.name).join(', ')}
+                </Row>
+              ) : null}
               {item.derivedFrom ? (
                 <Row label="Converted from">
                   {original ? (
@@ -225,22 +286,28 @@ export function HistoryDetails({
               </>
             ) : (
               <>
-                <Button
-                  variant="primary"
-                  data-testid="details-open"
-                  icon={<ExternalLink className="size-4" aria-hidden="true" />}
-                  onClick={() => actions.open(item)}
-                >
-                  Open
-                </Button>
-                {!isVideo && onEdit ? (
+                {item.format === 'fcap' ? (
+                  item.layout ? (
+                    <FcapExtract key={item.id} item={item} layout={item.layout} />
+                  ) : null
+                ) : (
+                  <Button
+                    variant="primary"
+                    data-testid="details-open"
+                    icon={<ExternalLink className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.open(item)}
+                  >
+                    {item.type === 'flow' ? 'Open guide' : 'Open'}
+                  </Button>
+                )}
+                {canEditItem(item) && onEdit ? (
                   <Button
                     variant="secondary"
                     data-testid="details-edit"
                     icon={<Pencil className="size-4" aria-hidden="true" />}
                     onClick={() => onEdit(item)}
                   >
-                    Edit
+                    {editLabel(item)}
                   </Button>
                 ) : null}
                 <div className="grid grid-cols-2 gap-2">
@@ -258,9 +325,10 @@ export function HistoryDetails({
                     icon={<Copy className="size-4" aria-hidden="true" />}
                     onClick={() => actions.copy(item)}
                   >
-                    {isVideo ? 'Copy path' : 'Copy image'}
+                    {item.type === 'screenshot' ? 'Copy image' : 'Copy path'}
                   </Button>
                 </div>
+                {canSaveAs(item) ? <SaveAsButton onOpen={() => actions.saveAs(item)} /> : null}
                 {isVideo ? (
                   <Button
                     variant="secondary"
@@ -269,6 +337,26 @@ export function HistoryDetails({
                     onClick={() => actions.saveCopy(item)}
                   >
                     Save a copy as…
+                  </Button>
+                ) : null}
+                {canDuplicateItem(item) ? (
+                  <Button
+                    variant="secondary"
+                    data-testid="details-duplicate"
+                    icon={<CopyPlus className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.duplicate(item)}
+                  >
+                    Duplicate
+                  </Button>
+                ) : null}
+                {canSaveProjectFile(item) ? (
+                  <Button
+                    variant="secondary"
+                    data-testid="details-save-project"
+                    icon={<FileBox className="size-4" aria-hidden="true" />}
+                    onClick={() => actions.saveProjectFile(item)}
+                  >
+                    Save as project file…
                   </Button>
                 ) : null}
                 {item.editable && onAskDeleteProject ? (

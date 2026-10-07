@@ -1,6 +1,7 @@
 import { announce, notify } from '../../lib/notify';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { startMp4Export } from '../../history/export-store';
+import { openSaveAs } from '../../history/save-as-store';
 
 type Outcome = { ok: boolean; error?: { message: string } };
 
@@ -25,15 +26,30 @@ export interface ItemActions {
   locate(item: HistoryItemView): void;
   exportMp4(item: HistoryItemView): void;
   saveCopy(item: HistoryItemView): void;
+  /** Opens the "Save in another format" dialog (a new file next to the recording). */
+  saveAs(item: HistoryItemView): void;
+  /** A copy next to the original, with its edits, as a new item. */
+  duplicate(item: HistoryItemView): void;
+  /** Saves the item's edits as a `.fcimage` / `.fcvideo` project file. */
+  saveProjectFile(item: HistoryItemView): void;
 }
 
 /**
  * The actions of a history item. All go through main by id. None of them deletes a file: that is
  * a separate, confirmed action (`deleteItemFile`).
  */
-export function createItemActions(reload: () => void): ItemActions {
+export function createItemActions(
+  reload: () => void,
+  /** A step guide opens in the Flow view (the app owns navigation). */
+  openFlow?: (id: string) => void,
+  /** Called with the id of a duplicate once it is made (the view selects it). */
+  onDuplicated?: (id: string) => void,
+): ItemActions {
   return {
-    open: (item) => void run(window.framecapt.invoke('history:open', { id: item.id })),
+    open: (item) =>
+      item.type === 'flow'
+        ? openFlow?.(item.id)
+        : void run(window.framecapt.invoke('history:open', { id: item.id })),
     reveal: (item) => void run(window.framecapt.invoke('history:reveal', { id: item.id })),
     copy: (item) =>
       void (item.type === 'screenshot'
@@ -64,6 +80,25 @@ export function createItemActions(reload: () => void): ItemActions {
         reload();
       }),
     exportMp4: (item) => void startMp4Export(item.id),
+    saveAs: (item) => openSaveAs(item),
+    duplicate: (item) =>
+      void window.framecapt.invoke('history:duplicate', { id: item.id }).then((response) => {
+        if (!response.ok) {
+          notify.error(response.error);
+          return;
+        }
+        reload();
+        onDuplicated?.(response.data.id);
+        notify.success('Duplicated');
+      }),
+    saveProjectFile: (item) =>
+      void window.framecapt.invoke('history:saveProjectFile', { id: item.id }).then((response) => {
+        if (!response.ok) notify.error(response.error);
+        else if ('path' in response.data) {
+          reload();
+          notify.success('Project file saved');
+        }
+      }),
     saveCopy: (item) =>
       void window.framecapt.invoke('history:saveCopy', { id: item.id }).then((response) => {
         if (!response.ok) notify.error(response.error);
@@ -131,4 +166,28 @@ export function startItemDrag(item: HistoryItemView): void {
   void window.framecapt.invoke('history:startDrag', { id: item.id }).then((response) => {
     if (!response.ok) notify.error(response.error);
   });
+}
+
+/** True for what the History "Edit" action can open: a screenshot (image editor) or a WebM, MP4 or multi-source recording (video editor). */
+export function canEditItem(item: HistoryItemView): boolean {
+  return (
+    item.type === 'screenshot' ||
+    (item.type === 'recording' &&
+      (item.format === 'webm' || item.format === 'mp4' || item.format === 'fcap'))
+  );
+}
+
+/** True when a Duplicate makes sense: a screenshot or a recording (not a step guide). */
+export function canDuplicateItem(item: HistoryItemView): boolean {
+  return item.type === 'screenshot' || item.type === 'recording';
+}
+
+/** True when the item's edits can be saved as a project file (it has stored edits). */
+export function canSaveProjectFile(item: HistoryItemView): boolean {
+  return canDuplicateItem(item) && item.hasEditState === true;
+}
+
+/** "Edit" for a screenshot, "Edit video" for a recording. */
+export function editLabel(item: HistoryItemView): string {
+  return item.type === 'recording' ? 'Edit video' : 'Edit';
 }

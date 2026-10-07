@@ -17,17 +17,29 @@ describe('ipc contract', () => {
       'app:reportError',
       'app:requestQuit',
       'app:resolveQuit',
+      'camera:getStyle',
+      'camera:setStyle',
       'capture:grant',
       'capture:listDisplays',
       'capture:listSources',
       'capture:startScreenshot',
       'diagnostics:revealFolder',
       'diagnostics:saveRecording',
+      'editor:historyImage',
+      'editor:open',
+      'editor:openVideo',
+      'editor:pickImage',
+      'editor:ready',
       'editor:resolveClose',
-      'editor:setDirty',
+      'editor:setState',
       'export:cancel',
       'export:capabilities',
       'export:mp4',
+      'flow:export',
+      'flow:get',
+      'flow:openStepInEditor',
+      'flow:readStep',
+      'flow:update',
       'history:cancelBulk',
       'history:clearMissing',
       'history:consumeNotice',
@@ -35,15 +47,30 @@ describe('ipc contract', () => {
       'history:copyPath',
       'history:deleteFile',
       'history:deleteProject',
+      'history:duplicate',
       'history:exportMany',
+      'history:extractFcap',
       'history:list',
       'history:open',
+      'history:openProjectFile',
       'history:relink',
       'history:remove',
+      'history:rescan',
       'history:reveal',
+      'history:saveAs',
       'history:saveCopy',
+      'history:saveProjectFile',
+      'history:splitSources',
       'history:startDrag',
       'history:undoRemove',
+      'library:createFolder',
+      'library:deleteFolder',
+      'library:moveContentsUp',
+      'library:moveItems',
+      'library:renameFolder',
+      'library:reveal',
+      'library:setCaptureFolder',
+      'library:tree',
       'overlay:cancel',
       'overlay:confirm',
       'overlay:getInit',
@@ -58,9 +85,11 @@ describe('ipc contract', () => {
       'recorder:reset',
       'recorder:resolveChoice',
       'recorder:resume',
+      'recorder:screenshot',
       'recorder:showInFolder',
       'recorder:start',
       'recorder:stop',
+      'recorder:toggleCamera',
       'recorder:toggleMute',
       'recovery:discard',
       'recovery:list',
@@ -83,35 +112,58 @@ describe('ipc contract', () => {
       'shot:discard',
       'shot:export',
       'shot:get',
+      'shot:importImage',
       'shot:openFromHistory',
+      'shot:openImage',
       'shot:quickSave',
       'shot:saveOver',
+      'steps:cancel',
+      'steps:captureStep',
+      'steps:done',
+      'steps:getState',
+      'steps:pause',
+      'steps:resume',
+      'steps:setAuto',
+      'steps:start',
       'toolbar:resize',
+      'video:addImage',
+      'video:addRecordedAudio',
+      'video:export',
+      'video:open',
+      'video:pickAudio',
+      'video:save',
       'worker:frameError',
       'worker:frameResult',
       'worker:ready',
     ]);
     expect([...IPC_EVENTS].sort()).toEqual([
-      'app:confirmClose',
       'app:confirmQuit',
       'app:navigate',
       'app:startRequest',
       'app:themeChanged',
       'app:toast',
       'capture:flowEnded',
+      'editor:confirmClose',
+      'editor:openTab',
       'export:done',
       'export:failed',
       'export:progress',
       'history:bulkProgress',
       'history:changed',
+      'library:changed',
       'overlay:clearSelection',
       'recorder:engineCommand',
       'recorder:levels',
       'recorder:state',
+      'recorder:toast',
       'recovery:changed',
       'settings:changed',
       'shortcuts:changed',
-      'shot:ready',
+      'steps:finished',
+      'steps:state',
+      'video:exportDone',
+      'video:exportFailed',
+      'video:exportProgress',
       'worker:grabFrames',
     ]);
   });
@@ -127,21 +179,24 @@ describe('ipc contract', () => {
       if (channel.startsWith('session:') || channel === 'recorder:engineEvent') {
         expect(roles).toEqual(['recorder']);
       }
-      // History and export take history ids from the main window only (never paths).
-      if (channel.startsWith('history:') || channel.startsWith('export:')) {
-        expect(roles).toEqual(['main']);
+      // Step guides: the Flow tab is the main window's; the pill (toolbar role) only steers the capture.
+      if (channel.startsWith('flow:')) expect(roles).toEqual(['main']);
+      if (channel.startsWith('steps:')) {
+        expect(roles.every((role) => role === 'main' || role === 'toolbar')).toBe(true);
+        expect(roles).toContain('main');
       }
+      // History, export, screenshots, the editors and settings take ids from the main window only
+      // (never paths); the toolbar only sizes itself.
       if (
+        channel.startsWith('history:') ||
+        channel.startsWith('library:') ||
+        channel.startsWith('export:') ||
         channel.startsWith('shot:') ||
         channel.startsWith('editor:') ||
-        channel === 'shell:showItemInFolder'
-      ) {
-        expect(roles).toEqual(['main']);
-      }
-      // Settings, shortcuts and quitting are the main window's; the toolbar only sizes itself.
-      if (
+        channel.startsWith('video:') ||
         channel.startsWith('settings:') ||
         channel.startsWith('shortcuts:') ||
+        channel === 'shell:showItemInFolder' ||
         channel === 'app:requestQuit' ||
         channel === 'app:resolveQuit'
       ) {

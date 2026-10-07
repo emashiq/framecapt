@@ -17,6 +17,8 @@ import {
   type DrawEnv,
   type EffectCache,
 } from '../../editor/flatten';
+import type { EditorAssets } from '../../editor/assets';
+import { pictureIn } from '../../editor/import-image';
 import { measureText } from '../../editor/measure';
 import { snapMove, type Guide } from '../../editor/model/arrange';
 import type { Command } from '../../editor/model/commands';
@@ -115,6 +117,10 @@ export interface EditorStageProps {
   onZoom: (zoom: number) => void;
   /** A step badge was placed: the counter moves on. */
   onStepPlaced: () => void;
+  /** The pictures of the document's image layers. */
+  assets: EditorAssets;
+  /** A picture file was dropped on the canvas, at this point (image px). */
+  onDropImage: (file: File, at: Point) => void;
 }
 
 /** The text being typed on the canvas: a new or existing text or callout. */
@@ -304,6 +310,7 @@ export function EditorStage(props: EditorStageProps) {
         forExport: true,
         cache: effectCache.current,
         shadowScale: fitted.zoom,
+        assets: L.assets,
       });
       ctx.restore();
       return;
@@ -340,6 +347,7 @@ export function EditorStage(props: EditorStageProps) {
       skipId: L.editing?.id ?? null,
       cache: effectCache.current,
       shadowScale: scale,
+      assets: L.assets,
     });
     const draft = draftRef.current;
     if (draft) {
@@ -508,11 +516,36 @@ export function EditorStage(props: EditorStageProps) {
     if (!container) return;
     const sync = (): void => {
       const rect = container.getBoundingClientRect();
-      setStageSize((current) =>
-        current.width === rect.width && current.height === rect.height
-          ? current
-          : { width: rect.width, height: rect.height },
-      );
+      const current = latest.current.stageSize;
+      if (current.width === rect.width && current.height === rect.height) {
+        setDpr(window.devicePixelRatio || 1);
+        return;
+      }
+      const next = { width: rect.width, height: rect.height };
+      // A zoomed or panned picture scales with the stage too: same share of the stage, the
+      // picture point at the stage's center stays at the center.
+      const { image: size, dpr: ratio } = latest.current;
+      if (current.width > 0 && current.height > 0 && rect.width > 0 && rect.height > 0) {
+        setUserView((user) => {
+          if (!user) return user;
+          const before = fitView(current, size, ratio).zoom;
+          const after = fitView(next, size, ratio).zoom;
+          const zoom = clampZoom(user.zoom * (after / before));
+          const mid = screenToImage(user, ratio, {
+            x: current.width / 2,
+            y: current.height / 2,
+          });
+          const scale = zoom / ratio;
+          return clampPan(
+            { zoom, panX: next.width / 2 - mid.x * scale, panY: next.height / 2 - mid.y * scale },
+            next,
+            size,
+            ratio,
+          );
+        });
+      }
+      latest.current.stageSize = next;
+      setStageSize(next);
       setDpr(window.devicePixelRatio || 1);
     };
     sync();
@@ -622,6 +655,8 @@ export function EditorStage(props: EditorStageProps) {
       target instanceof HTMLElement && !!target.closest('input, textarea, select, [role="menu"]');
     const down = (event: KeyboardEvent): void => {
       if (event.code !== 'Space' || typing(event.target)) return;
+      // A hidden tab (the tab strip keeps them mounted, inert) must not take the key.
+      if (containerRef.current?.closest('[inert]')) return;
       if (event.target instanceof HTMLElement && event.target.closest('button')) return;
       event.preventDefault();
       spaceRef.current = true;
@@ -1083,6 +1118,16 @@ export function EditorStage(props: EditorStageProps) {
       ref={containerRef}
       className="checkerboard relative min-h-0 flex-1 overflow-hidden"
       data-testid="editor-stage"
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+      }}
+      onDrop={(event) => {
+        const file = pictureIn(event.dataTransfer.files);
+        if (!file) return;
+        event.preventDefault();
+        const L = latest.current;
+        props.onDropImage(file, screenToImage(L.view, L.dpr, cssPoint(event)));
+      }}
     >
       <canvas
         ref={canvasRef}

@@ -1,28 +1,31 @@
 import type { MouseEvent } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
-  Camera,
   Copy,
+  CopyPlus,
   ExternalLink,
   FileX2,
   Film,
+  FolderInput,
   FolderOpen,
+  Layers,
   Link2,
   Loader2,
   MoreHorizontal,
   Pencil,
   Save,
   Trash2,
-  Video,
 } from 'lucide-react';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { formatBytes, formatDuration } from '../../../shared/recording';
 import { useExportState } from '../../history/export-store';
 import { cn } from '../../lib/cn';
 import { formatExact, formatRelative } from '../../lib/time';
+import { TypeIcon } from '../../history/type-icon';
 import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/IconButton';
-import type { ItemActions } from './actions';
+import { canDuplicateItem, canEditItem, editLabel, type ItemActions } from './actions';
+import { canSaveAs } from './SaveAs';
 import { Thumb } from './Thumb';
 
 export interface HistoryCardProps {
@@ -47,6 +50,10 @@ export interface HistoryCardProps {
   onContextMenu: (item: HistoryItemView, point: { x: number; y: number }) => void;
   /** Dragging the card out of the window drops its file; null when that is not allowed now. */
   onDragOut: ((item: HistoryItemView) => void) | null;
+  /** Dragging the card inside the window carries its id (or the selection's) to a folder in the folder pane. Alt+drag still drags the file out. */
+  onItemsDrag?: (item: HistoryItemView, transfer: DataTransfer) => void;
+  /** Opens the folder picker to move the item. */
+  onMoveTo?: (item: HistoryItemView) => void;
 }
 
 export function dimensionsText(item: Pick<HistoryItemView, 'width' | 'height'>): string {
@@ -58,15 +65,37 @@ export const menuItemClass =
   'data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent-fg data-[disabled]:opacity-45';
 
 /** Which kind of file the card is: a quiet badge on the thumbnail. */
-export function TypeBadge({ item }: { item: Pick<HistoryItemView, 'type' | 'format'> }) {
-  const Icon = item.type === 'screenshot' ? Camera : Video;
+export function TypeBadge({
+  item,
+}: {
+  item: Pick<HistoryItemView, 'type' | 'format' | 'stepCount' | 'projectFile'>;
+}) {
+  const text =
+    item.type === 'flow'
+      ? `${item.stepCount ?? 0} ${item.stepCount === 1 ? 'step' : 'steps'}`
+      : item.format;
   return (
     <span
       data-testid="history-type"
       className="inline-flex items-center gap-1 rounded-md bg-bg/85 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-fg-muted uppercase shadow-card backdrop-blur-sm"
     >
-      <Icon className="size-3" aria-hidden="true" />
-      {item.format}
+      <TypeIcon type={item.type} project={item.projectFile} className="size-3" aria-hidden="true" />
+      {text}
+    </span>
+  );
+}
+
+/** A multi-source recording says so, with its number of sources. */
+export function MultiBadge({ item }: { item: Pick<HistoryItemView, 'format' | 'layout'> }) {
+  if (item.format !== 'fcap') return null;
+  const count = item.layout?.sources.length;
+  return (
+    <span
+      data-testid="history-multi"
+      className="inline-flex items-center gap-1 rounded-md bg-accent-solid px-1.5 py-0.5 text-xs font-semibold text-white shadow-card"
+    >
+      <Layers className="size-3" aria-hidden="true" />
+      {count ? `Multi · ${count}` : 'Multi'}
     </span>
   );
 }
@@ -80,6 +109,70 @@ export function DurationChip({ durationMs }: { durationMs: number | null }) {
     >
       {formatDuration(durationMs)}
     </span>
+  );
+}
+
+/** The part of a card that shows the capture: thumbnail with its badges, then name, age and size. */
+export function CardFace({
+  item,
+  now,
+  converting = false,
+  percent = null,
+  room = false,
+}: {
+  item: HistoryItemView;
+  now: number;
+  /** A conversion runs: a chip with its progress. */
+  converting?: boolean;
+  percent?: number | null;
+  /** Leave room under the text for buttons laid over the card (a missing file's Locate/Remove). */
+  room?: boolean;
+}) {
+  const missing = !item.exists;
+  const subtitle = [dimensionsText(item), formatBytes(item.sizeBytes)].filter(Boolean).join(' · ');
+  // The type badge already says ".png"; the name shows the part that tells captures apart.
+  const stem = item.type === 'flow' ? item.fileName : item.fileName.replace(/[.][^.]+$/, '');
+  return (
+    <>
+      <span className="relative block">
+        <Thumb item={item} className="aspect-video w-full" />
+        <span className="absolute bottom-2 left-2 flex items-center gap-1.5">
+          <TypeBadge item={item} />
+          <MultiBadge item={item} />
+        </span>
+        <span className="absolute right-2 bottom-2 flex items-center gap-1.5">
+          {converting ? (
+            <span className="inline-flex items-center gap-1 rounded-md bg-accent-solid px-1.5 py-0.5 text-xs font-medium text-white tabular-nums">
+              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+              {percent !== null ? `${percent}%` : 'MP4'}
+            </span>
+          ) : null}
+          <DurationChip durationMs={item.durationMs} />
+        </span>
+        {missing ? (
+          <span
+            data-testid="history-missing"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-bg/55 text-center text-[13px] font-medium text-fg-muted"
+          >
+            <FileX2 className="size-5" aria-hidden="true" />
+            File moved or deleted
+          </span>
+        ) : null}
+      </span>
+      <span className={cn('flex flex-col gap-0.5 px-3 pt-2.5 pb-3', room && 'pb-14')}>
+        <span className="truncate text-[13px] font-medium text-fg" title={item.fileName}>
+          {stem}
+        </span>
+        <span
+          className="text-xs text-fg-muted"
+          title={formatExact(item.createdAt)}
+          data-testid="history-time"
+        >
+          {formatRelative(item.createdAt, now)}
+        </span>
+        <span className="truncate text-xs text-fg-subtle tabular-nums">{subtitle}</span>
+      </span>
+    </>
   );
 }
 
@@ -98,14 +191,15 @@ export function HistoryCard({
   onToggleSelect,
   onContextMenu,
   onDragOut,
+  onItemsDrag,
+  onMoveTo,
 }: HistoryCardProps) {
   const exportState = useExportState(item.id);
   const converting = exportState?.status === 'running' || exportState?.status === 'starting';
+  const percent = exportState?.status === 'running' ? exportState.percent : null;
   const missing = !item.exists;
-  const subtitle = [dimensionsText(item), formatBytes(item.sizeBytes)].filter(Boolean).join(' · ');
-  const kind = item.type === 'screenshot' ? 'screenshot' : 'recording';
-  // The type badge already says ".png"; the name shows the part that tells captures apart.
-  const stem = item.fileName.replace(/[.][^.]+$/, '');
+  const kind =
+    item.type === 'screenshot' ? 'screenshot' : item.type === 'flow' ? 'step guide' : 'recording';
   const openMenu = (event: MouseEvent<HTMLElement>): void => {
     event.preventDefault();
     // The mouse reports button 2; the Menu key and Shift+F10 do not: anchor those at the card.
@@ -131,11 +225,19 @@ export function HistoryCard({
         data-missing={missing || undefined}
         tabIndex={tabStop ? 0 : -1}
         aria-label={`${item.fileName}, ${kind}, ${formatRelative(item.createdAt, now)}${missing ? ', file missing' : ''}${selected ? ', selected' : ''}`}
-        draggable={onDragOut !== null && !missing}
+        draggable={
+          !missing && (onItemsDrag !== undefined || (onDragOut !== null && item.type !== 'flow'))
+        }
         onDragStart={(event) => {
+          const fileDrag = onDragOut !== null && item.type !== 'flow';
+          // Dragging within the window moves the card to a folder; with Alt (or without a folder pane) the file is dragged out.
+          if (onItemsDrag && !(event.altKey && fileDrag)) {
+            onItemsDrag(item, event.dataTransfer);
+            return;
+          }
           // The OS drag is started by main (it knows the file); the browser drag is not used.
           event.preventDefault();
-          if (onDragOut && !missing) onDragOut(item);
+          if (onDragOut && !missing && fileDrag) onDragOut(item);
         }}
         onClick={(event) => {
           if (event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -149,45 +251,7 @@ export function HistoryCard({
             : 'border-line hover:border-line-strong group-hover/card:shadow-raised',
         )}
       >
-        <span className="relative block">
-          <Thumb item={item} className="aspect-video w-full" />
-          <span className="absolute bottom-2 left-2">
-            <TypeBadge item={item} />
-          </span>
-          <span className="absolute right-2 bottom-2 flex items-center gap-1.5">
-            {converting ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-accent-solid px-1.5 py-0.5 text-xs font-medium text-white tabular-nums">
-                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                {exportState?.status === 'running' && exportState.percent !== null
-                  ? `${exportState.percent}%`
-                  : 'MP4'}
-              </span>
-            ) : null}
-            <DurationChip durationMs={item.durationMs} />
-          </span>
-          {missing ? (
-            <span
-              data-testid="history-missing"
-              className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-bg/55 text-center text-[13px] font-medium text-fg-muted"
-            >
-              <FileX2 className="size-5" aria-hidden="true" />
-              File moved or deleted
-            </span>
-          ) : null}
-        </span>
-        <span className={cn('flex flex-col gap-0.5 px-3 pt-2.5 pb-3', missing && 'pb-14')}>
-          <span className="truncate text-[13px] font-medium text-fg" title={item.fileName}>
-            {stem}
-          </span>
-          <span
-            className="text-xs text-fg-muted"
-            title={formatExact(item.createdAt)}
-            data-testid="history-time"
-          >
-            {formatRelative(item.createdAt, now)}
-          </span>
-          <span className="truncate text-xs text-fg-subtle tabular-nums">{subtitle}</span>
-        </span>
+        <CardFace item={item} now={now} converting={converting} percent={percent} room={missing} />
       </button>
 
       <label
@@ -231,11 +295,11 @@ export function HistoryCard({
         </div>
       ) : (
         <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity duration-150 group-focus-within/card:opacity-100 group-hover/card:opacity-100">
-          {item.type === 'screenshot' && onEdit ? (
+          {canEditItem(item) && onEdit ? (
             <IconButton
               size="sm"
               variant="secondary"
-              aria-label="Edit"
+              aria-label={editLabel(item)}
               data-testid="history-edit"
               icon={<Pencil className="size-4" />}
               onClick={() => onEdit(item)}
@@ -281,14 +345,14 @@ export function HistoryCard({
                 sideOffset={6}
                 className="z-50 min-w-56 rounded-xl border border-line bg-surface p-1.5 text-fg shadow-raised"
               >
-                {item.type === 'screenshot' && onEdit ? (
+                {canEditItem(item) && onEdit ? (
                   <DropdownMenu.Item
                     data-testid="history-menu-edit"
                     onSelect={() => onEdit(item)}
                     className={menuItemClass}
                   >
                     <Pencil className="size-4 text-fg-subtle" aria-hidden="true" />
-                    Edit
+                    {editLabel(item)}
                   </DropdownMenu.Item>
                 ) : null}
                 {item.type === 'recording' && item.format === 'webm' ? (
@@ -302,6 +366,16 @@ export function HistoryCard({
                     Export MP4…
                   </DropdownMenu.Item>
                 ) : null}
+                {canSaveAs(item) ? (
+                  <DropdownMenu.Item
+                    data-testid="history-menu-save-as"
+                    onSelect={() => actions.saveAs(item)}
+                    className={menuItemClass}
+                  >
+                    <Save className="size-4 text-fg-subtle" aria-hidden="true" />
+                    Save in another format…
+                  </DropdownMenu.Item>
+                ) : null}
                 {item.type === 'recording' ? (
                   <DropdownMenu.Item
                     data-testid="history-menu-save-copy"
@@ -310,6 +384,26 @@ export function HistoryCard({
                   >
                     <Save className="size-4 text-fg-subtle" aria-hidden="true" />
                     Save a copy as…
+                  </DropdownMenu.Item>
+                ) : null}
+                {canDuplicateItem(item) ? (
+                  <DropdownMenu.Item
+                    data-testid="history-menu-duplicate"
+                    onSelect={() => actions.duplicate(item)}
+                    className={menuItemClass}
+                  >
+                    <CopyPlus className="size-4 text-fg-subtle" aria-hidden="true" />
+                    Duplicate
+                  </DropdownMenu.Item>
+                ) : null}
+                {onMoveTo ? (
+                  <DropdownMenu.Item
+                    data-testid="history-menu-move"
+                    onSelect={() => onMoveTo(item)}
+                    className={menuItemClass}
+                  >
+                    <FolderInput className="size-4 text-fg-subtle" aria-hidden="true" />
+                    Move to…
                   </DropdownMenu.Item>
                 ) : null}
                 <DropdownMenu.Item

@@ -25,10 +25,16 @@ const env = (overrides: Partial<CommandEnv> = {}): CommandEnv => ({
 function actions(): CommandActions {
   return {
     startCapture: vi.fn(),
+    startSteps: vi.fn(),
     stopRecording: vi.fn(),
     togglePause: vi.fn(),
     navigate: vi.fn(),
+    toggleLibrarySidebar: vi.fn(),
     showKeyboardHelp: vi.fn(),
+    editVideo: vi.fn(),
+    openImage: vi.fn(),
+    openVideo: vi.fn(),
+    openProject: vi.fn(),
     toggleTheme: vi.fn(),
     quit: vi.fn(),
     openCommandCenter: vi.fn(),
@@ -85,9 +91,9 @@ describe('rankCommands', () => {
   });
 
   it('puts the best title match first inside a group', () => {
-    const [group] = rankCommands(commands, 'history');
+    const [group] = rankCommands(commands, 'library');
     expect(group?.heading).toBe('Navigate');
-    expect(group?.items[0]?.command.id).toBe('nav.history');
+    expect(group?.items[0]?.command.id).toBe('nav.library');
   });
 
   it('finds a command by a keyword that is not in its title', () => {
@@ -153,8 +159,44 @@ describe('commands call the app actions', () => {
     expect(calls.showKeyboardHelp).toHaveBeenCalled();
   });
 
+  it('offers a screenshot of all screens only with more than one display', () => {
+    const calls = actions();
+    expect(buildCommands(env(), calls).some((command) => command.id === 'shot.all')).toBe(false);
+    const command = find(buildCommands(env({ multiDisplay: true }), calls), 'shot.all');
+    expect(command.hint).toEqual({ kind: 'global', action: 'screenshotAllScreens' });
+    command.run();
+    expect(calls.startCapture).toHaveBeenCalledWith('screenshot', 'screen', true);
+  });
+
+  it('Open image is in the palette and at the top of the File menu, and runs the app action', () => {
+    const calls = actions();
+    const commands = buildCommands(env(), calls);
+    expect(idsOf(rankCommands(commands, 'open image'))).toContain('file.openImage');
+    expect(MENUS.find((menu) => menu.id === 'file')?.items[0]).toBe('file.openImage');
+    expect(hintFor(find(commands, 'file.openImage'), DEFAULT_SETTINGS)).toEqual(['Ctrl', 'O']);
+    find(commands, 'file.openImage').run();
+    expect(calls.openImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('Capture a step guide is a command with the Steps shortcut, in the File menu, and starts the guide', () => {
+    const calls = actions();
+    const commands = buildCommands(env(), calls);
+    const command = find(commands, 'steps.start');
+    expect(command.hint).toEqual({ kind: 'global', action: 'stepsToggle' });
+    expect(idsOf(rankCommands(commands, 'step guide'))).toContain('steps.start');
+    expect(MENUS.find((menu) => menu.id === 'file')?.items).toContain('steps.start');
+    expect(hintFor(command, DEFAULT_SETTINGS)).toEqual(['Ctrl', 'Shift', '8']);
+    command.run();
+    expect(calls.startSteps).toHaveBeenCalledTimes(1);
+    // While a recording runs it is explained, not hidden.
+    const busy = find(buildCommands(env({ recorderStatus: 'recording' }), calls), 'steps.start');
+    expect(busy.disabledReason).not.toBeNull();
+  });
+
   it('every menu entry is a known command', () => {
-    const ids = new Set(buildCommands(env(), actions()).map((command) => command.id));
+    const ids = new Set(
+      buildCommands(env({ multiDisplay: true }), actions()).map((command) => command.id),
+    );
     for (const menu of MENUS) {
       for (const id of menu.items) if (id !== null) expect(ids.has(id), id).toBe(true);
     }
@@ -183,7 +225,7 @@ describe('shortcut hints', () => {
       shortcuts: { ...DEFAULT_SETTINGS.shortcuts, recordRegion: null },
     };
     expect(hintFor(find(commands, 'rec.region'), unset)).toBe('Not set');
-    expect(hintFor(find(commands, 'nav.history'), DEFAULT_SETTINGS)).toBeNull();
+    expect(hintFor(find(commands, 'nav.library'), DEFAULT_SETTINGS)).toBeNull();
   });
 
   it('shows the command center key from the editable in-app shortcuts', () => {

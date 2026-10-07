@@ -194,7 +194,7 @@ test('the brand loader shows while MP4 export waits for the save dialog', async 
   });
   await page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'History' })
+    .getByRole('button', { name: 'Library' })
     .click();
   await page
     .getByTestId('history-grid')

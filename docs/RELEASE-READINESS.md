@@ -35,7 +35,7 @@ The repository is now the desktop application only: no accounts, sign-in, backen
   - Strict zod IPC with role and origin checks; strict CSP; a network blocker; no telemetry; zero network traffic measured.
 - **Packaging and docs**: Squirrel per-user installer and portable zip, CI and draft-release workflows (files only), and an update adapter that is safely unconfigured. GPL-3.0 license, third-party notices, user/build/testing docs and the commercial plan are included.
 
-**Explicitly deferred** (per the project contract): cloud upload/sync, accounts, AI, OCR, webcam overlay, timeline editor, streaming, team features, billing integration, macOS/Linux, a native capture backend.
+**Explicitly deferred** (per the project contract): cloud upload/sync, accounts, AI, OCR, timeline editor, streaming, team features, billing integration, macOS/Linux, a native capture backend.
 
 ## Commands
 

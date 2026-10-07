@@ -27,7 +27,7 @@ export type RecorderStatus = (typeof RECORDER_STATUSES)[number];
 
 /** What preflight found that the user must decide about (see the audio rules in phase 05). */
 export type PreflightChoiceKind =
-  'system-audio-unavailable' | 'mic-missing' | 'mic-denied' | 'mic-unavailable';
+  'system-audio-unavailable' | 'mic-missing' | 'mic-denied' | 'mic-unavailable' | 'camera-missing';
 
 export type AudioSource = 'mic' | 'system';
 

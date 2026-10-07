@@ -24,12 +24,15 @@ import {
 } from '@playwright/test';
 import { writeEvidenceJson, evidenceDirFor } from '../native/evidence';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed, hasEditorPage } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 const evidenceDir = evidenceDirFor(projectRoot, 'phase04');
 const FRAME = { width: 2560, height: 1440 };
 
 let app: ElectronApplication;
+/** The main window; `page` is the main window with the tab of the latest openShot(). */
+let main: Page;
 let page: Page;
 let userDataDir: string;
 let outDir: string;
@@ -66,7 +69,7 @@ test.beforeAll(async () => {
   ).toBe(true);
   outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-editor-out-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
-  ({ app, page, dir: userDataDir } = await launch());
+  ({ app, page: main, dir: userDataDir } = await launch());
 });
 
 test.afterAll(async () => {
@@ -144,21 +147,37 @@ async function chooseTool(
   await expect(target.getByTestId(`tool-${id}`)).toHaveAttribute('aria-pressed', 'true');
 }
 
-async function openShot(target: Page = page): Promise<void> {
-  await target.getByTestId('shot-screen').click();
-  await expect(target.getByTestId('editor-view')).toBeVisible();
-  await expect(target.getByTestId('editor-dimensions')).toHaveText(
+/** Takes a screenshot in the main window; it opens as a tab of the main window, which is returned. */
+async function openShot(
+  mainTarget: Page = main,
+  electronApp: ElectronApplication = app,
+): Promise<Page> {
+  await mainTarget.getByTestId('shot-screen').click();
+  const editor = await editorPage(electronApp);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-dimensions')).toHaveText(
     `${FRAME.width} × ${FRAME.height}`,
   );
+  if (electronApp === app) page = editor;
+  return editor;
 }
 
-/** Leaves the editor, confirming the discard dialog if it appears. */
-async function closeEditor(target: Page = page): Promise<void> {
+/**
+ * Closes the only tab (Done), answering "Don't save" if it asks: Home is shown again, with its
+ * last tab and the main window is where the user is.
+ */
+async function closeEditor(
+  target: Page = page,
+  electronApp: ElectronApplication = app,
+  mainTarget: Page = main,
+): Promise<void> {
   await target.getByTestId('editor-done').click();
-  const confirm = target.getByTestId('confirm-yes');
-  if (await confirm.isVisible().catch(() => false)) await confirm.click();
-  await expect(target.getByTestId('editor-view')).toHaveCount(0);
-  await expect(target.getByTestId('shot-screen')).toBeVisible();
+  await target
+    .getByTestId('confirm-yes')
+    .click({ timeout: 1500 })
+    .catch(() => undefined);
+  await expectEditorClosed(electronApp);
+  await expect(mainTarget.getByTestId('shot-screen')).toBeVisible();
 }
 
 async function stubSaveDialog(filePath: string, electronApp: ElectronApplication = app) {
@@ -340,9 +359,10 @@ test('the editor opens with an accessible toolbar, tool shortcuts and a live reg
 });
 
 test('shortcuts are scoped to the editor and ignored while typing', async () => {
-  // No editor: the letter keys do nothing and no editor UI exists.
-  await page.keyboard.press('x');
-  await expect(page.getByTestId('editor-toolbar')).toHaveCount(0);
+  // No editor: the letter keys do nothing in the main window and no editor UI exists.
+  await main.keyboard.press('x');
+  await expect(main.getByTestId('editor-toolbar')).toHaveCount(0);
+  expect(await hasEditorPage(app)).toBe(false);
 
   await openShot();
   await chooseTool('text');
@@ -693,6 +713,8 @@ test('selection: handles resize, arrow keys nudge (Shift x10), Delete removes, E
 
   await page.keyboard.press('Escape');
   await expect(canvas()).toHaveAttribute('data-selected', '');
+  // Toasts of the earlier steps (they stack at the bottom left) must not sit under the pointer.
+  await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 15_000 });
   await clickImage({ x: resized.rect.x, y: resized.rect.y + 100 });
   await expect(canvas()).toHaveAttribute('data-selected', 'rect');
   await page.keyboard.press('Delete');
@@ -724,7 +746,7 @@ test('Shift constrains arrows to 45 degrees and rectangles to squares', async ()
   await closeEditor();
 });
 
-test('unsaved changes: the discard dialog on Done, Discard and a tab change; saving clears it', async () => {
+test('unsaved changes: the save question on Done and Discard; saving clears it', async () => {
   const dirs = () => {
     const dir = path.join(userDataDir, 'shots');
     return fs.existsSync(dir) ? fs.readdirSync(dir).length : 0;
@@ -735,43 +757,51 @@ test('unsaved changes: the discard dialog on Done, Discard and a tab change; sav
   await chooseTool('rect');
   await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 });
 
-  // Done with unsaved work: asks first, focus lands on the safe choice.
+  // The tab shows a dot while it holds unsaved work.
+  await expect(page.getByTestId('editor-tab')).toHaveAttribute('data-dirty', 'true');
+  await expect(page.getByTestId('tab-dirty')).toBeVisible();
+
+  // Done with unsaved work: asks first (Save, Don't save, Cancel), focus lands on the safe choice.
   await page.getByTestId('editor-done').click();
-  const dialog = page.getByRole('alertdialog');
+  let dialog = page.getByRole('alertdialog');
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('Discard this screenshot?');
-  await expect(page.getByRole('button', { name: 'Keep editing' })).toBeFocused();
+  await expect(dialog).toContainText('Save changes to Screenshot?');
+  await expect(page.getByRole('button', { name: 'Cancel' })).toBeFocused();
   // Shortcuts are ignored behind the dialog.
   await page.keyboard.press('x');
   await expect(page.getByTestId('tool-redact')).not.toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Keep editing' }).click();
+  await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByTestId('editor-view')).toBeVisible();
   expect(dirs()).toBe(before + 1);
 
-  // Changing tab asks as well.
-  await page.getByRole('button', { name: 'Settings' }).click();
+  // Esc is Cancel as well.
+  await page.getByTestId('editor-done').click();
   await expect(dialog).toBeVisible();
-  await page.keyboard.press('Escape'); // Esc = keep editing
+  await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await expect(page.getByTestId('editor-view')).toBeVisible();
 
   // Saved: nothing is lost any more, so leaving is silent and deletes the original.
   await save('png', 'dirty-1.png');
+  await expect(page.getByTestId('editor-tab')).toHaveAttribute('data-dirty', 'false');
   await page.getByTestId('editor-done').click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
-  await expect(dialog).toBeHidden();
+  await expectEditorClosed(app);
   await expect.poll(dirs).toBe(before);
 
   // An edit after a save makes it dirty again.
   await openShot();
+  dialog = page.getByRole('alertdialog');
   await save('png', 'dirty-2.png');
   await chooseTool('arrow');
   await dragImage({ x: 300, y: 300 }, { x: 800, y: 700 });
   await page.getByTestId('editor-discard').click();
   await expect(dialog).toBeVisible();
-  await page.getByTestId('confirm-yes').click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
+  await page
+    .getByTestId('confirm-yes')
+    .click() // Don't save
+    .catch(() => undefined); // the window closes under the click
+  await expectEditorClosed(app);
   await expect.poll(dirs).toBe(before);
   // Undoing back to the saved state is clean again.
   await openShot();
@@ -780,8 +810,19 @@ test('unsaved changes: the discard dialog on Done, Discard and a tab change; sav
   await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 });
   await page.keyboard.press('Control+z');
   await page.getByTestId('editor-done').click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
-  await expect(dialog).toBeHidden();
+  await expectEditorClosed(app);
+});
+
+test('"Save" in the unsaved-tab question saves and then closes the tab', async () => {
+  await openShot();
+  await chooseTool('rect');
+  await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 });
+  const file = path.join(outDir, 'save-on-close.png');
+  await stubSaveDialog(file);
+  await page.getByTestId('editor-done').click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => fs.existsSync(file), { timeout: 15_000 }).toBe(true);
+  await expectEditorClosed(app);
 });
 
 /** Close-to-tray is on by default (closing hides the window); these tests are about really closing it. */
@@ -792,27 +833,28 @@ async function closeInsteadOfHiding(target: Page): Promise<void> {
   expect(result.ok).toBe(true);
 }
 
-test('closing the window with unsaved work asks; a second close always goes through', async () => {
+test('closing the window with unsaved tabs asks once, naming them; a second close always goes through', async () => {
   const second = await launch();
   try {
     await closeInsteadOfHiding(second.page);
-    await openShot(second.page);
-    await chooseTool('rect', second.page);
-    await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 }, second.page);
-    const win = await second.app.browserWindow(second.page);
+    const editor = await openShot(second.page, second.app);
+    await chooseTool('rect', editor);
+    await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 }, editor);
+    const win = await second.app.browserWindow(editor);
 
-    // First close attempt: the window stays and the renderer asks.
+    // First close attempt: the window stays and the renderer asks, naming what is unsaved.
     await win.evaluate((w) => w.close());
-    await expect(second.page.getByRole('alertdialog')).toBeVisible();
+    await expect(editor.getByRole('alertdialog')).toBeVisible();
+    await expect(editor.getByRole('alertdialog')).toContainText('Screenshot');
     expect(await win.evaluate((w) => w.isDestroyed())).toBe(false);
     // "Keep editing" answers main, and the next attempt asks again.
-    await second.page.getByRole('button', { name: 'Keep editing' }).click();
-    await expect(second.page.getByRole('alertdialog')).toBeHidden();
+    await editor.getByRole('button', { name: 'Keep editing' }).click();
+    await expect(editor.getByRole('alertdialog')).toBeHidden();
     await win.evaluate((w) => w.close());
-    await expect(second.page.getByRole('alertdialog')).toBeVisible();
+    await expect(editor.getByRole('alertdialog')).toBeVisible();
 
     // A second close while the question is open is a confirmation: quit is never blocked.
-    const closed = second.page.waitForEvent('close');
+    const closed = editor.waitForEvent('close');
     await win.evaluate((w) => w.close()).catch(() => undefined);
     await closed;
   } finally {
@@ -822,21 +864,43 @@ test('closing the window with unsaved work asks; a second close always goes thro
   const third = await launch();
   try {
     await closeInsteadOfHiding(third.page);
-    // Answering "Discard" closes the window and deletes the session.
-    await openShot(third.page);
-    await chooseTool('rect', third.page);
-    await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 }, third.page);
-    const win = await third.app.browserWindow(third.page);
-    const closed = third.page.waitForEvent('close');
+    // Answering "Discard & close" closes the window and deletes the session.
+    const editor = await openShot(third.page, third.app);
+    await chooseTool('rect', editor);
+    await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 }, editor);
+    const win = await third.app.browserWindow(editor);
+    const closed = editor.waitForEvent('close');
     await win.evaluate((w) => w.close());
-    await third.page.getByTestId('confirm-yes').click();
+    await editor
+      .getByTestId('confirm-yes')
+      .click()
+      .catch(() => undefined); // the window closes under the click
     await closed;
     const shots = path.join(third.dir, 'shots');
-    const left = fs.existsSync(shots) ? fs.readdirSync(shots).length : 0;
-    expect(left).toBe(0);
+    await expect.poll(() => (fs.existsSync(shots) ? fs.readdirSync(shots).length : 0)).toBe(0);
   } finally {
     await exitApp(third.app);
     fs.rmSync(third.dir, { recursive: true, force: true });
+  }
+});
+
+test('closing the window to the tray keeps unsaved tabs and asks nothing', async () => {
+  const fourth = await launch();
+  try {
+    const editor = await openShot(fourth.page, fourth.app);
+    await chooseTool('rect', editor);
+    await dragImage({ x: 300, y: 300 }, { x: 700, y: 600 }, editor);
+    const win = await fourth.app.browserWindow(editor);
+    // Close-to-tray (the default) only hides the window: the work is still there when it returns.
+    await win.evaluate((w) => w.close());
+    await expect.poll(() => win.evaluate((w) => w.isVisible())).toBe(false);
+    await expect(editor.getByRole('alertdialog')).toHaveCount(0);
+    await win.evaluate((w) => w.show());
+    await expect(editor.getByTestId('editor-view')).toBeVisible();
+    await expect(editor.getByTestId('editor-tab')).toHaveAttribute('data-dirty', 'true');
+  } finally {
+    await exitApp(fourth.app);
+    fs.rmSync(fourth.dir, { recursive: true, force: true });
   }
 });
 
@@ -905,14 +969,14 @@ test('UI evidence: editor with annotations and a redaction, light and dark', asy
 test('devicePixelRatio 1.5: pointer coordinates stay in image pixels, export is unscaled', async () => {
   const hi = await launch(['--force-device-scale-factor=1.5']);
   try {
-    await openShot(hi.page);
-    const view = await canvasView(hi.page);
+    const editor = await openShot(hi.page, hi.app);
+    const view = await canvasView(editor);
     expect(view.dpr).toBeCloseTo(1.5, 5);
-    await chooseTool('redact', hi.page);
+    await chooseTool('redact', editor);
     const from = { x: 800, y: 500 };
     const to = { x: 1400, y: 900 };
-    await dragImage(from, to, hi.page);
-    const [rect] = await redactions(hi.page);
+    await dragImage(from, to, editor);
+    const [rect] = await redactions(editor);
     if (!rect) throw new Error('no redaction');
     // The rectangle in the model is what was dragged, in image px, whatever the DPR.
     const tolerance = view.dpr / view.zoom + 1; // one device pixel of pointer precision
@@ -920,11 +984,11 @@ test('devicePixelRatio 1.5: pointer coordinates stay in image pixels, export is 
     expect(Math.abs(rect.y - from.y)).toBeLessThan(tolerance);
     expect(Math.abs(rect.x + rect.width - to.x)).toBeLessThan(tolerance);
 
-    const file = await save('png', 'dpr15.png', hi.page, hi.app);
+    const file = await save('png', 'dpr15.png', editor, hi.app);
     const out = await decodeFile(file);
     expect({ width: out.width, height: out.height }).toEqual(FRAME);
     expect(blackness(out, coverOf(rect) as Rect).nonBlack).toBe(0);
-    await expect(hi.page.getByTestId('editor-dimensions')).toHaveText(
+    await expect(editor.getByTestId('editor-dimensions')).toHaveText(
       `${FRAME.width} × ${FRAME.height}`,
     );
     measured.devicePixelRatio = {

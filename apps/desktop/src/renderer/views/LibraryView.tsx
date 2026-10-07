@@ -1,0 +1,750 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { announce, notify } from '../lib/notify';
+import { Camera, Clock, FolderOpen, FolderSearch, MapPin, SearchX, Video } from 'lucide-react';
+import type { HistoryItemView } from '../../shared/history-ipc';
+import { AlertConfirm } from '../components/ui/AlertConfirm';
+import { Button } from '../components/ui/Button';
+import { EmptyState } from '../components/ui/EmptyState';
+import {
+  cancelBulk,
+  dismissBulkSummary,
+  startBulkExport,
+  useBulkState,
+  useBulkSummary,
+} from '../history/bulk-store';
+import { useExportCapabilities } from '../history/use-export-capabilities';
+import { useHistory } from '../history/use-history';
+import { moveItemsTo, setCaptureFolder } from '../library/actions';
+import { startItemsDrag } from '../library/dnd';
+import { FolderPickerDialog } from '../library/FolderPickerDialog';
+import {
+  ALL_SELECTION,
+  RECENT_DAYS,
+  selectionMatches,
+  type FolderSelection,
+} from '../library/tree';
+import { useLibrary } from '../library/use-library';
+import { setLibraryPrefs, useLibraryPrefs, type LibrarySort } from '../library/view-prefs';
+import { recordOptionsFromSettings } from '../../shared/settings';
+import { getSettings } from '../settings/store';
+import {
+  createItemActions,
+  type ItemActions,
+  deleteItemFile,
+  deleteItemProject,
+  removeItems,
+  startItemDrag,
+} from './history/actions';
+import { BulkResultDialog } from './history/BulkResultDialog';
+import { HistoryContextMenu, type ContextTarget } from './history/HistoryContextMenu';
+import { SaveAsHost } from './history/SaveAs';
+import {
+  clickSelect,
+  EMPTY_SELECTION,
+  prune,
+  selectAll,
+  selectionLabel,
+  selectRange,
+  toggle,
+  type Selection,
+} from './history/selection';
+import { SelectionBar } from './history/SelectionBar';
+import { HistoryCard } from './history/HistoryCard';
+import { HistoryDetails } from './history/HistoryDetails';
+import { useNow } from './history/use-now';
+import { LibraryHeader } from './library/LibraryHeader';
+import { LibraryList } from './library/LibraryList';
+import { LibrarySidebar, type SmartCounts } from './library/LibrarySidebar';
+
+const SCOPE_NOUN = { screenshot: 'screenshots', recording: 'recordings', flow: 'guides' } as const;
+
+function sorted(items: HistoryItemView[], sort: LibrarySort): HistoryItemView[] {
+  switch (sort) {
+    case 'newest':
+      return items;
+    case 'oldest':
+      return [...items].reverse();
+    case 'name':
+      return [...items].sort((a, b) =>
+        a.fileName.localeCompare(b.fileName, undefined, { numeric: true }),
+      );
+    case 'size':
+      return [...items].sort((a, b) => b.sizeBytes - a.sizeBytes);
+  }
+}
+
+export interface LibraryViewProps {
+  /** The Library is on screen (its pinned tab is showing): Escape and the like only count then. */
+  active: boolean;
+  /** What the sidebar has selected (it lives in the app, so the Guides button can set it). */
+  scope: FolderSelection;
+  onScopeChange: (scope: FolderSelection) => void;
+  /** An item to open right away (chosen in Recent captures). */
+  focusId?: string | null;
+  onFocusConsumed?: () => void;
+  /** Opens a screenshot of history in the editor again. */
+  onEditItem?: (id: string) => void;
+  /** Opens a recording of history in the video editor. */
+  onEditVideo?: (id: string) => void;
+  /** Opens a step guide. */
+  onOpenFlow?: (id: string) => void;
+}
+
+/**
+ * Everything FrameCapt captured, like a file manager: a sidebar (smart items and the tree of real
+ * folders), a header (breadcrumb, search, sort, grid or list) and the captures. Entries come from
+ * main by id; moved or deleted files stay listed in a calm "File moved or deleted" state until the
+ * user re-links or removes them. Removing an entry never touches its file; deleting a file is a
+ * separate confirmed action.
+ */
+export function LibraryView({
+  active,
+  scope,
+  onScopeChange,
+  focusId = null,
+  onFocusConsumed,
+  onEditItem,
+  onEditVideo,
+  onOpenFlow,
+}: LibraryViewProps) {
+  const [queryInput, setQueryInput] = useState('');
+  const [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(focusId);
+  const [tabStopId, setTabStopId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<HistoryItemView | null>(null);
+  const [confirmProject, setConfirmProject] = useState<HistoryItemView | null>(null);
+  const [rawSelection, setRawSelection] = useState<Selection>(EMPTY_SELECTION);
+  const [menu, setMenu] = useState<ContextTarget | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string[] | null>(null);
+  const [moveIds, setMoveIds] = useState<string[] | null>(null);
+  const prefs = useLibraryPrefs();
+  const { tree } = useLibrary();
+  // A selected folder that no longer exists (deleted, or renamed elsewhere) falls back to All captures.
+  const [seenTree, setSeenTree] = useState(tree);
+  if (tree !== seenTree) {
+    setSeenTree(tree);
+    if (
+      tree &&
+      scope.kind === 'folder' &&
+      !tree.folders.some((info) => info.path.toLowerCase() === scope.path.toLowerCase())
+    ) {
+      onScopeChange(ALL_SELECTION);
+    }
+  }
+  const bulk = useBulkState();
+  const bulkSummary = useBulkSummary();
+  const gridRef = useRef<HTMLUListElement>(null);
+  const pendingFocus = useRef<string | null>(null);
+  const returnFocus = useRef<string | null>(null);
+  // A duplicate that was just made: selected and focused once the list has it.
+  const [duplicated, setDuplicated] = useState<string | null>(null);
+  const [focusCard, setFocusCard] = useState<string | null>(null);
+  const now = useNow();
+  const caps = useExportCapabilities();
+
+  // The whole list feeds the counts, the details view (its original may be elsewhere) and every
+  // scope; a search asks main for the matching ones.
+  const everything = useHistory({});
+  const searched = useHistory(query ? { query } : { limit: 1 });
+  const { loaded, failed, total } = everything;
+  const reload = everything.reload;
+  const listed = query && !selectedId ? searched.items : everything.items;
+
+  const counts = useMemo<SmartCounts>(() => {
+    const since = now - RECENT_DAYS * 86_400_000;
+    const tally: SmartCounts = { all: 0, recent: 0, screenshot: 0, recording: 0, flow: 0 };
+    for (const item of everything.items) {
+      tally.all += 1;
+      if (item.createdAt >= since) tally.recent += 1;
+      tally[item.type] += 1;
+    }
+    return tally;
+  }, [everything.items, now]);
+
+  const scoped = useMemo(
+    () =>
+      scope.kind === 'all'
+        ? listed
+        : listed.filter((item) => selectionMatches(item, scope, prefs.includeSubfolders, now)),
+    [listed, scope, prefs.includeSubfolders, now],
+  );
+  const items = useMemo(() => sorted(scoped, prefs.sort), [scoped, prefs.sort]);
+  const order = useMemo(() => items.map((item) => item.id), [items]);
+  // Cards that are no longer listed (removed, filtered out) leave the selection, so a bulk action
+  // can only ever touch what the view shows.
+  const selection = loaded && !selectedId ? prune(rawSelection, order) : rawSelection;
+  if (selection !== rawSelection) setRawSelection(selection);
+  const selectedCount = selection.ids.size;
+  const previousCount = useRef(0);
+  useEffect(() => {
+    if (selectedCount === previousCount.current) return;
+    announce(selectedCount === 0 ? 'Selection cleared' : selectionLabel(selectedCount));
+    previousCount.current = selectedCount;
+  }, [selectedCount]);
+  const clearSelection = useCallback(() => setRawSelection(EMPTY_SELECTION), []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setQuery(queryInput.trim()), 150);
+    return () => window.clearTimeout(timer);
+  }, [queryInput]);
+
+  useEffect(() => {
+    if (focusId) onFocusConsumed?.();
+  }, [focusId, onFocusConsumed]);
+
+  const selected = selectedId ? everything.items.find((item) => item.id === selectedId) : undefined;
+  // An item that vanished (removed, undone elsewhere) closes the details view.
+  if (selectedId && loaded && !selected) setSelectedId(null);
+
+  // After removing a card with the keyboard, focus lands on its neighbour; after closing the
+  // details, on the card that was open.
+  useEffect(() => {
+    const id = pendingFocus.current ?? (selectedId ? null : returnFocus.current);
+    if (!id || !gridRef.current) return;
+    const button = gridRef.current.querySelector<HTMLButtonElement>(`[data-id="${id}"]`);
+    if (button) {
+      button.focus();
+      pendingFocus.current = null;
+      returnFocus.current = null;
+    }
+  }, [items, selectedId]);
+
+  const select = useCallback((item: HistoryItemView) => {
+    returnFocus.current = item.id;
+    setTabStopId(item.id);
+    setSelectedId(item.id);
+  }, []);
+  // A multi-source recording opens inside FrameCapt (its details view), never in another player.
+  const baseActions = useMemo(
+    () => createItemActions(reload, onOpenFlow, setDuplicated),
+    [reload, onOpenFlow],
+  );
+  const actions = useMemo<ItemActions>(
+    () => ({
+      ...baseActions,
+      open: (item) => (item.format === 'fcap' ? select(item) : baseActions.open(item)),
+    }),
+    [baseActions, select],
+  );
+
+  if (duplicated && order.includes(duplicated)) {
+    setDuplicated(null);
+    setTabStopId(duplicated);
+    setRawSelection(clickSelect(EMPTY_SELECTION, order, duplicated, { ctrl: false, shift: false }));
+    setFocusCard(duplicated);
+  }
+  useEffect(() => {
+    if (!focusCard) return;
+    gridRef.current?.querySelector<HTMLButtonElement>(`[data-id="${focusCard}"]`)?.focus();
+  }, [focusCard]);
+
+  const selectClick = useCallback(
+    (item: HistoryItemView, modifiers: { ctrl: boolean; shift: boolean }) => {
+      setTabStopId(item.id);
+      setRawSelection((current) => clickSelect(current, order, item.id, modifiers));
+    },
+    [order],
+  );
+  const toggleSelect = useCallback((item: Pick<HistoryItemView, 'id'>) => {
+    setTabStopId(item.id);
+    setRawSelection((current) => toggle(current, item.id));
+  }, []);
+  const saveCopies = useCallback((ids: string[]) => void startBulkExport(ids), []);
+  const nameOf = useCallback(
+    (id: string) => everything.items.find((item) => item.id === id)?.fileName ?? 'Item',
+    [everything.items],
+  );
+
+  const mp4Available = caps?.mp4Available ?? false;
+  const missingCount = items.filter((item) => !item.exists).length;
+
+  const onGridKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
+    const target = event.target as HTMLElement;
+    if (!target.matches('[data-card-main]')) return;
+    const buttons = [
+      ...(gridRef.current?.querySelectorAll<HTMLButtonElement>('[data-card-main]') ?? []),
+    ];
+    const index = buttons.indexOf(target as HTMLButtonElement);
+    if (index < 0) return;
+    const firstTop = buttons[0]?.parentElement?.offsetTop ?? 0;
+    const columns = Math.max(
+      1,
+      buttons.filter((button) => button.parentElement?.offsetTop === firstTop).length,
+    );
+    const id = target.dataset.id ?? '';
+    const mod = event.ctrlKey || event.metaKey;
+    if (mod && event.key.toLowerCase() === 'a') {
+      event.preventDefault();
+      setRawSelection(selectAll(order));
+      return;
+    }
+    if (mod && event.key === ' ') {
+      event.preventDefault(); // Ctrl+Space selects the focused card without opening it
+      toggleSelect({ id });
+      return;
+    }
+    let next: number;
+    switch (event.key) {
+      case 'ArrowRight':
+        next = Math.min(buttons.length - 1, index + 1);
+        break;
+      case 'ArrowLeft':
+        next = Math.max(0, index - 1);
+        break;
+      case 'ArrowDown':
+        next = Math.min(buttons.length - 1, index + columns);
+        break;
+      case 'ArrowUp':
+        next = Math.max(0, index - columns);
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = buttons.length - 1;
+        break;
+      case 'Delete': {
+        // Removes the entry only, with Undo. Files are never deleted from the keyboard.
+        event.preventDefault();
+        if (selection.ids.size > 1 && selection.ids.has(id)) {
+          setConfirmRemove([...selection.ids]);
+          return;
+        }
+        const item = items.find((candidate) => candidate.id === target.dataset.id);
+        if (!item) return;
+        const neighbour = buttons[index + 1] ?? buttons[index - 1];
+        pendingFocus.current = neighbour?.dataset.id ?? null;
+        actions.remove(item);
+        return;
+      }
+      default:
+        return;
+    }
+    event.preventDefault();
+    const button = buttons[next];
+    if (button) {
+      button.focus();
+      setTabStopId(button.dataset.id ?? null);
+      if (event.shiftKey && event.key.startsWith('Arrow') && button.dataset.id) {
+        // Shift+arrows grow the selection from the card the move started on.
+        const targetId = button.dataset.id;
+        setRawSelection((current) =>
+          selectRange(
+            current.anchor === null ? toggle(EMPTY_SELECTION, id) : current,
+            order,
+            targetId,
+          ),
+        );
+      }
+    }
+  };
+
+  // Escape clears the selection from anywhere in the view (menus and dialogs take it first).
+  useEffect(() => {
+    if (selectedCount === 0 || !active) return;
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (document.querySelector('dialog[open], [role="menu"], [role="alertdialog"]')) return;
+      clearSelection();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selectedCount, clearSelection, active]);
+  const onGridKeyUp = (event: KeyboardEvent<HTMLUListElement>): void => {
+    // The key-up of Ctrl+Space would click the focused card (open it): it only selects.
+    if ((event.ctrlKey || event.metaKey) && event.key === ' ') event.preventDefault();
+  };
+
+  const startScreenshot = (): void => {
+    void window.framecapt
+      .invoke('capture:startScreenshot', { target: 'region' })
+      .then((response) => {
+        if (!response.ok) notify.error(response.error);
+      });
+  };
+  const startRecording = (): void => {
+    void window.framecapt
+      .invoke('recorder:start', {
+        target: 'screen',
+        options: recordOptionsFromSettings(getSettings().recording),
+      })
+      .then((response) => {
+        if (!response.ok) notify.error(response.error);
+      });
+  };
+
+  const confirmDialog = (
+    <AlertConfirm
+      open={confirmDelete !== null}
+      title="Delete file from disk?"
+      description={
+        confirmDelete
+          ? `“${confirmDelete.fileName}” will be moved to the Recycle Bin and removed from history. You can restore it from the Recycle Bin.`
+          : ''
+      }
+      cancelLabel="Keep file"
+      confirmLabel="Delete file"
+      onConfirm={() => {
+        const item = confirmDelete;
+        setConfirmDelete(null);
+        if (!item) return;
+        if (selectedId === item.id) setSelectedId(null);
+        void deleteItemFile(item, reload);
+      }}
+      onCancel={() => setConfirmDelete(null)}
+    />
+  );
+  const projectDialog = (
+    <AlertConfirm
+      open={confirmProject !== null}
+      title="Delete editable data?"
+      description="The unredacted original and the annotations of this screenshot will be deleted. The saved image stays, but its annotations can no longer be changed."
+      cancelLabel="Keep"
+      confirmLabel="Delete editable data"
+      onConfirm={() => {
+        const item = confirmProject;
+        setConfirmProject(null);
+        if (item) void deleteItemProject(item, reload);
+      }}
+      onCancel={() => setConfirmProject(null)}
+    />
+  );
+  const onEdit =
+    onEditItem || onEditVideo
+      ? (item: HistoryItemView) => (item.type === 'recording' ? onEditVideo : onEditItem)?.(item.id)
+      : undefined;
+
+  if (selected) {
+    return (
+      <>
+        <div className="h-full overflow-y-auto">
+          <div className="view-in mx-auto max-w-6xl px-8 py-7">
+            <HistoryDetails
+              item={selected}
+              original={
+                selected.derivedFrom
+                  ? everything.items.find((i) => i.id === selected.derivedFrom)
+                  : undefined
+              }
+              now={now}
+              actions={actions}
+              onBack={() => setSelectedId(null)}
+              onSelect={select}
+              onAskDelete={setConfirmDelete}
+              onEdit={onEdit}
+              onAskDeleteProject={setConfirmProject}
+            />
+          </div>
+        </div>
+        {confirmDialog}
+        {projectDialog}
+        <SaveAsHost />
+      </>
+    );
+  }
+
+  const findExisting = (): void => {
+    void window.framecapt.invoke('history:rescan').then((response) => {
+      if (!response.ok) notify.error(response.error);
+      else {
+        const { added } = response.data;
+        notify.info(
+          added > 0
+            ? `Added ${added} ${added === 1 ? 'capture' : 'captures'}`
+            : 'No new captures found',
+        );
+        reload();
+      }
+    });
+  };
+  const clearMissing = (): void => {
+    void window.framecapt.invoke('history:clearMissing').then((response) => {
+      if (!response.ok) notify.error(response.error);
+      else {
+        notify.info(
+          `Removed ${response.data.removed} missing ${response.data.removed === 1 ? 'item' : 'items'} from history`,
+        );
+        reload();
+      }
+    });
+  };
+
+  const dragIds = (item: HistoryItemView): string[] =>
+    selection.ids.has(item.id) && selection.ids.size > 1 ? [...selection.ids] : [item.id];
+  const activeId = tabStopId && items.some((i) => i.id === tabStopId) ? tabStopId : items[0]?.id;
+
+  const countText = !loaded
+    ? ''
+    : total === 0
+      ? ''
+      : query
+        ? `${items.length} of ${total} ${total === 1 ? 'item' : 'items'}`
+        : `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+
+  const folderPath = scope.kind === 'folder' ? scope.path : null;
+  const isSaveFolder =
+    folderPath !== null && tree?.captureFolder?.toLowerCase() === folderPath.toLowerCase();
+  const emptyScope =
+    scope.kind === 'type'
+      ? `No ${SCOPE_NOUN[scope.type]} yet`
+      : scope.kind === 'recent'
+        ? 'Nothing from the last week'
+        : 'Nothing here yet';
+
+  return (
+    <div data-testid="history-view" className="flex h-full min-h-0">
+      {prefs.sidebarCollapsed ? null : (
+        <LibrarySidebar
+          tree={tree}
+          counts={counts}
+          selection={scope}
+          onSelect={onScopeChange}
+          width={prefs.sidebarWidth}
+          onMoved={clearSelection}
+        />
+      )}
+      <div className="flex min-w-0 flex-1 flex-col" data-testid="history-main">
+        <LibraryHeader
+          scope={scope}
+          onScope={onScopeChange}
+          sidebarHidden={prefs.sidebarCollapsed}
+          onShowSidebar={() => setLibraryPrefs({ sidebarCollapsed: false })}
+          countText={countText}
+          showControls={total > 0}
+          query={queryInput}
+          onQuery={setQueryInput}
+          sort={prefs.sort}
+          onSort={(sort) => setLibraryPrefs({ sort })}
+          view={prefs.view}
+          onView={(view) => setLibraryPrefs({ view })}
+          includeSubfolders={prefs.includeSubfolders}
+          onIncludeSubfolders={(value) => setLibraryPrefs({ includeSubfolders: value })}
+          onFindExisting={findExisting}
+          missingCount={missingCount}
+          onClearMissing={clearMissing}
+        />
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {selectedCount > 0 ? (
+            <div className="sticky top-0 z-10 px-5 pt-4">
+              <SelectionBar
+                count={selectedCount}
+                listed={items.length}
+                bulk={bulk}
+                onSaveCopies={() => saveCopies([...selection.ids])}
+                onRemove={() => setConfirmRemove([...selection.ids])}
+                onMoveTo={() => setMoveIds([...selection.ids])}
+                onSelectAll={() => setRawSelection(selectAll(order))}
+                onClear={clearSelection}
+                onCancelBulk={() => void cancelBulk()}
+              />
+            </div>
+          ) : null}
+
+          {loaded && failed ? (
+            <EmptyState
+              icon={<SearchX className="size-6" />}
+              title="History could not be loaded"
+              description="Something went wrong while reading your history. Your files are safe. Try again, and if it keeps happening open Settings, Advanced to see the log."
+              action={
+                <Button variant="primary" data-testid="history-retry" onClick={reload}>
+                  Try again
+                </Button>
+              }
+            />
+          ) : loaded && total === 0 ? (
+            <EmptyState
+              icon={<Clock className="size-6" />}
+              title="Your captures will appear here"
+              description="Take a screenshot or record your screen. Everything you save is listed here so you can find it again, copy it or open its folder."
+              action={
+                <div className="flex flex-wrap justify-center gap-2.5">
+                  <Button
+                    variant="primary"
+                    data-testid="history-empty-shot"
+                    icon={<Camera className="size-4" aria-hidden="true" />}
+                    onClick={startScreenshot}
+                  >
+                    Take a screenshot
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    data-testid="history-empty-record"
+                    icon={<Video className="size-4" aria-hidden="true" />}
+                    onClick={startRecording}
+                  >
+                    Record your screen
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    data-testid="history-empty-find"
+                    icon={<FolderSearch className="size-4" aria-hidden="true" />}
+                    onClick={findExisting}
+                  >
+                    Find existing captures
+                  </Button>
+                </div>
+              }
+            />
+          ) : loaded && items.length === 0 && query === '' && folderPath !== null ? (
+            <EmptyState
+              icon={<FolderOpen className="size-6" />}
+              title="This folder is empty"
+              description="Drag captures here, or make it the save location so new captures land in it."
+              action={
+                isSaveFolder ? (
+                  <p className="text-[13px] text-fg-muted" data-testid="folder-empty-is-save">
+                    New captures are saved here.
+                  </p>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    data-testid="folder-empty-set-save"
+                    icon={<MapPin className="size-4" aria-hidden="true" />}
+                    onClick={() => void setCaptureFolder(folderPath)}
+                  >
+                    Save new captures here
+                  </Button>
+                )
+              }
+            />
+          ) : loaded && items.length === 0 && query === '' ? (
+            <EmptyState
+              icon={<FolderOpen className="size-6" />}
+              title={emptyScope}
+              description={
+                scope.kind === 'other'
+                  ? 'Captures saved outside the capture folders show up here.'
+                  : 'New captures of this kind will be listed here.'
+              }
+              action={
+                <Button
+                  variant="secondary"
+                  data-testid="history-show-all"
+                  onClick={() => onScopeChange(ALL_SELECTION)}
+                >
+                  Show all captures
+                </Button>
+              }
+            />
+          ) : loaded && items.length === 0 ? (
+            <EmptyState
+              icon={<SearchX className="size-6" />}
+              title="No matches"
+              description="Nothing in your library fits this search."
+              action={
+                <Button
+                  variant="secondary"
+                  data-testid="history-clear-filters"
+                  onClick={() => {
+                    setQueryInput('');
+                    onScopeChange(ALL_SELECTION);
+                  }}
+                >
+                  Clear search
+                </Button>
+              }
+            />
+          ) : prefs.view === 'list' ? (
+            <LibraryList
+              items={items}
+              now={now}
+              activeId={activeId}
+              selection={selection.ids}
+              selectMode={selectedCount > 0}
+              actions={actions}
+              listRef={gridRef}
+              onSelect={select}
+              onEdit={onEdit}
+              onSelectClick={selectClick}
+              onToggleSelect={toggleSelect}
+              onContextMenu={(target, point) => setMenu({ item: target, ...point })}
+              onDragOut={startItemDrag}
+              onItemsDrag={(dragged, transfer) => startItemsDrag(transfer, dragIds(dragged))}
+              onKeyDown={onGridKeyDown}
+              onKeyUp={onGridKeyUp}
+            />
+          ) : (
+            <ul
+              ref={gridRef}
+              data-testid="history-grid"
+              aria-label="Captures"
+              onKeyDown={onGridKeyDown}
+              onKeyUp={onGridKeyUp}
+              className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-4 p-5"
+            >
+              {items.map((item) => (
+                <HistoryCard
+                  key={item.id}
+                  item={item}
+                  now={now}
+                  tabStop={item.id === activeId}
+                  mp4Available={mp4Available}
+                  actions={actions}
+                  onSelect={select}
+                  onAskDelete={setConfirmDelete}
+                  onEdit={onEdit}
+                  selected={selection.ids.has(item.id)}
+                  selectMode={selectedCount > 0}
+                  onSelectClick={selectClick}
+                  onToggleSelect={toggleSelect}
+                  onContextMenu={(target, point) => setMenu({ item: target, ...point })}
+                  onDragOut={startItemDrag}
+                  onItemsDrag={(dragged, transfer) => startItemsDrag(transfer, dragIds(dragged))}
+                  onMoveTo={(target) => setMoveIds([target.id])}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+        {confirmDialog}
+        {projectDialog}
+        <HistoryContextMenu
+          target={menu}
+          selectedIds={selection.ids}
+          mp4Available={mp4Available}
+          actions={actions}
+          onEdit={onEdit}
+          onAskDelete={setConfirmDelete}
+          onAskDeleteProject={setConfirmProject}
+          onToggleSelect={toggleSelect}
+          onSaveCopies={saveCopies}
+          onRemoveMany={setConfirmRemove}
+          onClearSelection={clearSelection}
+          onMoveTo={setMoveIds}
+          onClose={() => setMenu(null)}
+        />
+        <AlertConfirm
+          open={confirmRemove !== null}
+          title={`Remove ${confirmRemove?.length ?? 0} items from history?`}
+          description="The files stay on your disk. You can undo this for a few seconds."
+          cancelLabel="Keep them"
+          confirmLabel="Remove"
+          onConfirm={() => {
+            const ids = confirmRemove ?? [];
+            setConfirmRemove(null);
+            clearSelection();
+            void removeItems(ids, reload);
+          }}
+          onCancel={() => setConfirmRemove(null)}
+        />
+        <SaveAsHost />
+        <BulkResultDialog summary={bulkSummary} nameOf={nameOf} onClose={dismissBulkSummary} />
+        <FolderPickerDialog
+          open={moveIds !== null}
+          title={`Move ${moveIds?.length ?? 0} ${moveIds?.length === 1 ? 'item' : 'items'} to`}
+          confirmLabel="Move here"
+          rootLabel="All captures (no folder)"
+          tree={tree}
+          initial={null}
+          onClose={() => setMoveIds(null)}
+          onConfirm={(folder) => {
+            const ids = moveIds;
+            setMoveIds(null);
+            if (ids) void moveItemsTo(ids, folder).then((moved) => moved && clearSelection());
+          }}
+        />
+      </div>
+    </div>
+  );
+}

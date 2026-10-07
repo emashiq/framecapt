@@ -9,6 +9,8 @@ export interface AlertConfirmProps {
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** A third, constructive answer beside the destructive one ("Save" next to "Don't save"). */
+  extra?: { label: string; onClick: () => void };
 }
 
 /**
@@ -23,6 +25,7 @@ export function AlertConfirm({
   confirmLabel,
   onConfirm,
   onCancel,
+  extra,
 }: AlertConfirmProps) {
   return (
     <AlertDialog.Root open={open} onOpenChange={(next) => !next && onCancel()}>
@@ -42,6 +45,13 @@ export function AlertConfirm({
                 {cancelLabel}
               </Button>
             </AlertDialog.Cancel>
+            {extra ? (
+              <AlertDialog.Action asChild>
+                <Button variant="primary" onClick={extra.onClick} data-testid="confirm-extra">
+                  {extra.label}
+                </Button>
+              </AlertDialog.Action>
+            ) : null}
             <AlertDialog.Action asChild>
               <Button variant="danger" onClick={onConfirm} data-testid="confirm-yes">
                 {confirmLabel}

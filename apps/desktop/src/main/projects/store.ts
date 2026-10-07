@@ -5,16 +5,21 @@ import { z } from 'zod';
 import { HISTORY_ID_PATTERN } from '../../shared/history-ipc';
 import {
   EDITOR_TOOL_VERSION,
+  MAX_ASSET_BYTES,
+  MAX_PROJECT_ASSETS,
   MAX_PROJECT_DOC_BYTES,
   PROJECT_VERSION,
   ProjectDocSchema,
   type ProjectDoc,
 } from '../../shared/project-ipc';
-import { readImageSize } from '../../shared/shots';
+import { detectImageFormat, MAX_FRAME_DIMENSION, readImageSize } from '../../shared/shots';
 import { writeFileAtomic } from '../shots/atomic-write';
 
 export const PROJECT_ORIGINAL = 'original.png';
 export const PROJECT_FILE = 'project.json';
+/** The pictures of image layers: `assets/<sha-256 of the PNG>.png`. */
+export const PROJECT_ASSETS = 'assets';
+const ASSET_NAME = /^([0-9a-f]{64})\.png$/;
 /** Projects with no history item stay this long before the startup sweep removes them. */
 export const PROJECT_SWEEP_GRACE_MS = 24 * 60 * 60 * 1000;
 
@@ -32,8 +37,21 @@ const ProjectFileSchema = z.object({
 export type ProjectFailure =
   'missing' | 'corrupt' | 'newer_version' | 'sha_mismatch' | 'dimension_mismatch';
 
+/** The picture of an image layer: PNG bytes and their SHA-256 (hex), which is the id. */
+export interface ProjectAsset {
+  id: string;
+  png: Buffer;
+}
+
 export type ProjectRead =
-  | { ok: true; png: Buffer; doc: ProjectDoc; width: number; height: number }
+  | {
+      ok: true;
+      png: Buffer;
+      doc: ProjectDoc;
+      width: number;
+      height: number;
+      assets: ProjectAsset[];
+    }
   | { ok: false; reason: ProjectFailure };
 
 export interface ProjectInput {
@@ -42,6 +60,22 @@ export interface ProjectInput {
   width: number;
   height: number;
   appVersion: string;
+  /** Pictures of the document's image layers (none: the project has no image layers). */
+  assets?: ProjectAsset[];
+}
+
+/** True for a PNG of at most MAX_ASSET_BYTES whose sides are within the frame limit. */
+function validAssetPng(png: Buffer): boolean {
+  const size = readImageSize(png);
+  return (
+    png.length <= MAX_ASSET_BYTES &&
+    detectImageFormat(png) === 'png' &&
+    size !== null &&
+    size.width > 0 &&
+    size.height > 0 &&
+    size.width <= MAX_FRAME_DIMENSION &&
+    size.height <= MAX_FRAME_DIMENSION
+  );
 }
 
 /** True when `candidate` lies strictly inside `root`. */
@@ -86,6 +120,7 @@ export class ProjectStore {
     }
     await fs.promises.mkdir(dir, { recursive: true });
     await writeFileAtomic(path.join(dir, PROJECT_ORIGINAL), input.png);
+    await this.writeAssets(dir, input.assets ?? []);
     await this.writeFile(dir, {
       ...input,
       baseSha256: sha256(input.png),
@@ -93,12 +128,69 @@ export class ProjectStore {
     });
   }
 
-  /** Replaces the editor document only; the original stays as it is. False when there is no valid project. */
-  async updateDoc(id: string, doc: ProjectDoc, appVersion: string): Promise<boolean> {
+  /**
+   * Writes the pictures of image layers (before project.json, so a document never points at a
+   * missing file), then removes the ones the document no longer uses. Every picture must be a
+   * valid PNG whose SHA-256 is its id; anything else rejects the whole write.
+   */
+  private async writeAssets(dir: string, assets: readonly ProjectAsset[]): Promise<void> {
+    if (assets.length > MAX_PROJECT_ASSETS) throw new Error('Too many image layers.');
+    for (const asset of assets) {
+      if (sha256(asset.png) !== asset.id || !validAssetPng(asset.png)) {
+        throw new Error('An image layer picture is not valid.');
+      }
+    }
+    const assetDir = path.join(dir, PROJECT_ASSETS);
+    if (assets.length === 0) {
+      await fs.promises.rm(assetDir, { recursive: true, force: true });
+      return;
+    }
+    await fs.promises.mkdir(assetDir, { recursive: true });
+    for (const asset of assets) {
+      await writeFileAtomic(path.join(assetDir, `${asset.id}.png`), asset.png);
+    }
+    const keep = new Set(assets.map((asset) => `${asset.id}.png`));
+    for (const name of await fs.promises.readdir(assetDir)) {
+      if (ASSET_NAME.test(name) && !keep.has(name)) {
+        await fs.promises.rm(path.join(assetDir, name), { force: true });
+      }
+    }
+  }
+
+  /** The pictures of a project: only valid, correctly named PNGs (a bad file is skipped: its layer shows a placeholder). */
+  private async readAssets(dir: string): Promise<ProjectAsset[]> {
+    const assetDir = path.join(dir, PROJECT_ASSETS);
+    let names: string[];
+    try {
+      names = await fs.promises.readdir(assetDir);
+    } catch {
+      return [];
+    }
+    const assets: ProjectAsset[] = [];
+    for (const name of names.filter((candidate) => ASSET_NAME.test(candidate))) {
+      if (assets.length >= MAX_PROJECT_ASSETS) break;
+      const png = await fs.promises.readFile(path.join(assetDir, name)).catch(() => null);
+      const id = name.slice(0, -4);
+      if (png && sha256(png) === id && validAssetPng(png)) assets.push({ id, png });
+    }
+    return assets;
+  }
+
+  /**
+   * Replaces the editor document and the pictures of its image layers; the original stays as it is.
+   * False when there is no valid project.
+   */
+  async updateDoc(
+    id: string,
+    doc: ProjectDoc,
+    appVersion: string,
+    assets: readonly ProjectAsset[] = [],
+  ): Promise<boolean> {
     const dir = this.dirFor(id);
     if (!dir) return false;
     const current = await this.read(id);
     if (!current.ok) return false;
+    await this.writeAssets(dir, assets);
     await this.writeFile(dir, {
       doc,
       width: current.width,
@@ -167,7 +259,23 @@ export class ProjectStore {
     if (!size || size.width !== parsed.data.width || size.height !== parsed.data.height) {
       return { ok: false, reason: 'dimension_mismatch' };
     }
-    return { ok: true, png, doc: parsed.data.doc, width: size.width, height: size.height };
+    return {
+      ok: true,
+      png,
+      doc: parsed.data.doc,
+      width: size.width,
+      height: size.height,
+      assets: await this.readAssets(dir),
+    };
+  }
+
+  /** Copies a project (original, document and pictures) to another id; false when `fromId` has none. */
+  async copy(fromId: string, toId: string): Promise<boolean> {
+    const from = this.dirFor(fromId);
+    const to = this.dirFor(toId);
+    if (!from || !to || !this.has(fromId)) return false;
+    await fs.promises.cp(from, to, { recursive: true, errorOnExist: true, force: false });
+    return true;
   }
 
   /** Deletes one project folder (idempotent). Only plain ids inside the root are ever touched. */

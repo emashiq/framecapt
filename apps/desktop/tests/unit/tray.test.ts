@@ -37,6 +37,7 @@ const idle: TrayState = {
   activeMs: 0,
   shortcuts: states,
   screenshotBusy: false,
+  multiDisplay: false,
 };
 
 const labels = (items: MenuItemConstructorOptions[]): string[] =>
@@ -62,9 +63,10 @@ describe('buildTrayTemplate', () => {
     expect(labels(template)).toEqual([
       'Screenshot',
       'Record',
+      'Capture steps',
       '-',
       'Open FrameCapt',
-      'History',
+      'Library',
       'Settings',
       '-',
       'Quit FrameCapt',
@@ -93,8 +95,6 @@ describe('buildTrayTemplate', () => {
     expect(find(template, 'stop')?.accelerator).toBe('Ctrl+Shift+0');
     const record = find(template, 'record')?.submenu as MenuItemConstructorOptions[];
     expect(record.every((item) => item.enabled === false)).toBe(true);
-    const shot = find(template, 'screenshot')?.submenu as MenuItemConstructorOptions[];
-    expect(shot.every((item) => item.enabled === false)).toBe(true);
   });
 
   it('paused offers Resume; saving disables the controls', () => {
@@ -114,8 +114,65 @@ describe('buildTrayTemplate', () => {
     expect(shot[2]?.accelerator).toBeUndefined();
   });
 
+  it('Steps: starts a guide, finishes the one that runs, and waits while another capture runs', () => {
+    const h = handlers();
+    const template = buildTrayTemplate(idle, h);
+    const item = find(template, 'steps');
+    expect(item?.label).toBe('Capture steps');
+    expect(item?.accelerator).toBe('Ctrl+Shift+8');
+    expect(item?.enabled).toBe(true);
+    (item?.click as () => void)();
+    expect(h.run).toHaveBeenCalledWith('stepsToggle');
+    const live = find(
+      buildTrayTemplate({ ...idle, screenshotBusy: true, stepsActive: true }, h),
+      'steps',
+    );
+    expect(live?.label).toBe('Finish step capture');
+    expect(live?.enabled).toBe(true);
+    expect(find(buildTrayTemplate({ ...idle, status: 'recording' }, h), 'steps')?.enabled).toBe(
+      false,
+    );
+    expect(find(buildTrayTemplate({ ...idle, screenshotBusy: true }, h), 'steps')?.enabled).toBe(
+      false,
+    );
+  });
+
   it('a screenshot in progress disables starting another', () => {
     const template = buildTrayTemplate({ ...idle, screenshotBusy: true }, handlers());
+    const shot = find(template, 'screenshot')?.submenu as MenuItemConstructorOptions[];
+    expect(shot.every((item) => item.enabled === false)).toBe(true);
+  });
+
+  it('offers All screens only with more than one display', () => {
+    const one = find(buildTrayTemplate(idle, handlers()), 'screenshot')
+      ?.submenu as MenuItemConstructorOptions[];
+    expect(one.map((item) => item.id)).not.toContain('screenshot-all-screens');
+    const h = handlers();
+    const template = buildTrayTemplate({ ...idle, multiDisplay: true }, h);
+    const shot = find(template, 'screenshot')?.submenu as MenuItemConstructorOptions[];
+    const all = shot.find((item) => item.id === 'screenshot-all-screens');
+    expect(all?.label).toBe('All screens');
+    expect(all?.accelerator).toBe(states.screenshotAllScreens.accelerator ?? undefined);
+    (all?.click as () => void)();
+    expect(h.run).toHaveBeenCalledWith('screenshotAllScreens');
+  });
+
+  it('screenshots stay available while a recording runs, except the window picker', () => {
+    for (const status of ['recording', 'paused'] as const) {
+      const template = buildTrayTemplate({ ...idle, status, multiDisplay: true }, handlers());
+      const shot = find(template, 'screenshot')?.submenu as MenuItemConstructorOptions[];
+      const enabled = Object.fromEntries(shot.map((item) => [item.id, item.enabled]));
+      expect(enabled).toEqual({
+        'screenshot-screen': true,
+        'screenshot-window': false,
+        'screenshot-region': true,
+        'screenshot-all-screens': true,
+      });
+    }
+  });
+
+  it('screenshots wait while a recording is being saved', () => {
+    const template = buildTrayTemplate({ ...idle, status: 'processing' }, handlers());
     const shot = find(template, 'screenshot')?.submenu as MenuItemConstructorOptions[];
     expect(shot.every((item) => item.enabled === false)).toBe(true);
   });

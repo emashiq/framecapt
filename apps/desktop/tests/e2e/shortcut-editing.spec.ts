@@ -15,6 +15,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 
@@ -83,7 +84,7 @@ const value = (action: string) => page.getByTestId(`shortcut-value-${action}`);
 test('a taken combination offers "Swap", and the swap saves both in one change', async () => {
   await openShortcuts();
   const before = await held();
-  expect(before).toHaveLength(8);
+  expect(before).toHaveLength(10);
 
   await page.getByTestId('shortcut-change-recordRegion').click();
   // Ctrl+Shift+3 is "Screenshot: region".
@@ -102,7 +103,7 @@ test('a taken combination offers "Swap", and the swap saves both in one change',
   await expect(value('screenshotRegion')).toContainText('7');
   await expect.poll(() => readSettings().shortcuts?.recordRegion).toBe('Ctrl+Shift+3');
   expect(readSettings().shortcuts?.screenshotRegion).toBe('Ctrl+Shift+7');
-  // The same eight combinations are registered, each for its new action.
+  // The same nine combinations are registered, each for its new action.
   await expect.poll(held).toEqual(before);
   await expect(page.getByTestId('shortcut-problems')).toHaveCount(0);
 });
@@ -203,30 +204,31 @@ test('editor keys: rebound in Settings, then they work in the editor (and the ol
   // Into the editor.
   await page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'Capture' })
+    .getByRole('button', { name: 'Home' })
     .click();
   await page.getByTestId('shot-screen').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await page.getByTestId('editor-canvas').click({ position: { x: 5, y: 5 } });
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await editor.getByTestId('editor-canvas').click({ position: { x: 5, y: 5 } });
 
-  const pressed = (tool: string) => page.getByTestId(`tool-${tool}`);
-  await page.keyboard.press('w');
+  const pressed = (tool: string) => editor.getByTestId(`tool-${tool}`);
+  await editor.keyboard.press('w');
   await expect(pressed('arrow')).toHaveAttribute('aria-pressed', 'true');
-  await page.keyboard.press('v');
+  await editor.keyboard.press('v');
   await expect(pressed('rect')).toHaveAttribute('aria-pressed', 'true');
-  await page.keyboard.press('r');
+  await editor.keyboard.press('r');
   await expect(pressed('select')).toHaveAttribute('aria-pressed', 'true');
   // The old arrow key is unbound now: nothing changes.
-  await page.keyboard.press('w');
-  await page.keyboard.press('a');
+  await editor.keyboard.press('w');
+  await editor.keyboard.press('a');
   await expect(pressed('arrow')).toHaveAttribute('aria-pressed', 'true');
   // The toolbar tooltip and the help show the live keys.
-  await page.getByTestId('tool-arrow').hover();
-  await expect(page.getByRole('tooltip').first()).toContainText('W');
-  await page.mouse.move(600, 400);
-  await page.keyboard.press('?');
-  await expect(page.getByTestId('keyboard-help')).toContainText('Arrow tool');
-  await expect(page.getByTestId('keyboard-help').getByLabel('W', { exact: true })).toHaveCount(1);
-  await page.getByRole('button', { name: 'Close keyboard shortcuts' }).click();
-  await expect(page.getByTestId('keyboard-help')).toBeHidden();
+  await editor.getByTestId('tool-arrow').hover();
+  await expect(editor.getByRole('tooltip').first()).toContainText('W');
+  await editor.mouse.move(600, 400);
+  await editor.keyboard.press('?');
+  await expect(editor.getByTestId('keyboard-help')).toContainText('Arrow tool');
+  await expect(editor.getByTestId('keyboard-help').getByLabel('W', { exact: true })).toHaveCount(1);
+  await editor.getByRole('button', { name: 'Close keyboard shortcuts' }).click();
+  await expect(editor.getByTestId('keyboard-help')).toBeHidden();
 });

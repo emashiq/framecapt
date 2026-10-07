@@ -35,13 +35,36 @@ async function writeFileDurable(file: string, data: string): Promise<void> {
   }
 }
 
+/** Windows refuses to rename over a file another process has open for a moment (a virus scanner, the indexer). */
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RENAME_ATTEMPTS = 6;
+const RENAME_BACKOFF_MS = 25;
+
+/**
+ * `fs.rename`, retried a few times (25, 50, ... ms) on those transient errors, like graceful-fs does.
+ * Without it a manifest or output file left behind by a scanner's brief lock is silently stale or
+ * the finalization fails; any other error, or a lock that does not clear, is thrown as before.
+ */
+export async function renameWithRetry(from: string, to: string): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await fs.promises.rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? '';
+      if (attempt >= RENAME_ATTEMPTS || !TRANSIENT_RENAME_CODES.has(code)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, RENAME_BACKOFF_MS * attempt));
+    }
+  }
+}
+
 export const nodeSessionFs: SessionFs = {
   mkdir: (dir, options) => fs.promises.mkdir(dir, options),
   open: (file, flags) => fs.promises.open(file, flags) as unknown as Promise<SessionFileHandle>,
   writeFile: writeFileDurable,
   readFile: (file) => fs.promises.readFile(file, 'utf8'),
   readdir: (dir) => fs.promises.readdir(dir),
-  rename: (from, to) => fs.promises.rename(from, to),
+  rename: renameWithRetry,
   rm: (target, options) => fs.promises.rm(target, options),
   copyFile: (from, to, mode) => fs.promises.copyFile(from, to, mode),
   stat: (file) => fs.promises.stat(file),

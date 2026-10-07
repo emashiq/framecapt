@@ -6,7 +6,8 @@ import {
   MAX_EXPORT_BYTES,
   MAX_FRAME_DIMENSION,
   MAX_FRAME_PNG_BYTES,
-  ShotKindSchema,
+  MAX_IMPORT_BYTES,
+  CaptureTargetSchema,
   ShotSessionMetaSchema,
 } from './shots';
 
@@ -27,8 +28,14 @@ const bytes = (max: number) =>
 
 export const StartScreenshotRequestSchema = z
   .strictObject({
-    target: ShotKindSchema,
+    target: CaptureTargetSchema,
     sourceId: SourceIdSchema.optional(),
+    /** One image of every screen, joined (target must be 'screen'). */
+    allScreens: z.boolean().optional(),
+  })
+  .refine((request) => !request.allScreens || request.target === 'screen', {
+    message: 'All screens is a screen capture.',
+    path: ['allScreens'],
   })
   .refine((request) => request.target !== 'window' || request.sourceId !== undefined, {
     message: 'A window capture needs a sourceId.',
@@ -41,6 +48,26 @@ export const ShotGetResponseSchema = z.strictObject({
   session: ShotSessionMetaSchema,
   png: z.instanceof(ArrayBuffer),
 });
+
+/**
+ * "Open image" (File menu, Ctrl+O): the user picks a picture in a main-process dialog; main checks
+ * its size and magic bytes and hands the bytes to the renderer, which decodes any format and sends
+ * a PNG back with `shot:importImage`. `editor:pickImage` (Insert image > From file) answers alike.
+ */
+export const PickImageResponseSchema = z.union([
+  z.strictObject({ name: z.string().max(260), bytes: bytes(MAX_IMPORT_BYTES) }),
+  z.strictObject({ cancelled: z.literal(true) }),
+]);
+
+/** A PNG the renderer made from a picture the user opened, dropped or pasted: it starts an editor session. */
+export const ShotImportRequestSchema = z.strictObject({ png: bytes(MAX_FRAME_PNG_BYTES) });
+export const ShotImportResponseSchema = z.strictObject({ session: ShotSessionMetaSchema });
+
+/** The picture of a screenshot in History, as PNG, to insert as an image layer (main-owned id). */
+export const HistoryImageRequestSchema = z.strictObject({
+  historyId: z.string().regex(/^[0-9a-f-]{36}$/),
+});
+export const HistoryImageResponseSchema = z.strictObject({ png: z.instanceof(ArrayBuffer) });
 
 export const ImageFormatSchema = z.enum(['png', 'jpeg']);
 
@@ -55,6 +82,8 @@ export const ShotExportRequestSchema = z.strictObject({
   thumbnail: bytes(MAX_THUMBNAIL_BYTES).optional(),
   /** The editable state to keep next to the image (ignored when Settings turn editable originals off). */
   project: ShotProjectPayloadSchema.optional(),
+  /** Quick save of a screenshot opened from history: next to that item's file, not in the folder. */
+  beside: z.boolean().optional(),
 });
 export const ShotExportResponseSchema = z.union([
   z.strictObject({ path: z.string(), historyId: z.string().optional() }),
@@ -71,16 +100,6 @@ export const ShotCopyRequestSchema = z.strictObject({
   sessionId: z.string().min(1).max(64),
   bytes: bytes(MAX_EXPORT_BYTES),
 });
-
-/** The editor reports whether closing the window would lose work (see main/close-guard.ts). */
-export const EditorSetDirtyRequestSchema = z.strictObject({
-  dirty: z.boolean(),
-  /** A screenshot is open in the editor (saved or not). */
-  open: z.boolean().optional(),
-});
-
-/** The user's answer to `app:confirmClose`: discard (close now) or keep editing. */
-export const EditorResolveCloseRequestSchema = z.strictObject({ discard: z.boolean() });
 
 export const ShowItemInFolderRequestSchema = z.strictObject({ path: z.string().min(1).max(1024) });
 
@@ -175,9 +194,3 @@ export const FlowEndedEventSchema = z.object({
   message: z.string().optional(),
 });
 export type FlowEndedEvent = z.infer<typeof FlowEndedEventSchema>;
-
-export const ShotReadyEventSchema = z.object({
-  session: ShotSessionMetaSchema,
-  /** Set when the "save and open the editor" setting already saved the capture: nothing is unsaved yet. */
-  savedPath: z.string().optional(),
-});

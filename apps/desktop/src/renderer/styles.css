@@ -13,6 +13,9 @@
   --surface: light-dark(#ffffff, #121829);
   --surface-2: light-dark(#f1f5f9, #0f1424);
   --surface-3: light-dark(#e8edf4, #1a2136);
+  /* The icon rail and the Library's sidebar: quiet panes next to the content. */
+  --rail: light-dark(#eceff5, #0d1220);
+  --pane: light-dark(#f3f5f9, #0e1322);
   --line: light-dark(#e2e8f0, #232b3e);
   --line-strong: light-dark(#cbd5e1, #333d55);
   /* The edge of a form control (input, select, switch): 3:1 against its surface (WCAG 1.4.11). */
@@ -68,6 +71,8 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
+  --color-rail: var(--rail);
+  --color-pane: var(--pane);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-control: var(--control);
@@ -347,4 +352,14 @@ html.overlay-root #root {
 /* A tooltip that must never take the pointer: Radix puts it in a positioned wrapper that would. */
 [data-radix-popper-content-wrapper]:has(> .tooltip-passthrough) {
   pointer-events: none;
+}
+
+/* Video editor: a piece cut out of the recording is hatched on the timeline. */
+.cut-hatch {
+  background-color: var(--surface);
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--fg) 30%, transparent) 0 2px,
+    transparent 2px 7px
+  );
 }

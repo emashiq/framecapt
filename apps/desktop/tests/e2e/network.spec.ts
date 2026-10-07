@@ -131,7 +131,7 @@ test('60 seconds of use make no request to the network', async () => {
     let step = 0;
     while (Date.now() - started < WATCH_MS) {
       // Walk through the main views: each one loads its own code and data.
-      const view = ['History', 'Settings', 'Capture'][step % 3] ?? 'Capture';
+      const view = ['Library', 'Settings', 'Home'][step % 3] ?? 'Home';
       await nav.getByRole('button', { name: view }).click();
       if (view === 'Settings') {
         await page.getByTestId('settings-nav-about').click();

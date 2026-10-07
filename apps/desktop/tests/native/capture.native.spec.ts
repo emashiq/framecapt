@@ -686,7 +686,9 @@ test('denial paths: bogus source, no grant, one-shot grants', async () => {
   writeJson('denial-paths.json', { details, mainLogDenials: denials });
 });
 
-test('camera (video getUserMedia) is denied by the permission handler', async () => {
+// Role-aware: the main window (this page) may not open the camera; the recorder and camera windows may
+// (covered by tests/e2e/recording-camera.spec.ts with Chromium's fake camera and by unit tests).
+test('camera (video getUserMedia) is denied to the main window by the permission handler', async () => {
   const outcome = await page.evaluate(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });

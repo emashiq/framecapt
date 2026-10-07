@@ -21,8 +21,10 @@ import { isSquirrelInstall, UpdateService } from './updates';
 import {
   createMainWindow,
   getMainWindow,
+  getRole,
   getOriginConfig,
   getRendererDir,
+  isQuitting,
   setQuitting,
   showMainWindow,
 } from './windows';
@@ -69,10 +71,11 @@ function start(): void {
   // From here on closing windows really closes them (close-to-tray stands down).
   app.on('before-quit', () => setQuitting(true));
 
-  // With close-to-tray the app lives on in the tray after its last window is gone.
+  // With close-to-tray the app lives on in the tray after its last window is gone, unless the user
+  // quit: a quit that the unsaved-work question stopped starts again once they discard.
   app.on('window-all-closed', () => {
     const keepAlive = settings?.get().general.closeToTray === true && desktop?.tray.active === true;
-    if (!keepAlive) app.quit();
+    if (!keepAlive || isQuitting()) app.quit();
   });
 
   app.on('activate', () => {
@@ -110,7 +113,9 @@ function start(): void {
     // The production renderer is served from app://framecapt (dev uses the Vite server).
     registerAppProtocol(getRendererDir());
     installCsp(session.defaultSession, getOriginConfig());
-    installPermissionHandlers(session.defaultSession, getOriginConfig);
+    installPermissionHandlers(session.defaultSession, getOriginConfig, (contents) =>
+      contents ? getRole(contents.id) : undefined,
+    );
     installNetworkBlocker(session.defaultSession, getOriginConfig);
     disableSpellChecker(session.defaultSession);
     // Unconfigured (empty feed URL) builds never touch autoUpdater: no update code, no network.

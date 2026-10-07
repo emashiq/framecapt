@@ -6,6 +6,7 @@ import {
   EyeOff,
   Grid3x3,
   Highlighter,
+  ImagePlus,
   ListOrdered,
   MessageSquare,
   Minus,
@@ -144,6 +145,17 @@ export const TOOL_GROUPS: readonly { label: string; ids: readonly ToolId[] }[] =
   { label: 'Annotate', ids: ['text', 'callout', 'step', 'stamp'] },
   { label: 'Effects', ids: ['highlight', 'blur', 'redact', 'spotlight', 'magnifier', 'ruler'] },
 ];
+
+/**
+ * Insert image is an action, not a drawing tool: it opens a menu (from a file, from History) and
+ * places the picture as a layer. Its key is a setting like the tools' keys.
+ */
+export const INSERT_IMAGE = {
+  label: 'Insert image',
+  action: 'insertImage',
+  icon: ImagePlus,
+  hint: 'Add a picture from a file or from History. You can also paste or drop one',
+} as const satisfies Omit<ToolDef, 'id'>;
 
 /** The tool an editor action selects, or null for the other actions. */
 export function toolForAction(action: EditorAction): ToolId | null {

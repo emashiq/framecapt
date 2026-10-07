@@ -13,6 +13,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 
@@ -53,7 +54,7 @@ test.afterAll(async () => {
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const nav = (name: 'Capture' | 'History' | 'Settings') =>
+const nav = (name: 'Home' | 'Library' | 'Settings') =>
   page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 
 const shotsDir = async (): Promise<string> => {
@@ -77,42 +78,48 @@ test('Ctrl+Shift+S saves into the screenshots folder with no dialog, lists it in
     }) as typeof shell.trashItem;
   });
   const folder = await shotsDir();
+  // A save is written to a `.tmp` file and renamed: only finished files count (the temp file is
+  // there for a moment and would be mistaken for the capture).
+  const saved = (): string[] =>
+    fs.existsSync(folder) ? fs.readdirSync(folder).filter((name) => !name.endsWith('.tmp')) : [];
 
   await page.getByTestId('shot-screen').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await page.getByTestId('editor-canvas').click({ position: { x: 40, y: 40 } });
-  await page.keyboard.press('Control+Shift+S');
-  await expect.poll(() => (fs.existsSync(folder) ? fs.readdirSync(folder).length : 0)).toBe(1);
-  const first = fs.readdirSync(folder)[0] as string;
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await editor.getByTestId('editor-canvas').click({ position: { x: 40, y: 40 } });
+  await editor.keyboard.press('Control+Shift+S');
+  await expect.poll(() => saved().length).toBe(1);
+  const first = saved()[0] as string;
   expect(first).toMatch(/^FrameCapt \d{4}-\d{2}-\d{2} at \d{2}\.\d{2}\.\d{2}\.png$/);
   expect(fs.readdirSync(folder).filter((name) => name.endsWith('.tmp'))).toEqual([]);
-  await expect(page.getByText(/Saved to/).first()).toBeVisible();
+  await expect(editor.getByText(/Saved to/).first()).toBeVisible();
   // A second quick save of the same capture never overwrites the first.
-  await page.keyboard.press('Control+Shift+S');
-  await expect.poll(() => fs.readdirSync(folder).length).toBe(2);
-  expect(fs.readdirSync(folder)).toContain(first);
+  await editor.keyboard.press('Control+Shift+S');
+  await expect.poll(() => saved().length).toBe(2);
+  expect(saved()).toContain(first);
   expect(await app.evaluate(() => (globalThis as unknown as { __dialogs: number }).__dialogs)).toBe(
     0,
   );
 
   // The menu entry does the same.
-  await page.getByTestId('editor-save-menu').click();
-  await page.getByTestId('editor-quick-save').click();
-  await expect.poll(() => fs.readdirSync(folder).length).toBe(3);
+  await editor.getByTestId('editor-save-menu').click();
+  await editor.getByTestId('editor-quick-save').click();
+  await expect.poll(() => saved().length).toBe(3);
 
   // Undo the last one.
   // Stacked toasts overlap and animate: activate the newest Undo directly.
-  await page.getByRole('button', { name: 'Undo' }).last().dispatchEvent('click');
-  await expect.poll(() => fs.readdirSync(folder).length).toBe(2);
+  await editor.getByRole('button', { name: 'Undo' }).last().dispatchEvent('click');
+  await expect.poll(() => saved().length).toBe(2);
   expect(
     await app.evaluate(() => (globalThis as unknown as { __trashed: string[] }).__trashed),
   ).toHaveLength(1);
 
   // After the undo the editor holds unsaved work again; quick save once more, then leave.
-  await page.keyboard.press('Control+Shift+S');
-  await expect.poll(() => fs.readdirSync(folder).length).toBe(3);
-  await page.getByTestId('editor-done').click();
-  await nav('History');
+  await editor.keyboard.press('Control+Shift+S');
+  await expect.poll(() => saved().length).toBe(3);
+  await editor.getByTestId('editor-done').click();
+  await expectEditorClosed(app);
+  await nav('Library');
   await expect(page.getByTestId('history-item')).toHaveCount(3);
 });
 
@@ -120,7 +127,7 @@ test('quick save is a customizable editor shortcut, listed in Settings', async (
   await nav('Settings');
   await page.getByTestId('settings-nav-shortcuts').click();
   await expect(page.getByTestId('settings-shortcuts')).toContainText('Quick save');
-  await nav('Capture');
+  await nav('Home');
 });
 
 test('Settings search filters sections and options, and shows an empty state', async () => {
@@ -150,7 +157,7 @@ test('Settings search filters sections and options, and shows an empty state', a
   await search.fill('folder');
   await page.keyboard.press('Escape');
   await expect(search).toHaveValue('');
-  await nav('Capture');
+  await nav('Home');
 });
 
 test('tucking the toolbar away keeps recording; the pause shortcut works while it is tucked', async () => {

@@ -1,9 +1,9 @@
 /**
- * Decides what happens when the main window is asked to close while the editor may hold unsaved
+ * Decides what happens when the main window is asked to close while its editor tabs may hold unsaved
  * work. Pure logic (no Electron), so the "quit must always remain possible" rules are unit tested.
  *
  *   - Not dirty -> close.
- *   - Dirty, first attempt -> ask the renderer (`app:confirmClose`) and keep the window open.
+ *   - Dirty, first attempt -> ask the renderer (`editor:confirmClose`) and keep the window open.
  *   - Dirty, a second attempt while the question is still open -> close. A hung or confused
  *     renderer therefore can never trap the user in the app.
  *   - Answer "discard" -> the next close goes through. Answer "keep editing" -> asking resets.

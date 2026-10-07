@@ -30,8 +30,8 @@ export interface FakeToolsOptions {
   stderr?: string;
   /** Called with the arguments before the fake remux "runs"; may await (to model a slow remux). */
   beforeRun?: (args: string[], options: RunOptions) => Promise<void> | void;
-  /** What the fake ffprobe says about a file. */
-  probe?: (file: string) => ProbeResult | Error;
+  /** What the fake ffprobe says about a file (and the history format it was asked to read it as). */
+  probe?: (file: string, format?: string) => ProbeResult | Error;
   missing?: boolean;
   /** Text of the fake `ffmpeg -encoders`. */
   encoders?: string;
@@ -64,9 +64,9 @@ export function fakeTools(options: FakeToolsOptions = {}): FakeTools {
       fs.copyFileSync(input, args.at(-1) as string);
       return { code: 0, stderrTail: '' };
     },
-    async probe(file) {
+    async probe(file, probeOptions) {
       probes.push(file);
-      const result = options.probe ? options.probe(file) : PLAYABLE;
+      const result = options.probe ? options.probe(file, probeOptions?.format) : PLAYABLE;
       if (result instanceof Error) throw result;
       return result;
     },

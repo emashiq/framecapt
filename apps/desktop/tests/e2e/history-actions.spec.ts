@@ -97,7 +97,7 @@ async function launch(
 async function openHistory(page: Page, count: number): Promise<void> {
   await page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'History' })
+    .getByRole('button', { name: 'Library' })
     .click();
   await expect(page.getByTestId('history-item')).toHaveCount(count);
 }
@@ -246,7 +246,8 @@ test('right-click opens a menu with the card actions; Shift+F10 opens it from th
   // The recording has no image copy and offers MP4.
   await mainOf(page, 4).click({ button: 'right' });
   await expect(page.getByTestId('ctx-mp4')).toBeVisible();
-  await expect(page.getByTestId('ctx-edit')).toHaveCount(0);
+  // A recording is edited in the video editor.
+  await expect(page.getByTestId('ctx-edit')).toHaveText('Edit video');
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
 

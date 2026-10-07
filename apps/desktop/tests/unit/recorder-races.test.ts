@@ -72,7 +72,11 @@ vi.mock('../../src/main/windows', () => {
 vi.mock('../../src/main/logger', () => ({
   log: { info: () => undefined, warn: () => undefined, error: () => undefined },
 }));
-vi.mock('../../src/main/worker', () => ({ whenWorkerReady: () => Promise.resolve() }));
+vi.mock('../../src/main/worker', () => ({
+  whenWorkerReady: () => Promise.resolve(),
+  requestFrames: async () => [],
+}));
+vi.mock('../../src/main/capture/exact-capture', () => ({ grabScreensExact: vi.fn() }));
 vi.mock('../../src/main/overlay', () => ({ OverlaySet: class {} }));
 vi.mock('../../src/main/recorder/windows', () => ({
   createToolbarWindow: () => ({
@@ -88,6 +92,7 @@ import { nodeSessionFs } from '../../src/main/recording/session-fs';
 import { SessionService, type SessionFileHandle } from '../../src/main/recording/session-service';
 import { RecorderController } from '../../src/main/recorder/controller';
 import type { EngineEvent } from '../../src/shared/recorder-ipc';
+import { grabScreensExact } from '../../src/main/capture/exact-capture';
 import { fakeTools } from './fake-tools';
 
 const { state } = hoisted;
@@ -114,6 +119,7 @@ let sessions: SessionService;
 let controller: RecorderController;
 let addVideo: ReturnType<typeof vi.fn>;
 let saved: (string | null)[];
+const savedShots: { kind: string; width: number; height: number }[] = [];
 let appended: Uint8Array[];
 let appendTimer: NodeJS.Timeout | undefined;
 
@@ -124,6 +130,7 @@ beforeEach(() => {
   state.sent.length = 0;
   appended = [];
   saved = [];
+  savedShots.length = 0;
   addVideo = vi.fn(async () => ({ id: 'history-1' }));
 });
 afterEach(async () => {
@@ -226,6 +233,7 @@ function build(
     media: new MediaRegistry(),
     synthetic: false,
     isScreenshotBusy: () => false,
+    saveScreenshot: async (shot) => void savedShots.push(shot),
     outputDir: () => out,
     tools,
     history: { addVideo } as never,
@@ -327,6 +335,54 @@ describe('stop from several places at once', () => {
     expect(controller.snapshotFor('recorder').result).toBeNull();
     expect(controller.snapshotFor('countdown').result).toBeNull();
     expect(controller.snapshotFor('main').result?.path).toContain(out);
+  });
+});
+
+describe('a screenshot of the running recording (the toolbar button)', () => {
+  const frame = (width: number, height: number) => ({
+    width,
+    height,
+    image: { getSize: () => ({ width, height }), toPNG: () => Buffer.from('png') },
+  });
+  const toasts = () => state.sent.filter((entry) => entry.event === 'recorder:toast');
+
+  it('saves a still of the screen, tells the toolbar, and the recording carries on', async () => {
+    build();
+    installEngine();
+    vi.mocked(grabScreensExact).mockResolvedValue({
+      frames: new Map([['1', frame(1920, 1080)]]) as never,
+      fallback: [],
+      ms: 1,
+    });
+    await startRecording();
+    expect(controller.isLive).toBe(true);
+    await controller.screenshotNow();
+    expect(savedShots).toEqual([
+      { kind: 'screen', width: 1920, height: 1080, png: expect.anything() },
+    ]);
+    expect(toasts().map((entry) => entry.payload)).toEqual([
+      { level: 'info', message: 'Screenshot saved' },
+    ]);
+    expect(controller.status).toBe('recording');
+    await controller.stop('user');
+  });
+
+  it('refuses when nothing is recording', async () => {
+    build();
+    expect(controller.isLive).toBe(false);
+    await expect(controller.screenshotNow()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(savedShots).toHaveLength(0);
+  });
+
+  it('says so in the toolbar when the capture fails', async () => {
+    build();
+    installEngine();
+    vi.mocked(grabScreensExact).mockRejectedValue(new Error('boom'));
+    await startRecording();
+    await expect(controller.screenshotNow()).rejects.toThrow();
+    expect(toasts().map((entry) => entry.payload.level)).toEqual(['error']);
+    expect(controller.status).toBe('recording');
+    await controller.stop('user');
   });
 });
 

@@ -967,7 +967,11 @@ async function main() {
 `,
   );
   const uninstallStarted = Date.now();
-  const un = run(updateExe, ['--uninstall', '-s'], { timeout: 180_000 });
+  // The uninstall hook asks whether to remove user data; the smoke test must keep it (sentinel check).
+  const un = run(updateExe, ['--uninstall', '-s'], {
+    timeout: 180_000,
+    env: { ...process.env, FRAMECAPT_UNINSTALL_KEEP: '1' },
+  });
   evidence.uninstall = {
     exitCode: un.status,
     seconds: (Date.now() - uninstallStarted) / 1000,

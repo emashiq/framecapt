@@ -107,7 +107,7 @@ export function placeToolbar(
 export const TOOLBAR_HEIGHT = 48;
 
 /**
- * Toolbar width in DIP: a fixed core (grip, dot and timer, pause, stop) plus a slot per recorded
+ * Toolbar width in DIP: a fixed core (grip, dot and timer, pause, screenshot, stop) plus a slot per recorded
  * audio source (mute button and level meter), which grows when that source is lost to make room
  * for the warning badge.
  */
@@ -116,5 +116,5 @@ export function toolbarWidth(
   lost: { mic: boolean; system: boolean } = { mic: false, system: false },
 ): number {
   const slot = (present: boolean, gone: boolean): number => (present ? (gone ? 196 : 76) : 0);
-  return 300 + slot(audio.mic, lost.mic) + slot(audio.system, lost.system);
+  return 340 + slot(audio.mic, lost.mic) + slot(audio.system, lost.system);
 }

@@ -19,6 +19,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { mockScreenshotPng, newId, seedHistory } from './history-fixtures';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -150,23 +151,29 @@ async function tool(page: Page, name: ToolName): Promise<void> {
 const annotationCount = async (page: Page): Promise<number> =>
   Number(await canvasOf(page).getAttribute('data-annotations'));
 
-async function openShot(page: Page): Promise<void> {
-  await page.getByTestId('shot-screen').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await expect(page.getByTestId('editor-dimensions')).toHaveText(
+/** Takes a screenshot in the main window; it opens as a tab of the main window, which is returned. */
+async function openShot(main: Page, app: ElectronApplication): Promise<Page> {
+  await main.getByTestId('shot-screen').click();
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-dimensions')).toHaveText(
     `${FRAME.width} × ${FRAME.height}`,
   );
+  return editor;
 }
 
-async function go(page: Page, name: 'Capture' | 'History' | 'Settings'): Promise<void> {
+async function go(page: Page, name: 'Home' | 'Library' | 'Settings'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 }
 
-async function leaveEditor(page: Page): Promise<void> {
-  await page.getByTestId('editor-done').click();
-  const confirm = page.getByTestId('confirm-yes');
-  if (await confirm.isVisible().catch(() => false)) await confirm.click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
+/** Closes the only tab (Done), answering "Don't save" if it asks; Home is shown again. */
+async function leaveEditor(editor: Page, app: ElectronApplication): Promise<void> {
+  await editor.getByTestId('editor-done').click();
+  await editor
+    .getByTestId('confirm-yes')
+    .click({ timeout: 1500 })
+    .catch(() => undefined);
+  await expectEditorClosed(app);
 }
 
 async function stubSaveDialog(app: ElectronApplication, filePath: string): Promise<void> {
@@ -202,14 +209,21 @@ async function decode(file: string) {
   return { width: image.width, height: image.height, context };
 }
 
-/** Opens History, then the item whose file name matches, then Edit in its details. */
-async function editFromHistory(page: Page, fileName: string): Promise<void> {
-  await go(page, 'History');
-  const card = page.getByTestId('history-item').filter({ hasText: fileName.replace(/\.png$/, '') });
+/** Opens History, then the item whose file name matches, then Edit in its details; returns the Editor window. */
+async function editFromHistory(
+  main: Page,
+  app: ElectronApplication,
+  fileName: string,
+): Promise<Page> {
+  await go(main, 'Home');
+  await go(main, 'Library');
+  const card = main.getByTestId('history-item').filter({ hasText: fileName.replace(/\.png$/, '') });
   await card.first().getByRole('button').first().click();
-  await expect(page.getByTestId('history-details')).toBeVisible();
-  await page.getByTestId('details-edit').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
+  await expect(main.getByTestId('history-details')).toBeVisible();
+  await main.getByTestId('details-edit').click();
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  return editor;
 }
 
 // --- capture, annotate, save, edit again -------------------------------------------------------
@@ -227,9 +241,9 @@ test.afterAll(async () => {
 
 test('annotate with the new tools, save, and the saved screenshot is editable from History', async () => {
   main = await launch();
-  const { app, page } = main;
+  const { app, page: mainWin } = main;
   outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-pro-out-'));
-  await openShot(page);
+  let page = await openShot(mainWin, app);
 
   // The panel is open and offers the arrange, canvas and (for the active tool) appearance sections.
   await expect(page.getByTestId('properties-panel')).toBeVisible();
@@ -282,8 +296,8 @@ test('annotate with the new tools, save, and the saved screenshot is editable fr
   const redacted = flattened.context.getImageData(600, 1150, 1, 1).data;
   expect([redacted[0], redacted[1], redacted[2]]).toEqual([0, 0, 0]);
 
-  await leaveEditor(page);
-  await editFromHistory(page, firstFileName);
+  await leaveEditor(page, app);
+  page = await editFromHistory(mainWin, app, firstFileName);
 
   // Everything is editable again: all 9 marks are back, no "flattened copy" notice.
   await expect.poll(() => annotationCount(page)).toBe(9);
@@ -313,7 +327,7 @@ test('annotate with the new tools, save, and the saved screenshot is editable fr
   // Save changes: a confirmation, then the file in History is replaced.
   await page.getByTestId('editor-save').click();
   await page.getByTestId('confirm-yes').click();
-  await expect(page.getByText(/Changes saved/).first()).toBeVisible();
+  await expect(page.getByText(/Changes saved/).first()).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => fs.statSync(firstFile).size).not.toBe(sizeBefore);
   const after1 = await historyItems(page);
   expect(after1).toHaveLength(1);
@@ -334,14 +348,16 @@ test('annotate with the new tools, save, and the saved screenshot is editable fr
   );
   // The original item still points at the file the overwrite wrote.
   expect(both.find((item) => item.id === firstId)?.path).toBe(firstFile);
-  await leaveEditor(page);
+  await leaveEditor(page, app);
 });
 
 test('delete editable data: the image stays, the project folder is gone, and Edit opens the flattened image', async () => {
   const session = main;
   if (!session) throw new Error('first test did not run');
-  const { page } = session;
-  await go(page, 'History');
+  const { page, app } = session;
+  // The main window stays where it was (History keeps the open details): start from its list.
+  await go(page, 'Home');
+  await go(page, 'Library');
   const card = page.getByTestId('history-item').filter({ hasText: 're-edit original' });
   await card.first().getByRole('button').first().click();
   await page.getByTestId('history-delete-project').click();
@@ -353,26 +369,27 @@ test('delete editable data: the image stays, the project folder is gone, and Edi
   expect(fs.existsSync(firstFile)).toBe(true);
 
   await page.getByTestId('details-edit').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await expect(page.getByTestId('editor-reedit-notice')).toContainText(
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-reedit-notice')).toContainText(
     'Editing a flattened copy: earlier annotations cannot be changed.',
   );
-  await expect.poll(() => annotationCount(page)).toBe(0);
-  await leaveEditor(page);
+  await expect.poll(() => annotationCount(editor)).toBe(0);
+  await leaveEditor(editor, app);
 });
 
 test('a new tool can be rebound and the editor follows (and the old key stops working)', async () => {
   const session = main;
   if (!session) throw new Error('first test did not run');
-  const { page } = session;
-  const updated = await page.evaluate(() =>
+  const { page: mainWin, app } = session;
+  const updated = await mainWin.evaluate(() =>
     window.framecapt.invoke('settings:update', {
       patch: { editorShortcuts: { toolEllipse: 'J' } },
     }),
   );
   expect(updated.ok).toBe(true);
-  await go(page, 'Capture');
-  await openShot(page);
+  await go(mainWin, 'Home');
+  const page = await openShot(mainWin, app);
   await canvasOf(page).click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('j');
   await expect(page.getByTestId('tool-ellipse')).toHaveAttribute('aria-pressed', 'true');
@@ -381,14 +398,14 @@ test('a new tool can be rebound and the editor follows (and the old key stops wo
   await expect(page.getByTestId('tool-select')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('tool-ellipse').hover();
   await expect(page.getByRole('tooltip').first()).toContainText('J');
-  await leaveEditor(page);
+  await leaveEditor(page, app);
 });
 
 test('the editor with the properties panel open has no serious accessibility violations', async () => {
   const session = main;
   if (!session) throw new Error('first test did not run');
-  const { page } = session;
-  await openShot(page);
+  const { page: mainWin, app } = session;
+  const page = await openShot(mainWin, app);
   await tool(page, 'rect');
   await drag(page, { x: 300, y: 300 }, { x: 800, y: 600 });
   await tool(page, 'select');
@@ -422,15 +439,15 @@ test('the editor with the properties panel open has no serious accessibility vio
   await page.evaluate(() =>
     window.framecapt.invoke('settings:update', { patch: { general: { theme: 'system' } } }),
   );
-  await leaveEditor(page);
+  await leaveEditor(page, app);
 });
 
 test('select several marks, arrange them, frame the export and crop to a shape', async () => {
   const session = main;
   if (!session) throw new Error('first test did not run');
-  const { page, app } = session;
-  await go(page, 'Capture');
-  await openShot(page);
+  const { page: mainWin, app } = session;
+  await go(mainWin, 'Home');
+  const page = await openShot(mainWin, app);
   await tool(page, 'rect');
   await drag(page, { x: 300, y: 300 }, { x: 500, y: 400 });
   await drag(page, { x: 700, y: 520 }, { x: 900, y: 650 });
@@ -506,7 +523,7 @@ test('select several marks, arrange them, frame the export and crop to a shape',
   await expect(page.getByTestId('editor-dimensions')).toHaveText(
     `${draft.width} × ${draft.height}`,
   );
-  await leaveEditor(page);
+  await leaveEditor(page, app);
 });
 
 // --- an old item: only a flattened image, no project ---------------------------------------------
@@ -540,9 +557,9 @@ test.describe('an item saved before editable projects existed', () => {
         },
       ]);
     });
-    const { page } = session;
-    expect((await historyItems(page))[0]).toMatchObject({ editable: false });
-    await editFromHistory(page, 'FrameCapt old item.png');
+    const { page: mainWin, app } = session;
+    expect((await historyItems(mainWin))[0]).toMatchObject({ editable: false });
+    const page = await editFromHistory(mainWin, app, 'FrameCapt old item.png');
     await expect(page.getByTestId('editor-reedit-notice')).toHaveText(
       'Editing a flattened copy: earlier annotations cannot be changed.',
     );
@@ -557,25 +574,25 @@ test.describe('an item saved before editable projects existed', () => {
     expect(fs.statSync(file).size).toBe(sizeBefore);
     await page.getByTestId('editor-save').click();
     await page.getByTestId('confirm-yes').click();
-    await expect(page.getByText(/Changes saved/).first()).toBeVisible();
+    await expect(page.getByText(/Changes saved/).first()).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => fs.statSync(file).size).not.toBe(sizeBefore);
     // The item is editable from now on (its project's base is the saved image).
     await expect.poll(async () => (await historyItems(page))[0]?.editable).toBe(true);
-    await leaveEditor(page);
+    await leaveEditor(page, app);
   });
 
   test('"Keep editable originals" off: a new export stores no project', async () => {
     const live = session;
     if (!live) throw new Error('previous test did not run');
-    const { page, app, dir } = live;
-    const off = await page.evaluate(() =>
+    const { page: mainWin, app, dir } = live;
+    const off = await mainWin.evaluate(() =>
       window.framecapt.invoke('settings:update', {
         patch: { screenshots: { keepEditableOriginals: false } },
       }),
     );
     expect(off.ok).toBe(true);
-    await go(page, 'Capture');
-    await openShot(page);
+    await go(mainWin, 'Home');
+    const page = await openShot(mainWin, app);
     await tool(page, 'rect');
     await drag(page, { x: 100, y: 100 }, { x: 600, y: 400 });
     const target = path.join(dir, 'files', 'no project.png');
@@ -586,7 +603,7 @@ test.describe('an item saved before editable projects existed', () => {
     const created = (await historyItems(page)).find((item) => item.fileName === 'no project.png');
     expect(created?.editable).toBe(false);
     expect(fs.existsSync(path.join(dir, 'projects', created?.id ?? 'x'))).toBe(false);
-    await leaveEditor(page);
+    await leaveEditor(page, app);
   });
 
   test('the Settings switch for editable originals changes the setting and says what is kept', async () => {
@@ -621,9 +638,9 @@ test.describe('opening from History by id', () => {
 
   test('an unknown id is NOT_FOUND and a path-like id is refused', async () => {
     session = await launch(() => undefined);
-    const { page } = session;
+    const { page: mainWin } = session;
     const call = (historyId: string) =>
-      page.evaluate(
+      mainWin.evaluate(
         (id) => window.framecapt.invoke('shot:openFromHistory', { historyId: id }),
         historyId,
       );

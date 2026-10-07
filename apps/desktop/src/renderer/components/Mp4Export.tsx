@@ -38,8 +38,13 @@ export function Mp4Export({ historyId, className }: Mp4ExportProps) {
     );
   }
 
+  // A "Save as…" job shows its own progress (see SaveAs).
+  if (state?.status === 'running' && state.converting) return null;
+
   if (state?.status === 'running' || state?.status === 'starting') {
     const percent = state.status === 'running' ? state.percent : null;
+    const verb =
+      state.status === 'running' && state.compressing ? 'Converting' : 'Converting to MP4';
     return (
       <div data-testid="mp4-progress" className={cn('flex flex-col gap-2', className)}>
         <div className="flex items-center justify-between text-[13px] text-fg-muted">
@@ -48,8 +53,8 @@ export function Mp4Export({ historyId, className }: Mp4ExportProps) {
             {state.status === 'starting'
               ? 'Choose where to save…'
               : percent === null
-                ? 'Converting to MP4…'
-                : `Converting to MP4… ${percent}%`}
+                ? `${verb}…`
+                : `${verb}… ${percent}%`}
           </span>
           {state.status === 'running' ? (
             <Button

@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   SettingsPatchSchema,
   applyPatch,
+  migrateLegacySettings,
   migrateSettings,
   parseSettings,
   patchFromRecordOptions,
@@ -10,6 +11,7 @@ import {
   resetSection,
 } from '../../src/shared/settings';
 import { DEFAULT_RECORD_OPTIONS } from '../../src/shared/recorder-ipc';
+import { bitrateFactorOf } from '../../src/shared/recording-format';
 import { DEFAULT_SHORTCUTS } from '../../src/shared/shortcuts';
 
 /** The unversioned flat layout the migration scaffold understands (no such file was ever shipped). */
@@ -35,13 +37,14 @@ describe('defaults', () => {
       launchAtLogin: false,
       closeToTray: true,
       showNotifications: true,
+      captureFolder: null,
     });
     expect(DEFAULT_SETTINGS.screenshots).toMatchObject({
       format: 'png',
       jpegQuality: 0.92,
       outputDir: null,
       afterCapture: 'editor',
-      copyToClipboardOnSave: false,
+      autoCopy: true,
       keepEditableOriginals: true,
     });
     expect(DEFAULT_SETTINGS.recording).toMatchObject({
@@ -52,6 +55,9 @@ describe('defaults', () => {
       systemAudio: false,
       outputDir: null,
       autoExportMp4: false,
+      saveFormat: 'webm',
+      compression: 'off',
+      autoCopy: true,
     });
     expect(DEFAULT_SETTINGS.shortcuts).toEqual(DEFAULT_SHORTCUTS);
   });
@@ -196,6 +202,96 @@ describe('record options', () => {
     });
   });
 
+  it('save format and compression default to WebM and off, patch, validate and reach the recorder as the compression level', () => {
+    const loaded = parseSettings({ version: 1, recording: { fps: 60 } });
+    expect(loaded.ok && loaded.settings.recording).toMatchObject({
+      saveFormat: 'webm',
+      compression: 'off',
+    });
+    const next = applyPatch(DEFAULT_SETTINGS, {
+      recording: { saveFormat: 'mkv', compression: 'strong' },
+    });
+    expect(next.recording).toMatchObject({ saveFormat: 'mkv', compression: 'strong' });
+    expect(recordOptionsFromSettings(next.recording)).toMatchObject({ compression: 'strong' });
+    expect('compression' in recordOptionsFromSettings(DEFAULT_SETTINGS.recording)).toBe(false);
+    for (const recording of [
+      { saveFormat: 'avi' },
+      { compression: 'max' },
+      { storage: 'original' },
+    ]) {
+      expect(SettingsPatchSchema.safeParse({ recording }).success).toBe(false);
+    }
+  });
+
+  it('the realtime bitrate factor follows the compression level (off/light 1, balanced 0.6, strong 0.45; legacy flag = balanced)', () => {
+    expect(bitrateFactorOf({})).toBe(1);
+    expect(bitrateFactorOf({ compression: 'light' })).toBe(1);
+    expect(bitrateFactorOf({ compression: 'balanced' })).toBe(0.6);
+    expect(bitrateFactorOf({ compression: 'strong' })).toBe(0.45);
+    expect(bitrateFactorOf({ compressed: true })).toBe(0.6);
+  });
+
+  describe('migration of replaced keys', () => {
+    const recordingOf = (recording: Record<string, unknown>) => {
+      const parsed = parseSettings({ version: 1, recording });
+      if (!parsed.ok) throw new Error(parsed.reason);
+      return parsed.settings.recording;
+    };
+
+    it("storage 'compressed' becomes MP4 + balanced, 'original' becomes WebM + off", () => {
+      expect(recordingOf({ storage: 'compressed' })).toMatchObject({
+        saveFormat: 'mp4',
+        compression: 'balanced',
+      });
+      expect(recordingOf({ storage: 'original' })).toMatchObject({
+        saveFormat: 'webm',
+        compression: 'off',
+      });
+    });
+
+    it('an explicit save format wins over a stale storage key, and storage is dropped', () => {
+      const recording = recordingOf({
+        storage: 'compressed',
+        saveFormat: 'gif',
+        compression: 'off',
+      });
+      expect(recording).toMatchObject({ saveFormat: 'gif', compression: 'off' });
+      expect('storage' in recording).toBe(false);
+    });
+
+    it("afterCapture 'copy-and-editor' keeps behaving the same: the editor opens and auto-copy is on", () => {
+      const parsed = parseSettings({
+        version: 1,
+        screenshots: { afterCapture: 'copy-and-editor', copyToClipboardOnSave: false },
+      });
+      expect(parsed.ok && parsed.settings.screenshots).toMatchObject({
+        afterCapture: 'editor',
+        autoCopy: true,
+      });
+      expect(parsed.ok && 'copyToClipboardOnSave' in parsed.settings.screenshots).toBe(false);
+    });
+
+    it('the other after-capture choices and an explicit autoCopy are kept; copyToClipboardOnSave is dropped', () => {
+      const parsed = parseSettings({
+        version: 1,
+        screenshots: {
+          afterCapture: 'save-and-editor',
+          autoCopy: false,
+          copyToClipboardOnSave: true,
+        },
+      });
+      expect(parsed.ok && parsed.settings.screenshots).toMatchObject({
+        afterCapture: 'save-and-editor',
+        autoCopy: false,
+      });
+    });
+
+    it('a new file written by this build is not changed by the migration', () => {
+      const first = parseSettings({ version: 1 });
+      expect(first.ok && migrateLegacySettings(first.settings)).toEqual(first.ok && first.settings);
+    });
+  });
+
   it('carries the phase-05 localStorage options over', () => {
     const patch = patchFromRecordOptions({
       mic: { enabled: true, deviceId: 'old-mic' },
@@ -216,6 +312,49 @@ describe('record options', () => {
     expect(
       applyPatch(next, patchFromRecordOptions(DEFAULT_RECORD_OPTIONS)).recording.micDeviceId,
     ).toBeUndefined();
+  });
+});
+
+describe('the all screens shortcut (added after version 1 shipped)', () => {
+  it('a file from before it gets the default key', () => {
+    const { screenshotAllScreens, ...older } = DEFAULT_SETTINGS.shortcuts;
+    expect(screenshotAllScreens).toBe('Ctrl+Shift+4');
+    const parsed = parseSettings({ ...structuredClone(DEFAULT_SETTINGS), shortcuts: older });
+    expect(parsed.ok && parsed.settings.shortcuts.screenshotAllScreens).toBe('Ctrl+Shift+4');
+  });
+
+  it('a user key that clashes with the new default keeps the user key and leaves it unbound', () => {
+    const { screenshotAllScreens: _added, ...older } = DEFAULT_SETTINGS.shortcuts;
+    void _added;
+    const parsed = parseSettings({
+      ...structuredClone(DEFAULT_SETTINGS),
+      shortcuts: { ...older, recordScreen: 'Ctrl+Shift+4' },
+    });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.settings.shortcuts.recordScreen).toBe('Ctrl+Shift+4');
+    expect(parsed.settings.shortcuts.screenshotAllScreens).toBeNull();
+  });
+});
+
+describe('the Open image and Insert image shortcuts (added with image layers)', () => {
+  it('a settings file from before them gets Ctrl+O and Ctrl+Shift+O', () => {
+    const { openImage, insertImage, ...older } = DEFAULT_SETTINGS.editorShortcuts;
+    expect([openImage, insertImage]).toEqual(['Ctrl+O', 'Ctrl+Shift+O']);
+    const parsed = parseSettings({ ...structuredClone(DEFAULT_SETTINGS), editorShortcuts: older });
+    expect(parsed.ok && parsed.settings.editorShortcuts.openImage).toBe('Ctrl+O');
+    expect(parsed.ok && parsed.settings.editorShortcuts.insertImage).toBe('Ctrl+Shift+O');
+  });
+
+  it('a user key that clashes with the new default leaves the new action unbound', () => {
+    const { openImage: _open, ...keys } = DEFAULT_SETTINGS.editorShortcuts;
+    void _open;
+    const parsed = parseSettings({
+      ...structuredClone(DEFAULT_SETTINGS),
+      editorShortcuts: { ...keys, toolText: 'Ctrl+O' },
+    });
+    expect(parsed.ok && parsed.settings.editorShortcuts.toolText).toBe('Ctrl+O');
+    expect(parsed.ok && parsed.settings.editorShortcuts.openImage).toBeNull();
   });
 });
 

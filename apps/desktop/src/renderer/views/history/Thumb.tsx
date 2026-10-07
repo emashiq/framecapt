@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Camera, Film } from 'lucide-react';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { thumbUrl } from '../../history/media-url';
+import { TypeIcon } from '../../history/type-icon';
 import { cn } from '../../lib/cn';
 
 export interface ThumbProps {
-  item: Pick<HistoryItemView, 'id' | 'type' | 'hasThumb' | 'createdAt' | 'exists'>;
+  item: Pick<HistoryItemView, 'id' | 'type' | 'hasThumb' | 'createdAt' | 'exists' | 'projectFile'>;
   className?: string;
 }
 
@@ -19,7 +19,6 @@ export function Thumb({ item, className }: ThumbProps) {
   const key = `${item.id}-${item.createdAt}-${item.hasThumb}`;
   const [failedKey, setFailedKey] = useState<string | null>(null);
   const failed = failedKey === key;
-  const Icon = item.type === 'screenshot' ? Camera : Film;
   return (
     <div
       className={cn(
@@ -40,7 +39,12 @@ export function Thumb({ item, className }: ThumbProps) {
           className={cn('size-full object-contain', !item.exists && 'opacity-45 grayscale')}
         />
       ) : (
-        <Icon className="size-8 text-fg-subtle/60" aria-hidden="true" />
+        <TypeIcon
+          type={item.type}
+          project={item.projectFile}
+          className="size-8 text-fg-subtle/60"
+          aria-hidden="true"
+        />
       )}
     </div>
   );

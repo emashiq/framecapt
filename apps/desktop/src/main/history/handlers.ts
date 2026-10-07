@@ -11,7 +11,10 @@ import type { Mp4Capability } from '../media/export';
 import { getMainWindow } from '../windows';
 import type { BulkExportService } from './bulk-export';
 import { planDrag } from './drag';
+import type { EncoderCapability } from '../media/convert';
 import type { ExportService } from './export-service';
+import type { FinalizeService } from './finalize-service';
+import type { ExtractService } from './extract-service';
 import { copyFileAtomic, isOpenableMedia } from './files';
 import type { HistoryService } from './service';
 
@@ -87,9 +90,13 @@ export async function mp4SaveDialog(
 export function registerHistoryHandlers(
   history: HistoryService,
   exports: ExportService,
+  extracts: ExtractService,
   bulk: BulkExportService,
   capability: () => Promise<Mp4Capability>,
   recordingsDir: () => string,
+  rescan: () => Promise<number>,
+  finalize: FinalizeService,
+  encoders: () => Promise<EncoderCapability>,
 ): void {
   handle('history:list', { roles: ['main'] }, (request) => history.list(request));
   handle('history:consumeNotice', { roles: ['main'] }, async () => ({
@@ -98,6 +105,7 @@ export function registerHistoryHandlers(
 
   handle('history:open', { roles: ['main'] }, async (request) => {
     const item = requireItem(history, request.id);
+    // A step guide opens in FrameCapt's own Flow view (the window does that); the shell never gets it.
     if (!isOpenableMedia(item.path)) {
       throw new IpcError('INVALID_PAYLOAD', 'Only images and videos can be opened from here.');
     }
@@ -112,11 +120,13 @@ export function registerHistoryHandlers(
   handle('history:reveal', { roles: ['main'] }, async (request) => {
     const item = requireItem(history, request.id);
     await requireFile(item.path);
-    shell.showItemInFolder(item.path);
+    // A guide is a folder: it is shown as that folder.
+    shell.showItemInFolder(item.type === 'flow' ? path.dirname(item.path) : item.path);
   });
 
   handle('history:copyPath', { roles: ['main'] }, (request) => {
-    clipboard.writeText(requireItem(history, request.id).path);
+    const item = requireItem(history, request.id);
+    clipboard.writeText(item.type === 'flow' ? path.dirname(item.path) : item.path);
   });
 
   handle('history:copyImage', { roles: ['main'] }, async (request) => {
@@ -172,9 +182,11 @@ export function registerHistoryHandlers(
       defaultPath: path.dirname(item.path),
       properties: ['openFile'],
       filters: [
-        isImage
-          ? { name: 'Images', extensions: item.format === 'png' ? ['png'] : ['jpg', 'jpeg'] }
-          : { name: 'Video', extensions: [item.format] },
+        item.format === 'flow'
+          ? { name: 'Step guide', extensions: ['json'] }
+          : isImage
+            ? { name: 'Images', extensions: item.format === 'png' ? ['png'] : ['jpg', 'jpeg'] }
+            : { name: 'Video', extensions: [item.format] },
       ],
     };
     const main = getMainWindow();
@@ -190,6 +202,8 @@ export function registerHistoryHandlers(
   handle('history:clearMissing', { roles: ['main'] }, async () => ({
     removed: await history.clearMissing(),
   }));
+
+  handle('history:rescan', { roles: ['main'] }, async () => ({ added: await rescan() }));
 
   // The finished WebM is already a complete file in Videos/FrameCapt; this only copies it.
   handle('history:saveCopy', { roles: ['main'] }, async (request) => {
@@ -209,7 +223,16 @@ export function registerHistoryHandlers(
       ),
       filters: [
         {
-          name: extension === '.mp4' ? 'MP4 video' : 'WebM video',
+          name:
+            extension === '.mp4'
+              ? 'MP4 video'
+              : extension === '.mkv'
+                ? 'MKV video'
+                : extension === '.fcap'
+                  ? 'FrameCapt multi-source recording'
+                  : extension === '.gif'
+                    ? 'GIF'
+                    : 'WebM video',
           extensions: [extension.slice(1)],
         },
       ],
@@ -226,10 +249,20 @@ export function registerHistoryHandlers(
     return { path: target };
   });
 
+  // Multi-source recordings: one source (or all) between two times, as a new MP4 or WebM.
+  handle('history:extractFcap', { roles: ['main'] }, (request) => extracts.start(request));
+
   handle('export:capabilities', { roles: ['main'] }, async () => {
     const result = await capability();
-    return { mp4Available: result.available, ...(result.reason && { reason: result.reason }) };
+    const found = await encoders();
+    return {
+      mp4Available: result.available,
+      webmAvailable: found.vp9,
+      gifAvailable: found.gif,
+      ...(result.reason && { reason: result.reason }),
+    };
   });
+  handle('history:saveAs', { roles: ['main'] }, (request) => finalize.saveAs(request));
   handle('export:mp4', { roles: ['main'] }, (request) => exports.start(request.historyId));
   handle('export:cancel', { roles: ['main'] }, (request) => exports.cancel(request.jobId));
 }

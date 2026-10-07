@@ -9,19 +9,23 @@ Global shortcuts work from any app while FrameCapt is running (also with its win
 | Screenshot: screen            | `Ctrl+Shift+1` | One screen: captured at once. Several: click the screen (or Enter).     |
 | Screenshot: window            | `Ctrl+Shift+2` | Brings up FrameCapt's window picker.                                    |
 | Screenshot: region            | `Ctrl+Shift+3` | Drag over the area, or use the arrow keys (below).                      |
+| Screenshot: all screens       | `Ctrl+Shift+4` | Every screen in one image, at once (several displays).                  |
 | Record: screen                | `Ctrl+Shift+5` | Pressing it again while recording stops (and saves) the recording.      |
 | Record: window                | `Ctrl+Shift+6` | Window picker first; the same key stops.                                |
 | Record: region                | `Ctrl+Shift+7` | Selection overlay first; the same key stops.                            |
 | Stop recording                | `Ctrl+Shift+0` | Also cancels a recording that is still starting (selection, countdown). |
 | Pause or resume the recording | `Ctrl+Shift+9` | Toggles.                                                                |
+| Start or finish step capture  | `Ctrl+Shift+8` | Starts a step guide; pressing it again is Done (saves the guide).       |
+| Capture a step                | not set        | A step now, at the pointer. No default: every comfortable key is taken. |
 
 Rules:
 
+- Step capture: while a guide is being captured, screenshot and record shortcuts are ignored ("A capture is already in progress"); a step guide cannot start during a recording or a screenshot. Files written by older versions get `Ctrl+Shift+8` for "Start or finish step capture" unless you already use that combination for something else (then it starts as "Not set").
 - A shortcut needs `Ctrl` or `Alt` (a bare key or `Shift` + key would be typed by accident). `F1`..`F24` and `PrintScreen` work without a modifier. The Windows key is not offered.
 - Two actions cannot share one shortcut. When you press a combination that another action already has, Settings says "already used by <action>" and offers **Swap**: the two actions exchange their shortcuts in one saved change (if the action you are editing had none, the other one becomes "Not set"). A shortcut can be turned off (`Backspace` or **Off** in Settings), shown as "Not set".
 - `PrintScreen` is **not** a default because the Windows Snipping Tool owns it by default; you can still choose it, and Settings shows a note next to it saying the Snipping Tool may answer first.
 - Combinations the system keeps for itself are refused **before** anything is registered, with the reason in Settings (see [Reserved combinations](#reserved-combinations)).
-- While a screenshot flow runs, screenshot shortcuts are ignored ("A capture is already in progress"). While a recording runs, screenshot shortcuts are ignored too.
+- While a screenshot flow runs, screenshot shortcuts are ignored ("A capture is already in progress"). While a recording runs, the screen, region and all-screens shortcuts still work: the image is saved straight to your screenshots folder and added to History (no editor opens, and FrameCapt's window stays out of the video). The window shortcut is refused then, because its picker needs FrameCapt's window; use the camera button on the recording toolbar for a window recording. While a recording is starting or being saved, screenshot shortcuts are ignored.
 - If the key combination is already held by another app, Windows refuses the registration. FrameCapt shows "Ctrl+Shift+1 is used by another app — choose a different shortcut" in Settings, a warning on the home screen and, once, a notification at startup. Nothing is registered for that action until you pick another one.
 
 ### Reserved combinations
@@ -44,14 +48,15 @@ refusing the registration ("used by another app"). A global shortcut also cannot
 
 ## Command center and menus (customizable)
 
-The title bar has a menu bar (**File**, **View**, **Help**) and a search box in the middle, the command center. These two keys open it from anywhere in the main window (the editor included); they are in-app keys, not registered with the operating system, and are edited on the same Settings, Shortcuts page (group **Command center**) and listed in the Keyboard shortcuts help:
+The title bar has a menu bar (**File**, **View**, **Help**) and a search box in the middle, the command center. These two keys open it from anywhere in the main window; they are in-app keys, not registered with the operating system, and are edited on the same Settings, Shortcuts page (group **Main window**) and listed in the Keyboard shortcuts help. **Open image** (`Ctrl+O`) is in the same group: it picks a picture file (PNG, JPEG, WebP, GIF or BMP) and opens it in the editor like a screenshot; nothing is saved until you save.
 
 | Action                                       | Default        |
 | -------------------------------------------- | -------------- |
 | Command center: search commands and captures | `Ctrl+K`       |
 | Command center: commands only                | `Ctrl+Shift+P` |
+| Open an image to edit                        | `Ctrl+O`       |
 
-In the command center: type to search, `Up` / `Down` choose, `Enter` runs the highlighted command (a saved capture opens in History), `Shift+Enter` on a saved capture shows it in its folder, `Esc` closes it. A command that cannot run now (signed out, Viewer role, a recording in progress) is listed with the reason and `Enter` does nothing. The menu bar works with the arrow keys (`Down` or `Enter` opens a menu, `Left` / `Right` move between menus, `Esc` closes and returns to the menu button); each item shows its live shortcut. There is no `Alt` access key for the menus.
+In the command center: type to search, `Up` / `Down` choose, `Enter` runs the highlighted command (a saved capture opens in the Library), `Shift+Enter` on a saved capture shows it in its folder, `Esc` closes it. A command that cannot run now (signed out, Viewer role, a recording in progress) is listed with the reason and `Enter` does nothing. The menu bar works with the arrow keys (`Down` or `Enter` opens a menu, `Left` / `Right` move between menus, `Esc` closes and returns to the menu button); each item shows its live shortcut. There is no `Alt` access key for the menus.
 
 ## Editor shortcuts (customizable)
 
@@ -78,6 +83,7 @@ focus (the Text tool's box, any input), so a letter bound to a tool never gets i
 | Magnifier                     | `M`                                                                              |
 | Stamp                         | `E`                                                                              |
 | Ruler                         | `I`                                                                              |
+| Insert an image from a file   | `Ctrl+Shift+O`                                                                   |
 | Duplicate                     | `Ctrl+D`                                                                         |
 | Bring forward / Send backward | `Ctrl+]` / `Ctrl+[`                                                              |
 | Bring to front / Send to back | `Ctrl+Shift+]` / `Ctrl+Shift+[`                                                  |
@@ -118,9 +124,9 @@ Focus returns to the main window (and the button you used) when the overlay clos
 
 `?` or `F1` opens the help. `Tab` / `Shift+Tab` move through the controls (the first stop is "Skip to content"). Dialogs trap focus and give it back. In the editor (defaults; see [Editor shortcuts](#editor-shortcuts-customizable) to change them): `V C A R T X` and the newer tool keys (`O L P H B N D S M E I`) pick tools, `Ctrl+D` duplicates, `Ctrl+]` / `Ctrl+[` reorder, `Ctrl+S` saves (in your chosen format), `Ctrl+C` copies, `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo, `Ctrl+=` / `Ctrl+-` / `Ctrl+0` / `Ctrl+1` zoom, arrow keys move the selected mark, `Delete` removes it. History: arrows move, `Enter` opens, `Delete` removes from history (with Undo).
 
-## History (the grid)
+## Library (the grid and the list)
 
-These work inside History and are not configurable. Arrow keys, `Home` and `End` move between cards; a plain click or `Enter` still opens the card.
+These work inside the Library and are not configurable. Arrow keys, `Home` and `End` move between cards (rows, in the list view); a plain click or `Enter` still opens the card.
 
 | Action                                    | Key                                                               |
 | ----------------------------------------- | ----------------------------------------------------------------- |
@@ -130,6 +136,50 @@ These work inside History and are not configurable. Arrow keys, `Home` and `End`
 | Clear the selection                       | `Esc`                                                             |
 | Open the card's menu                      | Right-click, `Shift+F10` or the Menu key                          |
 | Remove the card (or all selected) entries | `Delete` (several: after a confirmation, with Undo)               |
+
+### Library sidebar
+
+| Action                                  | Key                                                                          |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
+| Show or hide the sidebar                | `Ctrl+B` (also View > Toggle library sidebar)                                |
+| Move in the tree                        | `Up` / `Down`; `Right` opens a folder, `Left` closes it or goes to the parent |
+| Select the folder or smart item         | `Enter` or `Space`                                                          |
+| Rename the folder                       | `F2`                                                                         |
+| Delete the (empty) folder               | `Delete`                                                                     |
+| The folder's menu                       | `Shift+F10` or the Menu key                                                  |
+| Resize the sidebar (200 to 360 px)      | focus its edge, then `Left` / `Right` (`Shift`: 48 px), `Home`, `End`; double-click resets |
+
+## Tabs and the icon rail
+
+These work in the main window and are not configurable (the editors' own keys are below and under [Editor shortcuts](#editor-shortcuts-customizable)). `Ctrl+1` is the screenshot editor's "actual size", so the tab numbers use `Alt`. The Home tab is tab 1 and can never be closed.
+
+| Action                                      | Key                                              |
+| ------------------------------------------- | ------------------------------------------------ |
+| Next tab / previous tab                     | `Ctrl+Tab` / `Ctrl+Shift+Tab` (wraps around)     |
+| Go to the 1st (Home) to 8th tab             | `Alt+1` to `Alt+8`                               |
+| Go to the last tab                          | `Alt+9`                                          |
+| Close the tab (asks if it has unsaved work) | `Ctrl+W`, or a middle click on the tab           |
+| Reorder the tabs                            | Drag a tab                                       |
+| Open image (a new tab)                      | `Ctrl+O` (customizable)                          |
+| Move between the rail's icons               | `Up` / `Down` (also `Left` / `Right`), `Home`, `End` |
+
+## Video editor
+
+These work inside a video tab (Library > a recording > **Edit video**) and are not configurable. They are ignored while you type in a field, and `Space` does not fire while a button has the keyboard.
+
+| Action                                                                      | Key                                                                  |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Play or pause                                                               | `Space` (playback skips cut pieces and stops at the end of the trim) |
+| Step one frame back or forward                                              | `Left` / `Right` (`Shift`: one second)                               |
+| Jump to the start or end of the trim                                        | `Home` / `End`                                                       |
+| Mark the start / end of a range to cut                                      | `I` / `O`                                                            |
+| Remove the selected item, restore the selected cut, or cut the marked range | `Delete`                                                             |
+| Undo / redo                                                                 | `Ctrl+Z` / `Ctrl+Shift+Z` (also `Ctrl+Y`)                            |
+| Save the project now (it also saves by itself)                              | `Ctrl+S`                                                             |
+| Cancel the armed tool or crop mode, or clear the selection                  | `Esc`                                                                |
+| Zoom the timeline around the pointer                                        | `Ctrl` + mouse wheel (a plain wheel scrolls sideways)                |
+| Move an item or an edge without snapping                                    | hold `Alt` while dragging                                            |
+| Nudge a trim handle                                                         | focus it, then `Left` / `Right` (`Shift`: one second)                |
 
 ## Recording toolbar
 

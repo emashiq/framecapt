@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CameraSetStyleRequestSchema, CameraStyleStateSchema } from './camera';
 import {
   CaptureGrantRequestSchema,
   CaptureGrantResponseSchema,
@@ -9,20 +10,31 @@ import {
   SourceInfoSchema,
 } from './capture-schemas';
 import {
+  EditorOpenRequestSchema,
+  EditorOpenTabEventSchema,
   EditorResolveCloseRequestSchema,
-  EditorSetDirtyRequestSchema,
+  EditorStateSchema,
+  OpenVideoResponseSchema,
+  SplitSourcesRequestSchema,
+  SplitSourcesResponseSchema,
+} from './editor-ipc';
+import {
   FlowEndedEventSchema,
   GrabFramesEventSchema,
+  HistoryImageRequestSchema,
+  HistoryImageResponseSchema,
   OverlayConfirmRequestSchema,
   OverlayInitSchema,
   OverlayPickDisplayRequestSchema,
+  PickImageResponseSchema,
   ShotCopyRequestSchema,
   ShotExportRequestSchema,
   ShotExportResponseSchema,
   ShotQuickSaveResponseSchema,
   ShotGetRequestSchema,
   ShotGetResponseSchema,
-  ShotReadyEventSchema,
+  ShotImportRequestSchema,
+  ShotImportResponseSchema,
   ShowItemInFolderRequestSchema,
   StartScreenshotRequestSchema,
   WorkerFrameErrorSchema,
@@ -49,21 +61,55 @@ import {
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
 import {
+  LibraryFolderRequestSchema,
+  LibraryFolderResponseSchema,
+  LibraryMoveItemsRequestSchema,
+  LibraryMoveItemsResponseSchema,
+  LibraryMoveUpResponseSchema,
+  LibraryRenameRequestSchema,
+  LibraryRevealRequestSchema,
+  LibrarySetCaptureFolderRequestSchema,
+  LibraryTreeSchema,
+} from './library';
+import {
   BulkExportRequestSchema,
   BulkExportResponseSchema,
   BulkProgressEventSchema,
+  DuplicateResponseSchema,
+  OpenProjectFileResponseSchema,
+  SaveProjectFileResponseSchema,
   ExportCancelRequestSchema,
   ExportCapabilitiesSchema,
   ExportDoneEventSchema,
   ExportFailedEventSchema,
   ExportMp4RequestSchema,
   ExportMp4ResponseSchema,
+  ExtractFcapRequestSchema,
+  ExtractFcapResponseSchema,
+  SaveAsRequestSchema,
+  SaveAsResponseSchema,
   ExportProgressEventSchema,
   HistoryCancelledSchema,
   HistoryIdRequestSchema,
   HistoryListRequestSchema,
   HistoryListResponseSchema,
 } from './history-ipc';
+import {
+  VideoExportDoneEventSchema,
+  VideoExportFailedEventSchema,
+  VideoExportProgressEventSchema,
+  VideoExportRequestSchema,
+  VideoAddImageRequestSchema,
+  VideoAddImageResponseSchema,
+  VideoExportResponseSchema,
+  VideoAddRecordedAudioRequestSchema,
+  VideoAddRecordedAudioResponseSchema,
+  VideoPickAudioRequestSchema,
+  VideoPickAudioResponseSchema,
+  VideoOpenRequestSchema,
+  VideoOpenResponseSchema,
+  VideoSaveRequestSchema,
+} from './video-ipc';
 import {
   RecoverResponseSchema,
   RecoveryListResponseSchema,
@@ -84,6 +130,19 @@ import {
   StartRequestEventSchema,
   ToastEventSchema,
 } from './settings-ipc';
+import {
+  FlowExportRequestSchema,
+  FlowExportResponseSchema,
+  FlowGetRequestSchema,
+  FlowGetResponseSchema,
+  FlowOpenStepRequestSchema,
+  FlowReadStepResponseSchema,
+  FlowUpdateRequestSchema,
+  StepsDoneResponseSchema,
+  StepsFinishedEventSchema,
+  StepsSetAutoRequestSchema,
+  StepsSnapshotSchema,
+} from './flow-ipc';
 import { ROLES, type Role } from './types';
 
 const ALL_ROLES: readonly Role[] = ROLES;
@@ -211,6 +270,30 @@ export const ipcContract = {
     response: OpenFromHistoryResponseSchema,
     roles: ['main'],
   },
+  /** File > Open image: a main-process dialog; returns the picked picture's validated bytes. */
+  'shot:openImage': {
+    request: z.undefined(),
+    response: PickImageResponseSchema,
+    roles: ['main'],
+  },
+  /** Starts an editor session from a PNG the renderer made from a picture (opened, dropped, pasted). */
+  'shot:importImage': {
+    request: ShotImportRequestSchema,
+    response: ShotImportResponseSchema,
+    roles: ['main'],
+  },
+  /** Insert image > From file: the same dialog, for an image layer inside the open editor. */
+  'editor:pickImage': {
+    request: z.undefined(),
+    response: PickImageResponseSchema,
+    roles: ['main'],
+  },
+  /** Insert image > From History: the picture of an owned screenshot, as PNG. */
+  'editor:historyImage': {
+    request: HistoryImageRequestSchema,
+    response: HistoryImageResponseSchema,
+    roles: ['main'],
+  },
   'shot:copy': {
     request: ShotCopyRequestSchema,
     response: z.void(),
@@ -221,11 +304,32 @@ export const ipcContract = {
     response: z.void(),
     roles: ['main'],
   },
-  'editor:setDirty': {
-    request: EditorSetDirtyRequestSchema,
+  // --- editor tabs of the main window: one tab per open screenshot, video or step guide ---
+  /** Opens (or focuses) a tab in the main window (shown first if it was hidden). */
+  'editor:open': {
+    request: EditorOpenRequestSchema,
     response: z.void(),
     roles: ['main'],
   },
+  /** File > Open video: a main-process dialog; the video is added to history and opens in a tab. */
+  'editor:openVideo': {
+    request: z.undefined(),
+    response: OpenVideoResponseSchema,
+    roles: ['main'],
+  },
+  /** The main window's renderer is listening: main sends the tabs that were requested before. */
+  'editor:ready': {
+    request: z.undefined(),
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** The main window reports whether closing would lose work (an unsaved tab). */
+  'editor:setState': {
+    request: EditorStateSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** The answer to `editor:confirmClose`. */
   'editor:resolveClose': {
     request: EditorResolveCloseRequestSchema,
     response: z.void(),
@@ -296,6 +400,8 @@ export const ipcContract = {
   'recorder:resume': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
   'recorder:stop': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
   'recorder:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  /** A screenshot of what is being recorded, saved straight to the screenshots folder. */
+  'recorder:screenshot': { request: z.undefined(), response: z.void(), roles: ['toolbar'] },
   'recorder:toggleMute': {
     request: ToggleMuteRequestSchema,
     response: z.void(),
@@ -306,6 +412,20 @@ export const ipcContract = {
     request: z.strictObject({ width: z.number().min(120).max(900) }),
     response: z.void(),
     roles: ['toolbar'],
+  },
+  /** The toolbar's camera button: show or hide the camera bubble (and its picture in the video). */
+  'recorder:toggleCamera': { request: z.undefined(), response: z.void(), roles: ['toolbar'] },
+  /** The camera bubble reports a change of its own size, shape or visibility. */
+  'camera:setStyle': {
+    request: CameraSetStyleRequestSchema,
+    response: CameraStyleStateSchema,
+    roles: ['camera'],
+  },
+  /** The camera bubble asks what to show (device, shape, size). */
+  'camera:getStyle': {
+    request: z.undefined(),
+    response: CameraStyleStateSchema,
+    roles: ['camera'],
   },
   'recorder:getState': {
     request: z.undefined(),
@@ -361,7 +481,11 @@ export const ipcContract = {
     roles: ['main'],
   },
   'history:open': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
-  'history:reveal': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  'history:reveal': {
+    request: HistoryIdRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
   'history:copyImage': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
   'history:copyPath': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
   /** Removes the entry only; the file stays. */
@@ -371,7 +495,11 @@ export const ipcContract = {
   /** Deletes the editable project (unredacted original and annotations) of an item; the exported image stays. */
   'history:deleteProject': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
   /** Moves the file to the Recycle Bin and removes the entry. A separate, confirmed action. */
-  'history:deleteFile': { request: HistoryIdRequestSchema, response: z.void(), roles: ['main'] },
+  'history:deleteFile': {
+    request: HistoryIdRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
   /** Opens a file dialog in main to point a missing entry at its moved file. */
   'history:relink': {
     request: HistoryIdRequestSchema,
@@ -383,10 +511,34 @@ export const ipcContract = {
     response: z.object({ removed: z.number() }),
     roles: ['main'],
   },
+  /** Adds captures found in the output folders that history does not list (files only read). */
+  'history:rescan': {
+    request: z.undefined(),
+    response: z.object({ added: z.number() }),
+    roles: ['main'],
+  },
   /** Recordings: "Save a copy as..." of the finished WebM (a save dialog in main). */
   'history:saveCopy': {
     request: HistoryIdRequestSchema,
     response: z.union([z.object({ path: z.string() }), HistoryCancelledSchema]),
+    roles: ['main'],
+  },
+  /** Copies a screenshot or recording next to the original, with its edits, as a new item. */
+  'history:duplicate': {
+    request: HistoryIdRequestSchema,
+    response: DuplicateResponseSchema,
+    roles: ['main'],
+  },
+  /** Saves the item's edits as a `.fcimage` / `.fcvideo` project file (a save dialog in main). */
+  'history:saveProjectFile': {
+    request: HistoryIdRequestSchema,
+    response: SaveProjectFileResponseSchema,
+    roles: ['main'],
+  },
+  /** Opens a project file (an open dialog in main) and imports it into history. */
+  'history:openProjectFile': {
+    request: z.undefined(),
+    response: OpenProjectFileResponseSchema,
     roles: ['main'],
   },
   /** Drag-out: starts an OS file drag of an owned item's file (main resolves the path). */
@@ -399,6 +551,63 @@ export const ipcContract = {
   },
   /** Cancels the running "save copies" (the rest are skipped). */
   'history:cancelBulk': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  /** Multi-source recordings (`.fcap`): extracts one source or the whole picture, between two times. */
+  'history:extractFcap': {
+    request: ExtractFcapRequestSchema,
+    response: ExtractFcapResponseSchema,
+    roles: ['main'],
+  },
+  /** Every source of a multi-source recording as its own video (extracts the missing ones). */
+  'history:splitSources': {
+    request: SplitSourcesRequestSchema,
+    response: SplitSourcesResponseSchema,
+    roles: ['main'],
+  },
+  /** A recording saved as another format (WebM, MP4, MKV, GIF) with a compression level: a new item. */
+  'history:saveAs': {
+    request: SaveAsRequestSchema,
+    response: SaveAsResponseSchema,
+    roles: ['main'],
+  },
+  // --- the capture library: a tree of real folders in the capture folders. Relative, validated folder names and history ids only. ---
+  'library:tree': { request: z.undefined(), response: LibraryTreeSchema, roles: ['main'] },
+  'library:createFolder': {
+    request: LibraryFolderRequestSchema,
+    response: LibraryFolderResponseSchema,
+    roles: ['main'],
+  },
+  /** Renames the last level of a folder in both capture folders and keeps History pointing at the files. */
+  'library:renameFolder': {
+    request: LibraryRenameRequestSchema,
+    response: LibraryFolderResponseSchema,
+    roles: ['main'],
+  },
+  /** Only an empty folder is deleted; anything else is refused with a message. */
+  'library:deleteFolder': {
+    request: LibraryFolderRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** Moves a folder's captures and subfolders up one level; the emptied folder is removed. */
+  'library:moveContentsUp': {
+    request: LibraryFolderRequestSchema,
+    response: LibraryMoveUpResponseSchema,
+    roles: ['main'],
+  },
+  /** Moves captures (a guide moves as its folder) to a folder, or to the root with null. */
+  'library:moveItems': {
+    request: LibraryMoveItemsRequestSchema,
+    response: LibraryMoveItemsResponseSchema,
+    roles: ['main'],
+  },
+  /** Where new captures are saved: a folder, or null for the capture folders themselves. */
+  'library:setCaptureFolder': {
+    request: LibrarySetCaptureFolderRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** Opens one capture folder's copy of a library folder in the file manager. */
+  'library:reveal': { request: LibraryRevealRequestSchema, response: z.void(), roles: ['main'] },
   'export:capabilities': {
     request: z.undefined(),
     response: ExportCapabilitiesSchema,
@@ -409,9 +618,48 @@ export const ipcContract = {
     response: ExportMp4ResponseSchema,
     roles: ['main'],
   },
-  'export:cancel': { request: ExportCancelRequestSchema, response: z.void(), roles: ['main'] },
+  'export:cancel': {
+    request: ExportCancelRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  // --- video editor: the saved project (a recipe, the video is never changed) and its export ---
+  'video:open': {
+    request: VideoOpenRequestSchema,
+    response: VideoOpenResponseSchema,
+    roles: ['main'],
+  },
+  'video:save': { request: VideoSaveRequestSchema, response: z.void(), roles: ['main'] },
+  /** Stores a picture (PNG bytes) as an asset of the project and returns its id (its SHA-256). */
+  'video:addImage': {
+    request: VideoAddImageRequestSchema,
+    response: VideoAddImageResponseSchema,
+    roles: ['main'],
+  },
+  /** An Open dialog in main for an audio file; the file is copied into the project's assets. */
+  'video:pickAudio': {
+    request: VideoPickAudioRequestSchema,
+    response: VideoPickAudioResponseSchema,
+    roles: ['main'],
+  },
+  /** A voice-over recorded in the editor (WebM/Opus bytes): remuxed to Ogg and stored as an audio asset. */
+  'video:addRecordedAudio': {
+    request: VideoAddRecordedAudioRequestSchema,
+    response: VideoAddRecordedAudioResponseSchema,
+    roles: ['main'],
+  },
+  /** Renders the edit into a new file next to the source (a queued job; cancel with export:cancel). */
+  'video:export': {
+    request: VideoExportRequestSchema,
+    response: VideoExportResponseSchema,
+    roles: ['main'],
+  },
   // --- settings, shortcuts and the app lifecycle (phase 08) ---
-  'settings:get': { request: z.undefined(), response: SettingsStateSchema, roles: ['main'] },
+  'settings:get': {
+    request: z.undefined(),
+    response: SettingsStateSchema,
+    roles: ['main'],
+  },
   'settings:update': {
     request: SettingsUpdateRequestSchema,
     response: SettingsStateSchema,
@@ -444,7 +692,11 @@ export const ipcContract = {
     response: z.object({ reset: z.boolean() }),
     roles: ['main'],
   },
-  'shortcuts:status': { request: z.undefined(), response: ShortcutStatesSchema, roles: ['main'] },
+  'shortcuts:status': {
+    request: z.undefined(),
+    response: ShortcutStatesSchema,
+    roles: ['main'],
+  },
   'shortcuts:validate': {
     request: ShortcutValidateRequestSchema,
     response: ShortcutValidateResponseSchema,
@@ -457,6 +709,53 @@ export const ipcContract = {
     roles: ['main'],
   },
   'app:resolveQuit': { request: ResolveQuitRequestSchema, response: z.void(), roles: ['main'] },
+  // --- step guides: capturing (the pill and the main window) and the Flow view ---
+  'steps:start': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  'steps:getState': {
+    request: z.undefined(),
+    response: StepsSnapshotSchema,
+    roles: ['main', 'toolbar'],
+  },
+  /** A step now, at the pointer's current place. */
+  'steps:captureStep': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'steps:pause': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'steps:resume': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'steps:setAuto': {
+    request: StepsSetAutoRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  /** Saves the guide (a folder of step images and flow.json in the screenshots folder). */
+  'steps:done': {
+    request: z.undefined(),
+    response: StepsDoneResponseSchema,
+    roles: ['main', 'toolbar'],
+  },
+  /** Throws the steps away (the pill asks first). */
+  'steps:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  'flow:get': { request: FlowGetRequestSchema, response: FlowGetResponseSchema, roles: ['main'] },
+  'flow:update': {
+    request: FlowUpdateRequestSchema,
+    response: FlowGetResponseSchema,
+    roles: ['main'],
+  },
+  /** Opens one step in the screenshot editor; Save writes over that step's image. */
+  'flow:openStepInEditor': {
+    request: FlowOpenStepRequestSchema,
+    response: OpenFromHistoryResponseSchema,
+    roles: ['main'],
+  },
+  /** One step's PNG bytes, for drawing the exports in the renderer. */
+  'flow:readStep': {
+    request: FlowOpenStepRequestSchema,
+    response: FlowReadStepResponseSchema,
+    roles: ['main'],
+  },
+  'flow:export': {
+    request: FlowExportRequestSchema,
+    response: FlowExportResponseSchema,
+    roles: ['main'],
+  },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;
@@ -468,35 +767,47 @@ export type IpcResponse<C extends IpcChannel> = z.output<IpcContract[C]['respons
 /** Main -> renderer events. The preload only allows subscribing to these. */
 export const ipcEvents = {
   'app:themeChanged': z.object({ dark: z.boolean() }),
-  'shot:ready': ShotReadyEventSchema,
+  /** Open (or focus) this tab in the main window. */
+  'editor:openTab': EditorOpenTabEventSchema,
   'capture:flowEnded': FlowEndedEventSchema,
-  /** The main window was asked to close while the editor has unsaved work. */
-  'app:confirmClose': z.object({}),
+  /** The main window was asked to close (or the app to quit) while tabs have unsaved work. */
+  'editor:confirmClose': z.object({}),
   'overlay:clearSelection': z.object({}),
   'worker:grabFrames': GrabFramesEventSchema,
   /** The authoritative recorder state, to the main, toolbar and recorder windows. */
   'recorder:state': RecorderSnapshotSchema,
   /** Mic and system levels (0..1) for the toolbar meters; only while recording. */
   'recorder:levels': LevelsEventSchema,
+  /** The result of a screenshot taken during a recording, for the toolbar's inline status. */
+  'recorder:toast': ToastEventSchema,
   /** The list of unfinished recordings may have changed (the startup scan finished). */
   'recovery:changed': z.object({}),
   /** History changed (an item was added, removed or got its thumbnail): lists should reload. */
   'history:changed': z.object({}),
+  /** The folder tree changed (a folder was made, renamed, deleted, or captures moved). */
+  'library:changed': z.object({}),
   /** Progress of "save copies" (items finished of the total). */
   'history:bulkProgress': BulkProgressEventSchema,
   'export:progress': ExportProgressEventSchema,
   'export:done': ExportDoneEventSchema,
   'export:failed': ExportFailedEventSchema,
+  'video:exportProgress': VideoExportProgressEventSchema,
+  'video:exportDone': VideoExportDoneEventSchema,
+  'video:exportFailed': VideoExportFailedEventSchema,
   /** Settings changed (any window's change, a reset, a repaired file). */
   'settings:changed': SettingsStateSchema,
   'shortcuts:changed': ShortcutStatesSchema,
   /** Quit was requested during a recording: ask whether to stop it and quit. */
   'app:confirmQuit': z.object({}),
-  /** A tray or shortcut action that needs the main window (a window picker, an unsaved editor). */
+  /** A tray or shortcut action that needs the main window (a window picker). */
   'app:startRequest': StartRequestEventSchema,
   'app:toast': ToastEventSchema,
   /** The tray menu asks the main window to show a view. */
   'app:navigate': NavigateEventSchema,
+  /** The authoritative step-capture state, to the main window and the Steps pill. */
+  'steps:state': StepsSnapshotSchema,
+  /** A guide was saved: the main window opens it. */
+  'steps:finished': StepsFinishedEventSchema,
   /** Main -> the hidden recorder window: what the engine should do. */
   'recorder:engineCommand': EngineCommandSchema,
 } as const satisfies Record<string, z.ZodType>;

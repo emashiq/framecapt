@@ -1,16 +1,28 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, session, shell } from 'electron';
+import { app, nativeImage, Notification, screen, session, shell } from 'electron';
 import { BulkExportService } from './history/bulk-export';
+import { AutoCopy } from './clipboard/auto-copy';
+import { FinalizeService } from './history/finalize-service';
 import { ExportService } from './history/export-service';
+import { ExtractService } from './history/extract-service';
+import { OpenVideoService, registerOpenVideoHandler } from './history/open-video';
+import { registerSplitHandler, SplitService, splitAndOpen } from './history/split-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
-import { createAfterCapture } from './shots/after-capture';
+import { ProjectFileService, registerProjectFileHandlers } from './history/project-files';
+import { rescanLibrary } from './history/rescan';
+import { registerLibraryHandlers } from './library/handlers';
+import { LibraryService } from './library/service';
+import { LibraryStore } from './library/store';
+import { createAfterCapture, createSaveCaptureDirect } from './shots/after-capture';
 import { rememberExported } from './shots/exported-paths';
 import type { AppSettings } from './settings';
 import { probeWritable } from './settings/output-dirs';
 import type { TrayInfo } from './tray-info';
 import { HistoryService } from './history/service';
+import { detectEncoders, type EncoderCapability } from './media/convert';
 import { detectMp4Capability, MP4_UNAVAILABLE_MESSAGE, type Mp4Capability } from './media/export';
+import { JobRunner } from './media/job-runner';
 import { createMediaTools, FfmpegError, resolveFfmpeg, type MediaTools } from './media/ffmpeg';
 import { installMediaProtocol, MediaRegistry } from './recording/media-protocol';
 import { RecoveryService } from './recording/recovery';
@@ -20,9 +32,22 @@ import { SessionService } from './recording/session-service';
 import { RecorderController } from './recorder/controller';
 import { registerRecorderHandlers } from './recorder/handlers';
 import { CaptureFlow } from './capture-flow';
+import { StepsController } from './flows/controller';
+import { pickExportFolder, pickGuideSave } from './flows/dialogs';
+import { FlowSessions } from './flows/flow-store';
+import { createDisplayGrabber } from './flows/grab';
+import { registerFlowHandlers } from './flows/handlers';
+import { createStepsPill } from './flows/pill';
+import { FlowService } from './flows/service';
+import { guideThumbnail } from './flows/thumbnail';
 import { isMockCaptureEnabled } from './capture';
+import { openEditorTab, registerEditorHandlers } from './editor-host';
 import { registerShotHandlers } from './shot-handlers';
 import { ProjectStore } from './projects/store';
+import { VideoEditService, editedDestination } from './video-projects/service';
+import { pickAudioFile, registerVideoHandlers } from './video-projects/handlers';
+import { VideoProjectStore } from './video-projects/store';
+import { freeFileName } from './shots/free-name';
 import { ShotSessionStore, SWEEP_MAX_AGE_MS } from './shots/session-store';
 import { registerWorkerHandlers } from './worker';
 import { installDisplayMediaGrants } from './capture/display-media';
@@ -31,7 +56,13 @@ import type { CaptureProvider } from './capture/types';
 import type { IpcEventPayload } from '../shared/ipc-contract';
 import { sendEvent } from './events';
 import type { UpdateService } from './updates';
-import { getOriginConfig, setMainCloseInterceptor, webContentsWithRoles } from './windows';
+import {
+  getMainWindow,
+  getOriginConfig,
+  setMainCloseInterceptor,
+  showMainWindow,
+  webContentsWithRoles,
+} from './windows';
 import { IpcError } from './ipc-core';
 import { handle } from './ipc';
 import { log } from './logger';
@@ -79,15 +110,39 @@ function withE2eRemuxDelay(tools: MediaTools): MediaTools {
 }
 
 function emitToMain<
-  E extends 'export:progress' | 'export:done' | 'export:failed' | 'history:bulkProgress',
+  E extends
+    | 'export:progress'
+    | 'export:done'
+    | 'export:failed'
+    | 'history:bulkProgress'
+    | 'video:exportProgress'
+    | 'video:exportDone'
+    | 'video:exportFailed',
 >(event: E, payload: IpcEventPayload<E>): void {
   for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
+}
+
+/** A free `<name><suffix><extension>` next to the recording (no dialog). */
+async function freeVideoPath(
+  source: { path: string },
+  extension: string,
+  suffix = '',
+): Promise<string> {
+  const dir = path.dirname(source.path);
+  const base = `${path.basename(source.path, path.extname(source.path))}${suffix}`;
+  for (let attempt = 1; attempt < 1000; attempt += 1) {
+    const name = attempt === 1 ? `${base}${extension}` : `${base} (${attempt})${extension}`;
+    const candidate = path.join(dir, name);
+    if (!fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error(`No free ${extension} name.`);
 }
 
 /** What the desktop layer (tray, shortcuts) drives: the same objects the IPC handlers use. */
 export interface AppServices {
   flow: CaptureFlow;
   recorder: RecorderController;
+  steps: StepsController;
   exports: ExportService;
   history: HistoryService;
   sessions: SessionService;
@@ -117,7 +172,7 @@ export function registerHandlers(
 
   handle(
     'app:reportError',
-    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown'] },
+    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] },
     (report, ctx) => {
       const parts = [`Renderer error (${ctx.role}, ${report.source}): ${report.message}`];
       if (report.stack) parts.push(report.stack);
@@ -139,7 +194,8 @@ export function registerHandlers(
   const store = new ShotSessionStore(path.join(app.getPath('userData'), 'shots'));
   const synthetic = isMockCaptureEnabled();
   const recordingsDir = path.join(app.getPath('userData'), 'recordings');
-  const outputDir = (): string => settings.dirs().recordingsDir;
+  // New recordings (and what is saved beside them) go into the chosen library folder, if any.
+  const outputDir = (): string => library.saveDir('recordings');
   const tools = withE2eRemuxDelay(
     createMediaTools(() =>
       resolveFfmpeg({
@@ -156,16 +212,39 @@ export function registerHandlers(
   });
   const historyDir = path.join(app.getPath('userData'), 'history');
   const projects = new ProjectStore(path.join(app.getPath('userData'), 'projects'));
+  const videoProjects = new VideoProjectStore(path.join(app.getPath('userData'), 'video-projects'));
   const history = new HistoryService({
     dir: historyDir,
     projects,
+    videoProjects,
     tools,
     trashItem: (file) => shell.trashItem(file),
+    folderOf: (dir) => library.folderOfDir(dir),
     onChange: () => {
       for (const contents of webContentsWithRoles(['main']))
         sendEvent(contents, 'history:changed', {});
     },
   });
+  const libraryStore = new LibraryStore(app.getPath('userData'));
+  const library: LibraryService = new LibraryService({
+    roots: () => settings.dirs(),
+    history: {
+      ready: Promise.all([history.ready, libraryStore.load()]).then(() => undefined),
+      items: () => history.items(),
+      rewritePaths: (changes) => history.rewritePaths(changes),
+    },
+    store: libraryStore,
+    captureFolder: {
+      get: () => settings.store.get().general.captureFolder,
+      set: (folder) => void settings.store.setCaptureFolder(folder),
+    },
+    trashItem: (file) => shell.trashItem(file),
+    onChange: () => {
+      for (const contents of webContentsWithRoles(['main']))
+        sendEvent(contents, 'library:changed', {});
+    },
+  });
+  registerLibraryHandlers(library);
   // Capability is asked once, at startup, and cached (the answer cannot change while running).
   // E2E builds only (FRAMECAPT_E2E_NO_H264=1): behave like a build without an H.264 encoder.
   const detected: Promise<Mp4Capability> =
@@ -176,24 +255,129 @@ export function registerHandlers(
     log.info(`MP4 export ${capability.available ? 'available (libx264 + aac)' : 'unavailable'}`);
     return capability;
   });
+  // Which encoders the bundled build has (WebM, GIF, H.264): the save-format controls follow it.
+  // E2E builds only (FRAMECAPT_E2E_NO_H264=1): no H.264 here either.
+  const encoders: Promise<EncoderCapability> = detectEncoders(tools).then((found) =>
+    __FRAMECAPT_E2E__ && process.env.FRAMECAPT_E2E_NO_H264 === '1'
+      ? { ...found, h264: false }
+      : found,
+  );
+  // One ffmpeg job at a time: the user's MP4 exports and the save-format jobs share a queue.
+  const runner = new JobRunner();
   const exports = new ExportService({
     history,
     tools,
     capability: () => mp4Capability,
     pickDestination: (source) => mp4SaveDialog(source, outputDir()),
-    autoDestination: async (source) => {
-      const dir = path.dirname(source.path);
-      const base = path.basename(source.path, path.extname(source.path));
-      for (let attempt = 1; attempt < 1000; attempt += 1) {
-        const name = attempt === 1 ? `${base}.mp4` : `${base} (${attempt}).mp4`;
-        const candidate = path.join(dir, name);
-        if (!fs.existsSync(candidate)) return candidate;
-      }
-      throw new Error('No free MP4 name.');
-    },
+    autoDestination: (source) => freeVideoPath(source, '.mp4'),
+    runner,
     emit: {
       progress: (event) => emitToMain('export:progress', event),
       done: (event) => emitToMain('export:done', event),
+      failed: (event) => emitToMain('export:failed', event),
+    },
+  });
+  const extracts = new ExtractService({
+    history,
+    tools,
+    capability: () => mp4Capability,
+    runner,
+    emit: {
+      progress: (event) => emitToMain('export:progress', event),
+      done: (event) => emitToMain('export:done', event),
+      failed: (event) => emitToMain('export:failed', event),
+    },
+  });
+  const splitter = new SplitService({
+    history,
+    extracts,
+    capability: () => mp4Capability,
+  });
+  registerSplitHandler(splitter);
+  registerOpenVideoHandler(
+    new OpenVideoService({
+      history,
+      tools,
+      runner,
+      recordingsDir: outputDir,
+      encoders: () => encoders,
+      openTab: openEditorTab,
+    }),
+  );
+  // The clipboard rule: a confirmation goes to the recording toolbar while recording, else to the
+  // main window, else (it is hidden in the tray) to the OS when notifications are on.
+  const autoCopy = new AutoCopy({
+    settings: () => settings.store.get(),
+    notify: (message) => {
+      if (recorder.isLive) {
+        recorder.toastToolbar({ level: 'info', message });
+      } else if (getMainWindow()?.isVisible()) {
+        for (const contents of webContentsWithRoles(['main']))
+          sendEvent(contents, 'app:toast', { level: 'info', message });
+      } else if (settings.store.get().general.showNotifications && Notification.isSupported()) {
+        new Notification({ title: 'FrameCapt', body: message, silent: true }).show();
+      }
+    },
+  });
+  const finalize = new FinalizeService({
+    history,
+    tools,
+    encoders: () => encoders,
+    settings: () => settings.store.get().recording,
+    destination: freeVideoPath,
+    trashItem: (file) => shell.trashItem(file),
+    runner,
+    toast: (event) => {
+      if (getMainWindow()?.isVisible()) {
+        for (const contents of webContentsWithRoles(['main']))
+          sendEvent(contents, 'app:toast', event);
+      }
+    },
+    onReplaced: (change) => void autoCopy.replaced(change),
+    emit: {
+      progress: (event) => emitToMain('export:progress', event),
+      done: (event) => emitToMain('export:done', event),
+      failed: (event) => emitToMain('export:failed', event),
+    },
+  });
+  registerVideoHandlers(
+    new VideoEditService({
+      history,
+      store: videoProjects,
+      pickAudioFile,
+      tools,
+      runner,
+      destination: (source, extension) => editedDestination(source, extension, freeFileName),
+      emit: {
+        progress: (event) => emitToMain('video:exportProgress', event),
+        done: (event) => {
+          emitToMain('video:exportDone', event);
+          void autoCopy.file(event.path);
+        },
+        failed: (event) => emitToMain('video:exportFailed', event),
+      },
+    }),
+  );
+  const flowsDir = path.join(app.getPath('userData'), 'flows');
+  const flows = new FlowService({
+    history,
+    tools,
+    runner,
+    capability: () => mp4Capability,
+    screenshotsDir: () => library.saveDir('screenshots'),
+    scratchDir: flowsDir,
+    thumbnail: guideThumbnail,
+    trashItem: (file) => shell.trashItem(file),
+    pickFolder: () => pickExportFolder(settings.dirs().screenshotsDir),
+    pickSave: (options) => pickGuideSave(settings.dirs().screenshotsDir, options),
+    remember: rememberExported,
+    emit: {
+      progress: (event) => emitToMain('export:progress', event),
+      done: (event) => {
+        emitToMain('export:done', event);
+        // A guide exported as a video or GIF (the only kind this service reports as done).
+        void autoCopy.file(event.path);
+      },
       failed: (event) => emitToMain('export:failed', event),
     },
   });
@@ -207,13 +391,43 @@ export function registerHandlers(
     history,
   });
   const media = new MediaRegistry();
-  installMediaProtocol(media, history);
+  installMediaProtocol(media, {
+    thumbPathOf: (id) => history.thumbPathOf(id),
+    filePathOf: (id) => history.filePathOf(id),
+    videoAssetPathOf: (id, name) =>
+      history.get(id) ? videoProjects.assetPathByName(id, name) : undefined,
+    flowStepPathOf: (id, index) => flows.stepPathOf(id, index),
+  });
+  const captureSaving = {
+    settings: () => settings.store.get(),
+    screenshotsDir: () => library.saveDir('screenshots'),
+    history,
+    copyImage: (png: Uint8Array, options?: { quiet?: boolean }) =>
+      autoCopy.screenshot(png, options),
+  };
+  /**
+   * A recording was saved: put the file on the clipboard (the settings), then queue the work on
+   * the file. "Also save an MP4" queues first, so it reads the recording as recorded (it is skipped
+   * when MP4 is already the save format); the save-format job follows and replaces the file.
+   */
+  async function afterRecordingSaved(historyId: string): Promise<void> {
+    const item = history.get(historyId);
+    if (item) await autoCopy.file(item.path);
+    const recording = settings.store.get().recording;
+    if (recording.autoExportMp4 && recording.saveFormat !== 'mp4')
+      await exports.startAuto(historyId);
+    await finalize.startAfterSave(historyId);
+    // Several screens in one file: each screen becomes a video of its own, opened for editing.
+    if (item?.format === 'fcap') void splitAndOpen(splitter, history, historyId, openEditorTab);
+  }
+  const saveDirect = createSaveCaptureDirect(captureSaving);
   const recorder: RecorderController = new RecorderController({
     provider,
+    saveScreenshot: saveDirect,
     sessions,
     media,
     synthetic,
-    isScreenshotBusy: () => flow.state.active,
+    isScreenshotBusy: () => flow.state.active || steps.active,
     outputDir,
     tools,
     history,
@@ -226,10 +440,12 @@ export function registerHandlers(
       }
     },
     onSaved: (historyId) => {
-      if (historyId && settings.store.get().recording.autoExportMp4) {
-        void exports.startAuto(historyId);
-      }
+      if (!historyId) return;
+      void afterRecordingSaved(historyId).catch((error: unknown) =>
+        log.warn(`After saving a recording: ${String(error)}`),
+      );
     },
+    persistCameraStyle: (patch) => void settings.store.update({ recording: patch }),
     // E2E builds only: a slow engine start, to test a stop that arrives while starting.
     ...(__FRAMECAPT_E2E__ &&
       Number(process.env.FRAMECAPT_E2E_ENGINE_START_DELAY_MS) > 0 && {
@@ -245,13 +461,56 @@ export function registerHandlers(
     provider,
     store,
     synthetic,
-    isBlocked: () => recorder.busy,
-    afterCapture: createAfterCapture({
-      settings: () => settings.store.get(),
-      screenshotsDir: () => settings.dirs().screenshotsDir,
-      history,
-    }),
+    // A screenshot may start while a recording runs (saved directly), not while one is set up or saved.
+    // Nor while a step guide is captured: the pointer and the screen belong to it.
+    isBlocked: () => (recorder.busy && !recorder.isLive) || steps.active,
+    isRecording: () => recorder.isLive,
+    saveDirect,
+    toast: (event) => recorder.toastToolbar(event),
+    afterCapture: createAfterCapture(captureSaving),
+    openEditor: openEditorTab,
   });
+  // The recording ended (or was stopped) while a screenshot selection was open: drop the selection.
+  recorder.onChange(() => {
+    if (flow.duringRecording && !recorder.isLive) flow.cancel();
+  });
+  const steps: StepsController = new StepsController({
+    now: () => Date.now(),
+    monotonic: () => performance.now(),
+    cursor: () => screen.getCursorScreenPoint(),
+    displays: () => provider.listDisplays(),
+    grab: createDisplayGrabber(provider, synthetic),
+    sessions: new FlowSessions(flowsDir),
+    save: async (input) => {
+      const saved = await flows.saveSession(input);
+      // The guide is a folder of step images: that folder goes on the clipboard (the recording rule).
+      const guide = history.get(saved.historyId);
+      if (guide) void autoCopy.file(path.dirname(guide.path));
+      // The guide opens in the main window (a window that was hidden in the tray comes back).
+      showMainWindow();
+      for (const contents of webContentsWithRoles(['main'])) {
+        sendEvent(contents, 'steps:finished', { historyId: saved.historyId });
+      }
+      return saved;
+    },
+    isBlocked: () => recorder.busy || flow.state.active,
+    isOverPill: (point) => pill.isOver(point),
+    ui: {
+      open: () => pill.open(),
+      close: () => pill.close(),
+      follow: (displayId) => pill.follow(displayId),
+    },
+    log,
+  });
+  const pill = createStepsPill(() => {
+    void steps.done().catch((error: unknown) => log.warn(`Steps pill closed: ${String(error)}`));
+  });
+  steps.onChange((snapshot) => {
+    for (const contents of webContentsWithRoles(['main', 'toolbar'])) {
+      sendEvent(contents, 'steps:state', snapshot);
+    }
+  });
+  registerFlowHandlers(steps, flows);
   registerWorkerHandlers();
   registerShotHandlers(
     flow,
@@ -260,10 +519,13 @@ export function registerHandlers(
     history,
     {
       get: () => settings.store.get(),
-      screenshotsDir: () => settings.dirs().screenshotsDir,
+      screenshotsDir: () => library.saveDir('screenshots'),
+      copyImage: captureSaving.copyImage,
     },
     { store: projects, appVersion: app.getVersion() },
+    flows,
   );
+  registerEditorHandlers(store, history);
   const bulk = new BulkExportService({
     history,
     pickFolder: () => pickCopiesFolder(settings.dirs().screenshotsDir),
@@ -271,13 +533,54 @@ export function registerHandlers(
     onSaved: rememberExported,
     onProgress: (done, total) => emitToMain('history:bulkProgress', { done, total }),
   });
-  registerHistoryHandlers(history, exports, bulk, () => mp4Capability, outputDir);
-  registerRecorderHandlers(recorder, sessions, media);
+  const rescan = (): Promise<number> =>
+    rescanLibrary({
+      dirs: [settings.dirs().screenshotsDir, settings.dirs().recordingsDir],
+      history,
+      tools,
+      flowThumbnail: (dir, parsed) => flows.thumbnailOf(dir, parsed),
+      thumbnail: async (file, width) => {
+        const image = nativeImage.createFromPath(file);
+        return image.isEmpty() ? undefined : image.resize({ width }).toPNG();
+      },
+    });
+  registerHistoryHandlers(
+    history,
+    exports,
+    extracts,
+    bulk,
+    () => mp4Capability,
+    outputDir,
+    rescan,
+    finalize,
+    () => encoders,
+  );
+  registerProjectFileHandlers(
+    history,
+    new ProjectFileService({
+      history,
+      projects,
+      videoProjects,
+      screenshotsDir: () => library.saveDir('screenshots'),
+      appVersion: app.getVersion(),
+    }),
+  );
+  registerRecorderHandlers(recorder, sessions, media, (width) => pill.resize(width));
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.
-  setMainCloseInterceptor(() => recorder.isRecording && !recorder.isQuitting);
+  setMainCloseInterceptor(() => (recorder.isRecording && !recorder.isQuitting) || steps.active);
   app.on('before-quit', (event) => recorder.handleBeforeQuit(event, () => app.quit()));
-  app.on('will-quit', () => void sessions.closeAll());
+  app.on('will-quit', () => {
+    void sessions.closeAll();
+    void steps.dispose();
+  });
+  // Quitting while a guide is being captured saves what was captured (an empty one is dropped).
+  app.on('before-quit', (event) => {
+    if (!steps.active) return;
+    event.preventDefault();
+    const quit = (): void => app.quit();
+    void steps.done().then(quit, quit);
+  });
   // An export in progress is cancelled (its partial file removed) before the app exits.
   app.on('before-quit', (event) => {
     if (!exports.active) return;
@@ -295,10 +598,18 @@ export function registerHandlers(
     (error: unknown) =>
       log.error('ffmpeg is not usable (run "npm run fetch:ffmpeg" in development)', error),
   );
-  void history.backfillFromCompleted(recordingsDir).then(
-    (added) => added > 0 && log.info(`History: added ${added} earlier recordings`),
-    (error: unknown) => log.error('History backfill failed', error),
-  );
+  // A fresh start (no history.json: first run, a reinstall, lost app data): earlier recordings,
+  // then any capture files already sitting in the output folders. Once; later it is a button.
+  void history.ready
+    .then(async () => {
+      const firstRun = history.isFirstRun;
+      const backfilled = await history.backfillFromCompleted(recordingsDir);
+      if (backfilled > 0) log.info(`History: added ${backfilled} earlier recordings`);
+      if (!firstRun) return;
+      const found = await rescan();
+      if (found > 0) log.info(`History: found ${found} existing captures`);
+    })
+    .catch((error: unknown) => log.error('History backfill failed', error));
   void recovery
     .startup()
     .catch((error: unknown) => log.error('Recovery scan failed', error))
@@ -308,6 +619,9 @@ export function registerHandlers(
       }
     });
   // Originals of abandoned sessions are removed after a week (a `keep` marker exempts one).
+  void new FlowSessions(flowsDir).sweep(SWEEP_MAX_AGE_MS).then((removed) => {
+    if (removed > 0) log.info(`Step sweep: removed ${removed} abandoned capture folders`);
+  });
   void store.sweep(SWEEP_MAX_AGE_MS).then((result) => {
     log.info(
       `Shot sweep: scanned ${result.scanned}, removed ${result.removed}, kept ${result.kept}`,
@@ -316,10 +630,11 @@ export function registerHandlers(
   return {
     flow,
     recorder,
+    steps,
     exports,
     history,
     sessions,
     store,
-    isBusy: () => recorder.busy || flow.state.active || exports.active,
+    isBusy: () => recorder.busy || flow.state.active || exports.active || steps.active,
   };
 }

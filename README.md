@@ -20,7 +20,7 @@ Implemented and verified on the development machine (details and evidence in [do
 - **Crash-tolerant recording**: video is written to disk while recording (bounded memory), finished into a seekable WebM file, and an unfinished recording found at the next start can be recovered on a best-effort basis (see [docs/recording-persistence.md](docs/recording-persistence.md); recovery is not lossless).
 - **MP4 export** (H.264 + AAC) with progress and cancel, using a bundled FFmpeg.
 - **Local history** of your captures with search, thumbnails, "file moved" handling and delete-to-Recycle-Bin.
-- **Command center** (Ctrl+K) and command palette in a custom title bar, multi-select and bulk actions in History, customizable shortcuts for the editor and global actions.
+- **Command center** (Ctrl+K) and command palette in a custom title bar, multi-select and bulk actions in the Library, customizable shortcuts for the editor and global actions.
 - Settings, **global shortcuts** (configurable), tray icon, close-to-tray, light/dark theme following Windows, keyboard-accessible UI.
 
 Not implemented: cloud storage or sharing of captures, accounts, OCR, AI features, webcam overlay, a video timeline editor, a mobile app, macOS builds (Linux builds are experimental).

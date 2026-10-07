@@ -1,8 +1,26 @@
-import type { EngineCommand, EngineEvent, EnginePrepareCommand } from '../../shared/recorder-ipc';
+import type {
+  EngineCommand,
+  EngineEvent,
+  EngineMultiSource,
+  EnginePrepareCommand,
+} from '../../shared/recorder-ipc';
 import { CHUNK_TIMESLICE_MS } from '../../shared/recorder-ipc';
 import type { AudioSource } from '../../shared/recorder-machine';
-import { AUDIO_BITRATE, qualityLimit, videoBitrate } from '../../shared/recording';
+import { cornerCenter } from '../../shared/camera';
+import {
+  followCrop,
+  followCropSize,
+  multiSourceLayout,
+  type FollowZoom,
+  type MosaicLayout,
+} from '../../shared/compositor-layout';
+import type { Size } from '../../shared/geometry';
+import type { Rect } from '../../shared/rect';
+import { AUDIO_BITRATE, fitWithin, qualityLimit, videoBitrate } from '../../shared/recording';
+import { bitrateFactorOf } from '../../shared/recording-format';
 import { createAudioMix, type AudioMix } from '../capture/audio-graph';
+import type { CameraLayerState } from '../capture/camera-layer';
+import { createCompositor, type CompositorCamera } from '../capture/compositor';
 import { CaptureError, mapMediaError } from '../capture/errors';
 import { detectRecorderFormats } from '../capture/recorder-probe';
 import { createCanvasTransform, type CroppedStream } from '../capture/region-crop';
@@ -13,7 +31,11 @@ import {
   registerStream,
   stopStream,
 } from '../capture/resource-registry';
-import { acquireDisplayStream, acquireMicrophoneStream } from '../capture/stream';
+import {
+  acquireCameraStream,
+  acquireDisplayStream,
+  acquireMicrophoneStream,
+} from '../capture/stream';
 import { ChunkUploader, type AppendFn, type UploadFailure } from './chunk-uploader';
 
 export interface EngineDeps {
@@ -24,14 +46,19 @@ export interface EngineDeps {
 }
 
 interface Prepared {
-  displayStream: MediaStream;
+  /** One stream per source (a single-source recording has one); the first carries the system audio. */
+  displayStreams: MediaStream[];
+  /** Each source's tile in the picture (multi-source recordings only). */
+  tiles: Rect[] | undefined;
   micStream: MediaStream | undefined;
+  cameraStream: MediaStream | undefined;
   crop: CroppedStream;
   mix: AudioMix | undefined;
   mime: string;
   width: number;
   height: number;
   fps: number;
+  bitrateFactor: number;
   audio: { mic: boolean; system: boolean };
   unwatch: () => void;
 }
@@ -44,6 +71,11 @@ interface Active {
   stopped: Promise<void>;
   unregister: () => void;
   ending: boolean;
+}
+
+/** The zoom of a follow-mouse recording; only a whole-screen recording follows. */
+function followZoom(command: EnginePrepareCommand): FollowZoom | undefined {
+  return command.kind === 'screen' && !command.region ? command.options.follow?.zoom : undefined;
 }
 
 /** An ordinary microphone list: `audioinput` devices, excluding the virtual "communications" alias. */
@@ -77,7 +109,16 @@ export class RecorderEngine {
   private stopSampler: (() => void) | undefined;
   /** Sources already reported as lost (reported once). */
   private lost = new Set<AudioSource>();
+  /** Multi-source recordings: the sources that ended, and how many there are. */
+  private lostTiles = new Set<number>();
+  private tileCount = 0;
   private queue: Promise<void> = Promise.resolve();
+  /** The mouse on the recorded display (0..1), from main; the follow window aims at it. */
+  private cursor = { nx: 0.5, ny: 0.5 };
+  /** The webcam overlay as main last placed it (`camera` command). */
+  private camera: CameraLayerState = { nx: 1, ny: 1, size: 'm', shape: 'circle', visible: true };
+  /** The camera's track ended mid-recording: the overlay stays hidden. */
+  private cameraLost = false;
 
   constructor(private readonly deps: EngineDeps) {}
 
@@ -113,6 +154,18 @@ export class RecorderEngine {
         this.levelsEnabled = command.enabled;
         this.updateSampler();
         return;
+      case 'cursor':
+        this.cursor = { nx: command.nx, ny: command.ny };
+        return;
+      case 'camera':
+        this.camera = {
+          nx: command.nx,
+          ny: command.ny,
+          size: command.size,
+          shape: command.shape,
+          visible: command.visible && !this.cameraLost,
+        };
+        return;
     }
   }
 
@@ -121,16 +174,22 @@ export class RecorderEngine {
   private async prepare(command: EnginePrepareCommand): Promise<void> {
     this.releaseAll();
     const { requestId, options } = command;
+    let displayStreams: MediaStream[] = [];
+    let micStream: MediaStream | undefined;
+    let cameraStream: MediaStream | undefined;
     const choice = (
-      kind: 'system-audio-unavailable' | 'mic-missing' | 'mic-denied' | 'mic-unavailable',
+      kind:
+        | 'system-audio-unavailable'
+        | 'mic-missing'
+        | 'mic-denied'
+        | 'mic-unavailable'
+        | 'camera-missing',
       canUseDefaultMic = false,
     ): void => {
+      stopStream(cameraStream);
       this.releaseAll();
       this.deps.send({ type: 'needsChoice', requestId, choice: kind, canUseDefaultMic });
     };
-
-    let displayStream: MediaStream | undefined;
-    let micStream: MediaStream | undefined;
     try {
       const formats = detectRecorderFormats();
       if (!formats.defaultMime) {
@@ -157,9 +216,25 @@ export class RecorderEngine {
         micDeviceId = undefined;
       }
 
+      // The camera: a chosen device that is gone falls back to the default one; no camera at all is a choice.
+      this.cameraLost = false;
+      if (options.camera) {
+        try {
+          cameraStream = await acquireCameraStream(options.camera.deviceId);
+        } catch {
+          return choice('camera-missing');
+        }
+        this.camera = {
+          ...cornerCenter(options.camera.corner),
+          size: options.camera.size,
+          shape: options.camera.shape,
+          visible: true,
+        };
+      }
+
       // The picture (and system audio). A missing loopback track is a choice, never silence.
       try {
-        displayStream = await this.acquireDisplay(command);
+        displayStreams = await this.acquireDisplays(command);
       } catch (error) {
         if (error instanceof CaptureError && error.code === 'system-audio-unavailable') {
           return choice('system-audio-unavailable');
@@ -172,23 +247,43 @@ export class RecorderEngine {
           micStream = await acquireMicrophoneStream(micDeviceId, { processing: true });
         } catch (error) {
           const mapped = mapMediaError(error);
-          stopStream(displayStream);
-          displayStream = undefined;
+          displayStreams.forEach((stream) => stopStream(stream));
+          displayStreams = [];
           if (mapped.code === 'denied') return choice('mic-denied');
           if (mapped.code === 'source-gone') return choice('mic-unavailable', defaultMicExists);
           throw mapped;
         }
       }
 
-      const crop = await createCanvasTransform(
-        displayStream,
-        {
-          rect: command.region ?? undefined,
-          limit: qualityLimit(options.quality),
-        },
-        options.fps,
-        'timer',
-      );
+      const follow = followZoom(command);
+      const displayStream = displayStreams[0] as MediaStream;
+      this.cursor = { nx: 0.5, ny: 0.5 };
+      const camera: CompositorCamera | undefined = cameraStream && {
+        stream: cameraStream,
+        state: () => this.camera,
+      };
+      this.lostTiles = new Set();
+      this.tileCount = command.multi?.length ?? 0;
+      let tiles: Rect[] | undefined;
+      const crop = command.multi
+        ? await this.createMultiCompositor(displayStreams, command.multi, command, camera).then(
+            (made) => {
+              tiles = made.tiles;
+              return made.crop;
+            },
+          )
+        : follow
+          ? await this.createFollowCompositor(displayStream, follow, command, camera)
+          : await createCanvasTransform(
+              displayStream,
+              {
+                rect: command.region ?? undefined,
+                limit: qualityLimit(options.quality),
+                camera,
+              },
+              options.fps,
+              'timer',
+            );
       const { outWidth: width, outHeight: height } = crop.stats();
 
       const mic = micStream !== undefined;
@@ -198,14 +293,17 @@ export class RecorderEngine {
 
       this.lost = new Set();
       const prepared: Prepared = {
-        displayStream,
+        displayStreams,
+        tiles,
         micStream,
+        cameraStream,
         crop,
         mix,
         mime: formats.defaultMime,
         width,
         height,
         fps: options.fps,
+        bitrateFactor: bitrateFactorOf(options),
         audio: { mic, system },
         unwatch: () => undefined,
       };
@@ -218,38 +316,166 @@ export class RecorderEngine {
         width,
         height,
         audio: prepared.audio,
+        ...(tiles && { tiles }),
       });
     } catch (error) {
       stopStream(micStream);
-      stopStream(displayStream);
+      displayStreams.forEach((stream) => stopStream(stream));
+      stopStream(cameraStream);
       this.releaseAll();
       const { code, message } = failure(error);
       this.deps.send({ type: 'prepareFailed', requestId, code, message });
     }
   }
 
-  private async acquireDisplay(command: EnginePrepareCommand): Promise<MediaStream> {
-    if (__FRAMECAPT_E2E__ && command.synthetic) {
+  /**
+   * The streams of a recording: one, or (multi-source) one per source, acquired SEQUENTIALLY (a
+   * grant is one-shot and belongs to one request at a time). Only the first carries system audio.
+   * On any failure the streams already acquired are released.
+   */
+  private async acquireDisplays(command: EnginePrepareCommand): Promise<MediaStream[]> {
+    if (!command.multi) return [await this.acquireDisplay(command)];
+    const streams: MediaStream[] = [];
+    try {
+      for (const [index, source] of command.multi.entries()) {
+        streams.push(await this.acquireDisplay(command, source, index === 0));
+      }
+    } catch (error) {
+      streams.forEach((stream) => stopStream(stream));
+      throw error;
+    }
+    return streams;
+  }
+
+  private async acquireDisplay(
+    command: EnginePrepareCommand,
+    source?: EngineMultiSource,
+    primary = true,
+  ): Promise<MediaStream> {
+    const systemAudio = command.options.systemAudio && primary;
+    const synthetic = source?.synthetic ?? command.synthetic;
+    if (__FRAMECAPT_E2E__ && synthetic) {
       const { createSyntheticDisplayStream } = await import('../capture/synthetic-stream');
-      if (command.options.systemAudio) {
+      if (systemAudio) {
         // The mock has no loopback audio: exercises the "system audio isn't available" choice.
         throw new CaptureError('system-audio-unavailable', 'Synthetic: no system audio.');
       }
-      return createSyntheticDisplayStream(command.synthetic.width, command.synthetic.height);
+      return createSyntheticDisplayStream(synthetic.width, synthetic.height);
     }
     return acquireDisplayStream({
-      sourceId: command.sourceId,
-      systemAudio: command.options.systemAudio,
+      sourceId: source?.sourceId ?? command.sourceId,
+      systemAudio,
       maxFrameRate: command.options.fps,
-      maxSize: command.region ? undefined : (qualityLimit(command.options.quality) ?? undefined),
+      // A region and a follow-mouse window are cut from the unscaled frame, and so are the sources
+      // of a mosaic (the whole mosaic is scaled to its cap afterwards).
+      maxSize:
+        command.region || followZoom(command) || command.multi
+          ? undefined
+          : (qualityLimit(command.options.quality) ?? undefined),
     });
+  }
+
+  /**
+   * Follow-mouse picture: a window of frame/zoom pixels that eases toward the mouse, fitted to the
+   * quality preset (so 3440x1440 at 2x is 1720x720 and fits 1080p unchanged).
+   */
+  private createFollowCompositor(
+    displayStream: MediaStream,
+    zoom: FollowZoom,
+    command: EnginePrepareCommand,
+    camera: CompositorCamera | undefined,
+  ): Promise<CroppedStream> {
+    const limit = qualityLimit(command.options.quality);
+    let crop: Rect | null = null;
+    let last = performance.now();
+    return createCompositor({
+      tiles: [
+        {
+          stream: displayStream,
+          src: (frame) => {
+            const now = performance.now();
+            crop = followCrop({
+              target: { x: this.cursor.nx * frame.width, y: this.cursor.ny * frame.height },
+              prev: crop,
+              dtMs: now - last,
+              zoom,
+              frame,
+            });
+            last = now;
+            return crop;
+          },
+          dst: (out) => ({ x: 0, y: 0, width: out.width, height: out.height }),
+        },
+      ],
+      outSize: ([frame]) => fitWithin(followCropSize(frame as Size, zoom), limit),
+      fps: command.options.fps,
+      driver: 'timer',
+      camera,
+    });
+  }
+
+  /**
+   * Several sources in one picture: every source is a tile, laid out once all have delivered a
+   * frame ('virtual' for screens only, else an equal-cell 'grid') and capped as a whole by the
+   * quality preset. A tile that ends is blanked (the compositor draws "Source ended"), reported with
+   * `tileLost`, and the recording goes on; only when every tile has ended does it stop.
+   */
+  private async createMultiCompositor(
+    streams: MediaStream[],
+    multi: readonly EngineMultiSource[],
+    command: EnginePrepareCommand,
+    camera: CompositorCamera | undefined,
+  ): Promise<{ crop: CroppedStream; tiles: Rect[] }> {
+    const plan: { layout?: MosaicLayout } = {};
+    const crop = await createCompositor({
+      tiles: streams.map((stream, index) => ({
+        stream,
+        // A window can change size while it is recorded: its frame is fitted into the tile.
+        fit: true,
+        dst: () => (plan.layout as MosaicLayout).rects[index] as Rect,
+      })),
+      outSize: (sizes) => {
+        plan.layout = multiSourceLayout(
+          sizes.map((size, index) => {
+            const source = multi[index] as EngineMultiSource;
+            return {
+              kind: source.kind,
+              size,
+              position: source.rect ? { x: source.rect.x, y: source.rect.y } : null,
+            };
+          }),
+          command.options.quality,
+        );
+        return { width: plan.layout.width, height: plan.layout.height };
+      },
+      fps: command.options.fps,
+      driver: 'timer',
+      onTileLost: (index) => this.onTileLost(index),
+      camera,
+    });
+    return { crop, tiles: (plan.layout as MosaicLayout).rects };
+  }
+
+  private onTileLost(index: number): void {
+    if (this.lostTiles.has(index)) return;
+    this.lostTiles.add(index);
+    this.deps.send({ type: 'tileLost', index });
+    if (this.lostTiles.size >= this.tileCount) this.deps.send({ type: 'sourceLost' });
   }
 
   /** Watches for the picture and the audio sources going away. Returns the unwatcher. */
   private watchSources(prepared: Prepared): () => void {
-    const video = prepared.displayStream.getVideoTracks()[0];
+    // A multi-source recording watches its tiles in the compositor instead (see onTileLost).
+    const video = prepared.tiles ? undefined : prepared.displayStreams[0]?.getVideoTracks()[0];
     const onVideoEnded = (): void => this.deps.send({ type: 'sourceLost' });
     video?.addEventListener('ended', onVideoEnded);
+    // An unplugged camera only takes the overlay away; the recording itself goes on.
+    const cameraTrack = prepared.cameraStream?.getVideoTracks()[0];
+    const onCameraEnded = (): void => {
+      this.cameraLost = true;
+      this.camera = { ...this.camera, visible: false };
+    };
+    cameraTrack?.addEventListener('ended', onCameraEnded);
 
     const markLost = (source: AudioSource): void => {
       if (this.lost.has(source)) return;
@@ -274,6 +500,7 @@ export class RecorderEngine {
 
     return () => {
       video?.removeEventListener('ended', onVideoEnded);
+      cameraTrack?.removeEventListener('ended', onCameraEnded);
       offEnded?.();
       navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
     };
@@ -305,6 +532,7 @@ export class RecorderEngine {
         videoBitsPerSecond: videoBitrate(
           { width: prepared.width, height: prepared.height },
           prepared.fps,
+          prepared.bitrateFactor,
         ),
         ...(audioTrack && { audioBitsPerSecond: AUDIO_BITRATE }),
       });
@@ -477,7 +705,8 @@ export class RecorderEngine {
       prepared.mix?.dispose();
       prepared.crop.dispose();
       stopStream(prepared.micStream);
-      stopStream(prepared.displayStream);
+      stopStream(prepared.cameraStream);
+      prepared.displayStreams.forEach((stream) => stopStream(stream));
     }
   }
 }

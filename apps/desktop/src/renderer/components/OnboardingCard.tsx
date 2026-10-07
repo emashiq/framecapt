@@ -11,11 +11,11 @@ function Point({ icon, children }: { icon: ReactNode; children: ReactNode }) {
     <li className="flex items-start gap-3">
       <span
         aria-hidden="true"
-        className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-fg"
+        className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-fg"
       >
         {icon}
       </span>
-      <span className="min-w-0 flex-1 text-sm text-fg-muted">{children}</span>
+      <span className="min-w-0 flex-1 text-[13px] text-fg-muted">{children}</span>
     </li>
   );
 }
@@ -25,7 +25,7 @@ export interface OnboardingCardProps {
 }
 
 /**
- * The first-run card on the Capture view: what stays on your device, the global shortcuts as they are
+ * The first-run card on Home: what stays on your device, the global shortcuts as they are
  * set right now, and what closing the window does. Dismissing it is remembered (settings, notices).
  */
 export function OnboardingCard({ onDismiss }: OnboardingCardProps) {
@@ -34,17 +34,19 @@ export function OnboardingCard({ onDismiss }: OnboardingCardProps) {
   const screen = shortcuts.screenshotScreen;
   return (
     <Card
-      padding="lg"
-      className="mb-5"
+      padding="md"
+      className="mb-4"
       data-testid="onboarding-card"
       role="region"
       aria-labelledby="onboarding-heading"
     >
-      <h2 id="onboarding-heading" className="text-lg font-semibold text-fg">
+      <h2 id="onboarding-heading" className="text-[15px] font-semibold text-fg">
         Welcome to FrameCapt
       </h2>
-      <p className="mt-0.5 text-sm text-fg-muted">Three things worth knowing before you start.</p>
-      <ul className="mt-4 flex flex-col gap-3.5">
+      <p className="mt-0.5 text-[13px] text-fg-muted">
+        Three things worth knowing before you start.
+      </p>
+      <ul className="mt-3 flex flex-col gap-2.5">
         <Point icon={<ShieldCheck className="size-4" />}>
           <span className="font-medium text-fg">Everything stays on your device.</span> There is no
           account and nothing is uploaded: screenshots and recordings are saved in the folders you
@@ -82,7 +84,7 @@ export function OnboardingCard({ onDismiss }: OnboardingCardProps) {
             : 'Close to tray is off in Settings, so shortcuts only work while the window is open.'}
         </Point>
       </ul>
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="primary" data-testid="onboarding-dismiss" onClick={onDismiss}>
           Got it
         </Button>

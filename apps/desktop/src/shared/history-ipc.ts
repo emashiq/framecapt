@@ -1,16 +1,32 @@
 import { z } from 'zod';
+import {
+  COMPRESSION_LEVELS,
+  MAX_OUTPUT_WIDTH,
+  MIN_OUTPUT_WIDTH,
+  SAVE_FORMATS,
+} from './recording-format';
+import { RecordingLayoutSchema } from './recording-layout';
 
 /** History ids are random uuids made by main; the renderer only ever sends them back. */
 export const HISTORY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const HistoryIdSchema = z.string().regex(HISTORY_ID_PATTERN);
 
-export const HistoryTypeSchema = z.enum(['screenshot', 'recording']);
+export const HistoryTypeSchema = z.enum(['screenshot', 'recording', 'flow']);
 export type HistoryType = z.infer<typeof HistoryTypeSchema>;
 
-export const HistorySourceSchema = z.enum(['screen', 'window', 'region', 'unknown']);
+export const HistorySourceSchema = z.enum(['screen', 'window', 'region', 'multi', 'unknown']);
 export type HistorySource = z.infer<typeof HistorySourceSchema>;
 
-export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4'] as const;
+export const HISTORY_FORMATS = [
+  'png',
+  'jpeg',
+  'webm',
+  'mp4',
+  'mkv',
+  'fcap',
+  'gif',
+  'flow',
+] as const;
 export const HistoryFormatSchema = z.enum(HISTORY_FORMATS);
 export type HistoryFormat = z.infer<typeof HistoryFormatSchema>;
 
@@ -42,6 +58,18 @@ export const HistoryItemViewSchema = z.object({
   exists: z.boolean(),
   /** An editable project (the unredacted original and the annotations) is stored for this item. */
   editable: z.boolean(),
+  /** `.fcap` recordings: where each source sits in the picture (read from the file's header). */
+  layout: RecordingLayoutSchema.nullable().optional(),
+  /** Steps of a step guide (type `flow`); absent for everything else. */
+  stepCount: z.number().int().min(0).optional(),
+  /** The library folder the file sits in (`Clients/Acme`); absent = the library root. */
+  folder: z.string().optional(),
+  /** The file is outside both capture folders ("Other locations"). */
+  outside: z.boolean().optional(),
+  /** The item was saved to or opened from a project file (`.fcimage` / `.fcvideo`). */
+  projectFile: z.boolean().optional(),
+  /** Edits are stored for this item (a screenshot's editable project or a recording's video project). */
+  hasEditState: z.boolean().optional(),
 });
 export type HistoryItemView = z.infer<typeof HistoryItemViewSchema>;
 
@@ -63,10 +91,28 @@ export const HistoryIdRequestSchema = z.strictObject({ id: HistoryIdSchema });
 
 export const HistoryCancelledSchema = z.object({ cancelled: z.literal(true) });
 
+// --- duplicate and project files ----------------------------------------------------------------
+
+/** Project files: `.fcimage` (a screenshot with its edits) and `.fcvideo` (a recording's edits). */
+export const PROJECT_FILE_EXTENSIONS = ['fcimage', 'fcvideo'] as const;
+export const DuplicateResponseSchema = z.object({ id: HistoryIdSchema });
+export const SaveProjectFileResponseSchema = z.union([
+  z.object({ path: z.string() }),
+  HistoryCancelledSchema,
+]);
+export const OpenProjectFileResponseSchema = z.union([
+  z.object({ historyId: HistoryIdSchema }),
+  HistoryCancelledSchema,
+]);
+
 // --- MP4 export -------------------------------------------------------------------------------
 
 export const ExportCapabilitiesSchema = z.object({
   mp4Available: z.boolean(),
+  /** libvpx-vp9 + libopus: WebM can be produced (re-encoded). Absent in answers of older builds: assume true. */
+  webmAvailable: z.boolean().optional(),
+  /** The GIF encoder is present. */
+  gifAvailable: z.boolean().optional(),
   reason: z.string().optional(),
 });
 export type ExportCapabilities = z.infer<typeof ExportCapabilitiesSchema>;
@@ -78,13 +124,21 @@ export const ExportMp4ResponseSchema = z.union([
 ]);
 export const ExportCancelRequestSchema = z.strictObject({ jobId: z.string().min(1).max(64) });
 
+/**
+ * What the job is: the user's MP4 export (default), the post-save format/compression job that
+ * replaces the recording's file, a "Save as…" copy, a `.fcap` extract or a step-guide slideshow.
+ */
+const ExportKindSchema = z.enum(['export', 'compress', 'convert', 'extract', 'guide']).optional();
+
 export const ExportProgressEventSchema = z.object({
+  kind: ExportKindSchema,
   jobId: z.string(),
   historyId: HistoryIdSchema,
   /** 0..99 while encoding; null when the length of the recording is not known. */
   percent: z.number().nullable(),
 });
 export const ExportDoneEventSchema = z.object({
+  kind: ExportKindSchema,
   jobId: z.string(),
   historyId: HistoryIdSchema,
   path: z.string(),
@@ -92,6 +146,7 @@ export const ExportDoneEventSchema = z.object({
   itemId: HistoryIdSchema.nullable(),
 });
 export const ExportFailedEventSchema = z.object({
+  kind: ExportKindSchema,
   jobId: z.string(),
   historyId: HistoryIdSchema,
   code: z.string(),
@@ -101,6 +156,40 @@ export const ExportFailedEventSchema = z.object({
 export type ExportProgressEvent = z.infer<typeof ExportProgressEventSchema>;
 export type ExportDoneEvent = z.infer<typeof ExportDoneEventSchema>;
 export type ExportFailedEvent = z.infer<typeof ExportFailedEventSchema>;
+
+// --- Save as… (a new file in another format) -------------------------------------------------
+
+/** `history:saveAs`: a copy of a recording in another format; the source is never replaced. */
+export const SaveAsRequestSchema = z.strictObject({
+  id: HistoryIdSchema,
+  format: z.enum(SAVE_FORMATS),
+  compression: z.enum(COMPRESSION_LEVELS),
+  /** The picture is made at most this wide (never larger than the source). Absent: keep the size. */
+  maxWidth: z.number().int().min(MIN_OUTPUT_WIDTH).max(MAX_OUTPUT_WIDTH).optional(),
+});
+export type SaveAsRequest = z.infer<typeof SaveAsRequestSchema>;
+export const SaveAsResponseSchema = z.strictObject({ jobId: z.string() });
+
+// --- extracting from a multi-source recording ---------------------------------------------------
+
+export const EXTRACT_FORMATS = ['mp4', 'webm'] as const;
+export type ExtractFormat = (typeof EXTRACT_FORMATS)[number];
+
+/** `history:extractFcap`: one source (or null: the whole picture) of a `.fcap`, between two times. */
+export const ExtractFcapRequestSchema = z
+  .strictObject({
+    id: HistoryIdSchema,
+    sourceIndex: z.number().int().min(0).max(3).nullable(),
+    startMs: z.number().int().min(0).max(86_400_000),
+    endMs: z.number().int().min(1).max(86_400_000),
+    format: z.enum(EXTRACT_FORMATS),
+  })
+  .refine((request) => request.endMs > request.startMs, {
+    message: 'The end must be after the start.',
+    path: ['endMs'],
+  });
+export type ExtractFcapRequest = z.infer<typeof ExtractFcapRequestSchema>;
+export const ExtractFcapResponseSchema = z.strictObject({ jobId: z.string() });
 
 // --- bulk save of copies and drag-out ---------------------------------------------------------
 

@@ -249,7 +249,7 @@ test('History lists the recording and its MP4 with real thumbnails, and both ope
   await page.getByTestId('result-new').click();
   await page
     .getByRole('navigation', { name: 'Primary' })
-    .getByRole('button', { name: 'History' })
+    .getByRole('button', { name: 'Library' })
     .click();
   const cards = page.getByTestId('history-item');
   await expect(cards).toHaveCount(2);

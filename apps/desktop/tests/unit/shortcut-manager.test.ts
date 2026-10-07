@@ -31,9 +31,16 @@ describe('ShortcutManager', () => {
     const { api, held } = fakeApi();
     const manager = new ShortcutManager({ api, run: vi.fn() });
     const states = manager.apply(DEFAULT_SHORTCUTS);
-    expect([...held.keys()].sort()).toEqual(Object.values(DEFAULT_SHORTCUTS).sort());
+    expect([...held.keys()].sort()).toEqual(
+      Object.values(DEFAULT_SHORTCUTS).filter(Boolean).sort(),
+    );
     for (const action of SHORTCUT_ACTIONS) {
-      expect(states[action]).toEqual({ accelerator: DEFAULT_SHORTCUTS[action], status: 'ok' });
+      const accelerator = DEFAULT_SHORTCUTS[action];
+      expect(states[action]).toEqual(
+        accelerator === null
+          ? { accelerator: null, status: 'disabled' }
+          : { accelerator, status: 'ok' },
+      );
     }
     expect(hasProblems(states)).toBe(false);
   });
@@ -68,7 +75,7 @@ describe('ShortcutManager', () => {
     const manager = new ShortcutManager({ api, run: vi.fn() });
     const states = manager.apply({ ...DEFAULT_SHORTCUTS, recordWindow: null });
     expect(states.recordWindow).toEqual({ accelerator: null, status: 'disabled' });
-    expect(held.size).toBe(7);
+    expect(held.size).toBe(9);
   });
 
   it('never registers a duplicate: the second action gets a conflict', () => {
@@ -105,7 +112,7 @@ describe('ShortcutManager', () => {
     const unregistered = log
       .filter((line) => line.startsWith('unregister'))
       .map((l) => l.slice(11));
-    expect(unregistered.sort()).toEqual(Object.values(DEFAULT_SHORTCUTS).sort());
+    expect(unregistered.sort()).toEqual(Object.values(DEFAULT_SHORTCUTS).filter(Boolean).sort());
     expect(unregistered).not.toContain('Escape');
     expect(held.has('Escape')).toBe(true);
     expect(held.has('Ctrl+Alt+R')).toBe(true);
@@ -129,7 +136,7 @@ describe('ShortcutManager', () => {
     expect(held.size).toBe(0);
     manager.setPaused(true); // idempotent
     manager.setPaused(false);
-    expect(held.size).toBe(8);
+    expect(held.size).toBe(10);
   });
 
   it('a change while paused takes effect on resume', () => {

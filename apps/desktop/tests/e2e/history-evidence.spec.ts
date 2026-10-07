@@ -62,9 +62,9 @@ async function launch(dir: string): Promise<void> {
   await expect(page.getByTestId('shot-screen')).toBeVisible();
 }
 
-async function goTo(name: 'Capture' | 'History'): Promise<void> {
+async function goTo(name: 'Home' | 'Library'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
-  await expect(page.getByTestId(name === 'History' ? 'history-view' : 'shot-screen')).toBeVisible();
+  await expect(page.getByTestId(name === 'Library' ? 'history-view' : 'shot-screen')).toBeVisible();
 }
 
 async function stubSaveDialog(filePath: string) {
@@ -189,7 +189,7 @@ test.afterAll(async () => {
 });
 
 test('UI evidence: the History grid with hover actions, light and dark', async () => {
-  await goTo('History');
+  await goTo('Library');
   await expect(page.getByTestId('history-item')).toHaveCount(9);
   // Every thumbnail has loaded before the picture is taken.
   await expect
@@ -216,7 +216,9 @@ test('UI evidence: the missing-file state, light and dark', async () => {
     await card.hover();
     await shoot(`ui-history-missing-${theme}.png`);
   });
+  await page.getByTestId('library-more').click();
   await expect(page.getByTestId('history-clear-missing')).toBeVisible();
+  await page.keyboard.press('Escape');
   // Details of a missing item.
   await card.locator('[data-card-main]').click();
   await expect(page.getByTestId('history-missing-details')).toBeVisible();
@@ -323,8 +325,8 @@ test('MP4 export progress and Cancel from the UI keep the original; a retry fini
 });
 
 test('UI evidence: the home view with Recent captures, light and dark', async () => {
-  await goTo('Capture');
-  await expect(page.getByTestId('recent-item')).toHaveCount(6);
+  await goTo('Home');
+  await expect(page.getByTestId('recent-item')).toHaveCount(8);
   await expect
     .poll(() =>
       page
@@ -348,7 +350,7 @@ test('UI evidence: the empty History, light and dark', async () => {
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-e2e-hist-empty-'));
   try {
     await launch(empty);
-    await goTo('History');
+    await goTo('Library');
     await expect(page.getByText('Your captures will appear here')).toBeVisible();
     await eachTheme(async (theme) => {
       await shoot(`ui-history-empty-${theme}.png`);

@@ -20,7 +20,8 @@ vi.mock('electron', () => ({
       return { canceled: true };
     },
   },
-  nativeImage: {},
+  // A JPEG save is decoded to PNG for the auto-copy.
+  nativeImage: { createFromBuffer: () => ({ toPNG: () => Buffer.from('png') }) },
   shell: {},
 }));
 vi.mock('../../src/main/ipc', () => ({
@@ -34,11 +35,8 @@ vi.mock('../../src/main/logger', () => ({
   log: { info: () => undefined, warn: () => undefined, error: () => undefined },
 }));
 vi.mock('../../src/main/windows', () => ({
-  closeGuard: { setDirty: () => undefined, resolve: () => false },
-  getMainWindow: () => undefined,
+  dialogParent: () => undefined,
   onMainWindowClosed: () => undefined,
-  setEditorState: () => undefined,
-  setQuitting: () => undefined,
 }));
 vi.mock('../../src/main/shots/after-capture', () => ({
   writePngToClipboard: async () => undefined,
@@ -80,7 +78,7 @@ async function setup(outDir = path.join(root, 'out', 'nested')) {
     store,
     { selecting: false } as never,
     history,
-    { get: () => settings, screenshotsDir: () => outDir },
+    { get: () => settings, screenshotsDir: () => outDir, copyImage: async () => false },
     { store: projects, appVersion: '1.0.0' },
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

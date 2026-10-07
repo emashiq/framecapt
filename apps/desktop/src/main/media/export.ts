@@ -1,14 +1,9 @@
-import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  FfmpegError,
-  localInput,
-  mediaPath,
-  type FfmpegProgress,
-  type MediaTools,
-  type ProbeResult,
-} from './ffmpeg';
+import { FfmpegError, localInput, mediaPath, type MediaTools, type ProbeResult } from './ffmpeg';
+import { runFileJob, type FileJobFailureCode, type FileJobResult } from './job-runner';
+
+export { partialPathFor, percentOf } from './job-runner';
 
 /** Shown wherever MP4 export is offered but this FFmpeg build cannot make it. */
 export const MP4_UNAVAILABLE_MESSAGE =
@@ -16,10 +11,6 @@ export const MP4_UNAVAILABLE_MESSAGE =
 
 /** The output may differ from the source's duration by this much (container rounding, VFR to CFR). */
 export const DURATION_TOLERANCE_SEC = 0.5;
-const PROBE_TIMEOUT_MS = 30_000;
-const MIN_EXPORT_TIMEOUT_MS = 10 * 60_000;
-/** Free space the destination volume must keep beyond the source's size while exporting. */
-const FREE_MARGIN_BYTES = 100 * 1024 * 1024;
 
 // --- capability -------------------------------------------------------------------------------
 
@@ -58,12 +49,16 @@ export async function detectMp4Capability(tools: MediaTools): Promise<Mp4Capabil
 
 // --- arguments and verification ---------------------------------------------------------------
 
+/** The user's "Export MP4" (and the automatic one): a high-quality H.264 copy, encoded quickly. */
+const MP4_QUALITY = { preset: 'veryfast', crf: '20', audioBitrate: '160k' };
+
 /**
  * WebM (VP8/VP9 + Opus) -> MP4 (H.264 + AAC). Sides are rounded down to even numbers (4:2:0
  * needs it), `+faststart` moves the index to the front so the file plays while it loads. An array
  * for `spawn` with `shell: false`; the only variable parts are the two paths.
  */
 export function mp4Args(input: string, output: string): string[] {
+  const quality = MP4_QUALITY;
   return [
     '-hide_banner',
     '-y',
@@ -75,9 +70,9 @@ export function mp4Args(input: string, output: string): string[] {
     '-c:v',
     'libx264',
     '-preset',
-    'veryfast',
+    quality.preset,
     '-crf',
-    '20',
+    quality.crf,
     '-pix_fmt',
     'yuv420p',
     '-vf',
@@ -85,7 +80,7 @@ export function mp4Args(input: string, output: string): string[] {
     '-c:a',
     'aac',
     '-b:a',
-    '160k',
+    quality.audioBitrate,
     '-movflags',
     '+faststart',
     '-progress',
@@ -108,12 +103,6 @@ export function verifyMp4(output: ProbeResult, source: ProbeResult): string | nu
     return 'The output has a different length than the recording.';
   }
   return null;
-}
-
-/** Progress 0..99 from ffmpeg's output position; null when the source has no known duration. */
-export function percentOf(progress: FfmpegProgress, durationSec: number | null): number | null {
-  if (durationSec === null || durationSec <= 0) return null;
-  return Math.max(0, Math.min(99, Math.floor((progress.outTimeUs / 1e6 / durationSec) * 100)));
 }
 
 /**
@@ -144,18 +133,8 @@ export async function mp4TopLevelBoxes(file: string, limit = 32): Promise<string
 
 // --- the export -------------------------------------------------------------------------------
 
-export type Mp4FailureCode =
-  | 'INVALID_DESTINATION'
-  | 'SOURCE_UNREADABLE'
-  | 'LOW_DISK'
-  | 'CANCELLED'
-  | 'TIMEOUT'
-  | 'FAILED'
-  | 'VERIFY_FAILED';
-
-export type Mp4Result =
-  | { ok: true; path: string; bytes: number; durationMs: number; probe: ProbeResult }
-  | { ok: false; code: Mp4FailureCode; message: string; stderrTail: string };
+export type Mp4FailureCode = FileJobFailureCode;
+export type Mp4Result = FileJobResult;
 
 export interface Mp4Request {
   tools: MediaTools;
@@ -166,16 +145,6 @@ export interface Mp4Request {
   onProgress?: (percent: number | null) => void;
 }
 
-function failure(code: Mp4FailureCode, message: string, stderrTail = ''): Mp4Result {
-  return { ok: false, code, message, stderrTail };
-}
-
-/** The temporary output: next to the destination (one volume, so the rename is atomic) and unique. */
-export function partialPathFor(destPath: string): string {
-  const token = randomBytes(6).toString('hex');
-  return path.join(path.dirname(destPath), `.framecapt-export-${token}.partial.mp4`);
-}
-
 /** Case-insensitive path equality (Windows file names). */
 function samePath(a: string, b: string): boolean {
   return path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
@@ -184,100 +153,27 @@ function samePath(a: string, b: string): boolean {
 /**
  * Converts a recording to MP4 through a partial file: probe the source, encode, probe the result
  * (H.264, AAC when the source had audio, same duration within 0.5 s), then rename onto
- * `destPath`. On cancel, timeout, failure or a failed check the partial file (the one this call
- * made, nothing else) is deleted. The source is only ever read.
+ * `destPath`. On cancel, timeout, failure or a failed check the partial file is deleted. The
+ * source is only ever read.
  */
 export async function exportMp4(request: Mp4Request): Promise<Mp4Result> {
-  const { tools, sourcePath, destPath, signal } = request;
+  const { sourcePath, destPath } = request;
   if (path.extname(destPath).toLowerCase() !== '.mp4' || samePath(sourcePath, destPath)) {
-    return failure('INVALID_DESTINATION', 'Choose a different .mp4 file name.');
-  }
-  if (signal?.aborted) return failure('CANCELLED', 'The export was cancelled.');
-
-  let sourceProbe: ProbeResult;
-  let sourceBytes: number;
-  try {
-    sourceBytes = (await fs.promises.stat(sourcePath)).size;
-    sourceProbe = await tools.probe(sourcePath, {
-      timeoutMs: PROBE_TIMEOUT_MS,
-      ...(signal && { signal }),
-    });
-  } catch (error) {
-    if (error instanceof FfmpegError && error.code === 'FFMPEG_ABORTED') {
-      return failure('CANCELLED', 'The export was cancelled.');
-    }
-    return failure('SOURCE_UNREADABLE', 'The recording could not be read.');
-  }
-  if (!sourceProbe.hasVideo) return failure('SOURCE_UNREADABLE', 'The file has no video.');
-
-  const partial = partialPathFor(destPath);
-  try {
-    const stat = await fs.promises.statfs(path.dirname(destPath)).catch(() => null);
-    if (stat && Number(stat.bavail) * Number(stat.bsize) < sourceBytes + FREE_MARGIN_BYTES) {
-      return failure('LOW_DISK', 'There is not enough free space to export the video.');
-    }
-
-    const timeoutMs = Math.max(MIN_EXPORT_TIMEOUT_MS, (sourceProbe.durationSec ?? 0) * 4000);
-    let last: number | null = -1;
-    const run = await tools
-      .run(mp4Args(sourcePath, partial), {
-        timeoutMs,
-        ...(signal && { signal }),
-        onProgress: (progress) => {
-          const percent = percentOf(progress, sourceProbe.durationSec);
-          if (percent === last) return;
-          last = percent;
-          request.onProgress?.(percent);
-        },
-      })
-      .catch((error: unknown) => {
-        if (error instanceof FfmpegError) return error;
-        throw error;
-      });
-    if (run instanceof FfmpegError) {
-      if (run.code === 'FFMPEG_ABORTED') return failure('CANCELLED', 'The export was cancelled.');
-      if (run.code === 'FFMPEG_TIMEOUT') {
-        return failure('TIMEOUT', 'The export took too long and was stopped.', run.stderrTail);
-      }
-      return failure('FAILED', 'The video could not be converted.', run.stderrTail);
-    }
-    if (run.code !== 0) {
-      return failure('FAILED', 'The video could not be converted.', run.stderrTail);
-    }
-
-    let outputProbe: ProbeResult;
-    try {
-      outputProbe = await tools.probe(partial, {
-        timeoutMs: PROBE_TIMEOUT_MS,
-        ...(signal && { signal }),
-      });
-    } catch (error) {
-      if (error instanceof FfmpegError && error.code === 'FFMPEG_ABORTED') {
-        return failure('CANCELLED', 'The export was cancelled.');
-      }
-      return failure('VERIFY_FAILED', 'The converted video could not be checked.');
-    }
-    const problem = verifyMp4(outputProbe, sourceProbe);
-    if (problem) return failure('VERIFY_FAILED', problem);
-
-    await fs.promises.rename(partial, destPath);
-    const bytes = (await fs.promises.stat(destPath)).size;
-    request.onProgress?.(100);
     return {
-      ok: true,
-      path: destPath,
-      bytes,
-      durationMs: Math.round((outputProbe.durationSec ?? 0) * 1000),
-      probe: outputProbe,
+      ok: false,
+      code: 'INVALID_DESTINATION',
+      message: 'Choose a different .mp4 file name.',
+      stderrTail: '',
     };
-  } catch (error) {
-    if (error instanceof FfmpegError) return failure('FAILED', error.message, error.stderrTail);
-    return failure('FAILED', 'The video could not be saved.');
-  } finally {
-    // Whatever is still named like this belongs to this call (success renamed it away). ffmpeg may
-    // need a moment to release the file after it was killed, so retry.
-    await fs.promises
-      .rm(partial, { force: true, maxRetries: 20, retryDelay: 100 })
-      .catch(() => undefined);
   }
+  return runFileJob({
+    tools: request.tools,
+    sourcePath,
+    destPath,
+    ...(request.signal && { signal: request.signal }),
+    ...(request.onProgress && { onProgress: request.onProgress }),
+    args: (partial) => mp4Args(sourcePath, partial),
+    verify: verifyMp4,
+    noun: 'export',
+  });
 }

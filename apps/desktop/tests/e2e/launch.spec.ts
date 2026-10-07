@@ -47,22 +47,17 @@ test.afterAll(async () => {
   if (userDataDir) fs.rmSync(userDataDir, { recursive: true, force: true });
 });
 
-test('opens a FrameCapt window loaded from app://framecapt with the sidebar nav', async () => {
+test('opens a FrameCapt window loaded from app://framecapt with the icon rail', async () => {
   await expect(page).toHaveTitle('FrameCapt');
   expect(page.url()).toMatch(/^app:\/\/framecapt\/index\.html/);
 
   const nav = page.getByRole('navigation', { name: 'Primary' });
   await expect(nav).toBeVisible();
-  for (const name of ['Capture', 'History', 'Settings']) {
+  for (const name of ['Home', 'Library', 'Guides', 'Settings', 'Keyboard shortcuts']) {
     await expect(nav.getByRole('button', { name })).toBeVisible();
   }
-  await expect(nav.getByRole('button', { name: 'Capture' })).toHaveAttribute(
-    'aria-current',
-    'page',
-  );
-  await expect(
-    page.getByRole('heading', { name: 'What would you like to capture?' }),
-  ).toBeVisible();
+  await expect(nav.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { name: 'Capture', level: 1 })).toBeVisible();
 
   const window = await app.browserWindow(page);
   const size = await window.evaluate((win) => win.getSize());
@@ -74,8 +69,8 @@ test('screenshot and record buttons are enabled', async () => {
   const shots = page.getByTestId('mode-screenshot');
   const record = page.getByTestId('mode-record');
   for (const name of ['Screen', 'Window', 'Region']) {
-    await expect(shots.getByRole('button', { name })).toBeEnabled();
-    await expect(record.getByRole('button', { name })).toBeEnabled();
+    await expect(shots.getByRole('button', { name, exact: true })).toBeEnabled();
+    await expect(record.getByRole('button', { name, exact: true })).toBeEnabled();
   }
 });
 

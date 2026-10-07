@@ -18,16 +18,17 @@ const ROLE_HASH: Record<Role, string> = {
   toolbar: '/toolbar',
   recorder: '/recorder',
   countdown: '/countdown',
+  camera: '/camera',
 };
 
 const roles = new Map<number, Role>();
 let mainWindow: BrowserWindow | undefined;
 
-/** Asks before the main window closes over unsaved editor work (see close-guard.ts). */
+/** Asks before the main window closes over unsaved editor tabs (see close-guard.ts). */
 export const closeGuard = new CloseGuard();
 const mainClosedListeners: (() => void)[] = [];
 
-/** Runs when the main window is gone (the editor's session directory is deleted then). */
+/** Runs when the main window is gone (the screenshot sessions its tabs held are deleted then). */
 export function onMainWindowClosed(listener: () => void): void {
   mainClosedListeners.push(listener);
 }
@@ -77,13 +78,20 @@ export function isQuitting(): boolean {
   return quitting;
 }
 
-/** What the editor holds, reported by the renderer: used to decide how a shortcut must start. */
-let editorState = { open: false, dirty: false };
-export function setEditorState(state: { open: boolean; dirty: boolean }): void {
-  editorState = state;
+/** Whether the editor tabs hold unsaved work, reported by the main window's renderer. */
+export function setEditorDirty(dirty: boolean): void {
+  closeGuard.setDirty(dirty);
 }
-export function getEditorState(): { open: boolean; dirty: boolean } {
-  return editorState;
+
+/** The answer to the "close with unsaved tabs?" question. Returns whether the window closes now. */
+export function resolveClose(discard: boolean): boolean {
+  if (!closeGuard.resolve(discard)) {
+    // "Keep editing" also withdraws a quit that was waiting on this answer.
+    quitting = false;
+    return false;
+  }
+  getMainWindow()?.close();
+  return true;
 }
 
 /**
@@ -128,11 +136,12 @@ export function securePreferences(): Electron.WebPreferences {
   };
 }
 
-export function loadRenderer(win: BrowserWindow, role: Role): Promise<void> {
+/** `search` (for example `?mode=steps`) goes after the role's hash; the role itself is unchanged. */
+export function loadRenderer(win: BrowserWindow, role: Role, search = ''): Promise<void> {
   const { devServerUrl } = getOriginConfig();
   const hash = ROLE_HASH[role];
   // Development: the Vite server. Otherwise the built renderer from the app:// scheme (not file://).
-  return win.loadURL(`${devServerUrl ?? APP_ENTRY_URL}#${hash}`);
+  return win.loadURL(`${devServerUrl ?? APP_ENTRY_URL}#${hash}${search}`);
 }
 
 /** The BrowserWindow `icon` option for this platform (empty where the exe carries the icon). */
@@ -159,15 +168,7 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
     webPreferences: securePreferences(),
   });
 
-  // The window buttons follow the theme (the setting drives nativeTheme.themeSource).
-  if (hasTitleBarOverlay(process.platform)) {
-    const followTheme = (): void => {
-      if (!win.isDestroyed())
-        win.setTitleBarOverlay(titleBarOverlay(nativeTheme.shouldUseDarkColors));
-    };
-    nativeTheme.on('updated', followTheme);
-    win.once('closed', () => nativeTheme.off('updated', followTheme));
-  }
+  followThemeWithButtons(win);
 
   registerWebContents(win.webContents, 'main');
   mainWindow = win;
@@ -186,12 +187,13 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
       win.minimize();
       return;
     }
+    // Unsaved editor tabs: ask first (a quit asks too; close-to-tray never gets here).
     if (win.webContents.isDestroyed() || closeGuard.onCloseRequested() === 'close') return;
     event.preventDefault();
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();
-    sendEvent(win.webContents, 'app:confirmClose', {});
+    sendEvent(win.webContents, 'editor:confirmClose', {});
   });
   // A logoff or shutdown must never wait for the discard question.
   win.on('session-end', () => closeGuard.allowClose());
@@ -213,6 +215,22 @@ export function showMainWindow(): BrowserWindow {
   win.show();
   win.focus();
   return win;
+}
+
+/** The window buttons (the title bar overlay) follow the theme; the setting drives nativeTheme.themeSource. */
+function followThemeWithButtons(win: BrowserWindow): void {
+  if (!hasTitleBarOverlay(process.platform)) return;
+  const followTheme = (): void => {
+    if (!win.isDestroyed())
+      win.setTitleBarOverlay(titleBarOverlay(nativeTheme.shouldUseDarkColors));
+  };
+  nativeTheme.on('updated', followTheme);
+  win.once('closed', () => nativeTheme.off('updated', followTheme));
+}
+
+/** The window a dialog belongs to. */
+export function dialogParent(): BrowserWindow | undefined {
+  return getMainWindow();
 }
 
 let workerWindow: BrowserWindow | undefined;

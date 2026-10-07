@@ -1,9 +1,19 @@
 import { useId, type ReactNode } from 'react';
 import { Settings2 } from 'lucide-react';
+import {
+  DEFAULT_CAMERA_STYLE,
+  type CameraCorner,
+  type CameraShape,
+  type CameraSize,
+} from '../../shared/camera';
 import type { RecordOptions as Options } from '../../shared/recorder-ipc';
 import type { RecordFps, RecordQuality } from '../../shared/recording';
+import { followFromSetting, type FollowMouseSetting } from '../../shared/settings';
+import { cn } from '../lib/cn';
 import { usePlatformCapabilities } from '../lib/use-platform-capabilities';
+import { useCameras } from '../recorder/use-cameras';
 import { useMicrophones } from '../recorder/use-microphones';
+import { CameraSelect } from './CameraSelect';
 import { MicrophoneSelect } from './MicrophoneSelect';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
@@ -18,6 +28,10 @@ export interface RecordOptionsProps {
   /** Where finished recordings go (shown as a line; the folder itself is chosen in Settings). */
   outputDir?: string;
   onOpenSettings?: () => void;
+  /** The remembered camera style: used when the camera is switched on (undefined: the defaults). */
+  cameraStyle?: { shape: CameraShape; size: CameraSize; corner: CameraCorner };
+  /** The dashboard's dense form: four columns, no explanatory lines. */
+  compact?: boolean;
 }
 
 const QUALITY = [
@@ -27,6 +41,23 @@ const QUALITY = [
 const FPS = [
   { value: 30, label: '30' },
   { value: 60, label: '60' },
+] as const;
+
+export const CAMERA_SHAPE_OPTIONS = [
+  { value: 'circle', label: 'Circle' },
+  { value: 'rounded', label: 'Rounded' },
+] as const;
+export const CAMERA_SIZE_OPTIONS = [
+  { value: 's', label: 'S' },
+  { value: 'm', label: 'M' },
+  { value: 'l', label: 'L' },
+] as const;
+
+const FOLLOW = [
+  { value: 'off', label: 'Off' },
+  { value: '1.5', label: '1.5×' },
+  { value: '2', label: '2×' },
+  { value: '3', label: '3×' },
 ] as const;
 
 function Cell({
@@ -68,20 +99,36 @@ export function RecordOptions({
   disabled = false,
   outputDir,
   onOpenSettings,
+  cameraStyle = DEFAULT_CAMERA_STYLE,
+  compact = false,
 }: RecordOptionsProps) {
+  /** Explanations are for the roomy form; what a switch cannot do is always said. */
+  const note = (text: ReactNode): ReactNode => (compact ? undefined : text);
   const micId = useId();
+  const cameraId = useId();
   const systemId = useId();
   const qualityId = useId();
   const fpsId = useId();
+  const followId = useId();
   const countdownId = useId();
   const microphones = useMicrophones();
   const noMic = microphones.loaded && microphones.devices.length === 0;
+  const cameras = useCameras();
+  const noCamera = cameras.loaded && cameras.devices.length === 0;
+  const camera = options.camera;
   const platform = usePlatformCapabilities();
 
   return (
-    <Card padding="lg" data-testid="record-options" aria-label="Recording options" role="group">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-[15px] font-semibold text-fg">Recording options</h2>
+    <Card
+      padding={compact ? 'md' : 'lg'}
+      data-testid="record-options"
+      aria-label="Recording options"
+      role="group"
+    >
+      <div className={cn('flex items-center justify-between gap-3', compact ? 'mb-3' : 'mb-4')}>
+        <h2 className={cn('font-semibold text-fg', compact ? 'text-[13px]' : 'text-[15px]')}>
+          Recording options
+        </h2>
         {onOpenSettings ? (
           <Button
             size="sm"
@@ -94,7 +141,12 @@ export function RecordOptions({
           </Button>
         ) : null}
       </div>
-      <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div
+        className={cn(
+          'grid sm:grid-cols-2',
+          compact ? 'gap-x-6 gap-y-4 lg:grid-cols-4' : 'gap-x-8 gap-y-5 lg:grid-cols-3',
+        )}
+      >
         <Cell
           id={micId}
           label="Microphone"
@@ -121,10 +173,61 @@ export function RecordOptions({
           />
         </Cell>
         <Cell
+          id={cameraId}
+          label="Camera"
+          hint={note('Your webcam, in the corner of the video. Drag the bubble to move it.')}
+          control={
+            <Switch
+              aria-labelledby={cameraId}
+              data-testid="opt-camera"
+              checked={camera !== undefined && !noCamera}
+              disabled={disabled || noCamera}
+              onCheckedChange={(enabled) => {
+                const { camera: _drop, ...rest } = options;
+                onChange(enabled ? { ...rest, camera: { ...cameraStyle } } : rest);
+              }}
+            />
+          }
+        >
+          <CameraSelect
+            deviceId={camera?.deviceId}
+            disabled={disabled || camera === undefined}
+            labelledBy={cameraId}
+            testId="opt-camera-device"
+            onChange={(deviceId) => {
+              if (!camera) return;
+              const { deviceId: _old, ...rest } = camera;
+              onChange({ ...options, camera: { ...rest, ...(deviceId && { deviceId }) } });
+            }}
+          />
+          {camera ? (
+            <div className="flex flex-wrap gap-2">
+              <Segmented<CameraShape>
+                label="Camera shape"
+                data-testid="opt-camera-shape"
+                value={camera.shape}
+                options={CAMERA_SHAPE_OPTIONS}
+                disabled={disabled}
+                onChange={(shape) => onChange({ ...options, camera: { ...camera, shape } })}
+              />
+              <Segmented<CameraSize>
+                label="Camera size"
+                data-testid="opt-camera-size"
+                value={camera.size}
+                options={CAMERA_SIZE_OPTIONS}
+                disabled={disabled}
+                onChange={(size) => onChange({ ...options, camera: { ...camera, size } })}
+              />
+            </div>
+          ) : null}
+        </Cell>
+        <Cell
           id={systemId}
           label="System audio"
           hint={
-            platform.systemAudio ? 'Everything you hear on this PC' : platform.systemAudioReason
+            platform.systemAudio
+              ? note('Everything you hear on this PC')
+              : platform.systemAudioReason
           }
           control={
             <Switch
@@ -139,7 +242,7 @@ export function RecordOptions({
         <Cell
           id={countdownId}
           label="Countdown"
-          hint="3 seconds before it starts"
+          hint={note('3 seconds before it starts')}
           control={
             <Switch
               aria-labelledby={countdownId}
@@ -153,7 +256,9 @@ export function RecordOptions({
         <Cell
           id={qualityId}
           label="Quality"
-          hint={options.quality === '1080p' ? 'Fits 1920 × 1080' : 'Full resolution, larger files'}
+          hint={note(
+            options.quality === '1080p' ? 'Fits 1920 × 1080' : 'Full resolution, larger files',
+          )}
         >
           <Segmented<RecordQuality>
             label="Quality"
@@ -164,7 +269,7 @@ export function RecordOptions({
             onChange={(quality) => onChange({ ...options, quality })}
           />
         </Cell>
-        <Cell id={fpsId} label="Frame rate" hint="Frames per second">
+        <Cell id={fpsId} label="Frame rate" hint={note('Frames per second')}>
           <Segmented<RecordFps>
             label="Frame rate"
             data-testid="opt-fps"
@@ -172,6 +277,26 @@ export function RecordOptions({
             options={FPS}
             disabled={disabled}
             onChange={(fps) => onChange({ ...options, fps })}
+          />
+        </Cell>
+        <Cell
+          id={followId}
+          label="Follow mouse"
+          hint={note(
+            'Zooms in and pans to the mouse. Screen recordings only: window and region recordings ignore it.',
+          )}
+        >
+          <Segmented<FollowMouseSetting>
+            label="Follow mouse"
+            data-testid="opt-follow"
+            value={options.follow ? (String(options.follow.zoom) as FollowMouseSetting) : 'off'}
+            options={FOLLOW}
+            disabled={disabled}
+            onChange={(value) => {
+              const { follow: _drop, ...rest } = options;
+              const follow = followFromSetting(value);
+              onChange({ ...rest, ...(follow && { follow }) });
+            }}
           />
         </Cell>
         {outputDir ? (

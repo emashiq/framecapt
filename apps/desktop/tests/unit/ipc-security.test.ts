@@ -14,8 +14,17 @@ import {
   type ChannelDef,
   type IpcChannel,
 } from '../../src/shared/ipc-contract';
-import { MAX_EXPORT_BYTES } from '../../src/shared/shots';
+import { MAX_ASSET_BYTES, MAX_PROJECT_ASSETS } from '../../src/shared/project-ipc';
+import { MAX_EXPORT_BYTES, MAX_FRAME_PNG_BYTES } from '../../src/shared/shots';
 import { ROLES } from '../../src/shared/types';
+import {
+  applyCommand,
+  createProject,
+  newAudio,
+  newImage,
+  newItem,
+  newText,
+} from '../../src/shared/video-edit';
 
 const origin: AppOriginConfig = {};
 const goodUrl = 'app://framecapt/index.html';
@@ -63,12 +72,36 @@ describe('IPC: every channel is closed to roles the contract does not name', () 
     expect(defOf('recorder:getState').roles).toEqual(['main', 'toolbar', 'recorder', 'countdown']);
   });
 
-  it('privileged actions belong to the main window alone (files, folders, settings, history, export)', () => {
+  it('the screenshot of a running recording is the toolbar button alone and takes no payload', () => {
+    expect(defOf('recorder:screenshot').roles).toEqual(['toolbar']);
+    expect(defOf('recorder:screenshot').request.safeParse(undefined).success).toBe(true);
+    expect(defOf('recorder:screenshot').request.safeParse({ path: 'x.png' }).success).toBe(false);
+  });
+
+  it('privileged actions belong to the main window alone (files, folders, settings, history, export, the editors)', () => {
     const mainOnly = IPC_CHANNELS.filter((channel) =>
-      /^(history|export|settings|shortcuts|recovery|diagnostics|shot|editor|shell):/.test(channel),
+      /^(history|export|settings|library|shortcuts|recovery|diagnostics|shot|editor|video|shell):/.test(
+        channel,
+      ),
     );
     expect(mainOnly.length).toBeGreaterThan(30);
     for (const channel of mainOnly) expect(defOf(channel).roles, channel).toEqual(['main']);
+  });
+
+  it('the editors are tabs of the main window: no other role reaches them (ADR-050)', () => {
+    for (const channel of ['editor:open', 'editor:ready', 'editor:setState'] as const) {
+      expect(defOf(channel).roles).toEqual(['main']);
+    }
+    expect(defOf('editor:resolveClose').roles).toEqual(['main']);
+    // A forged "unsaved" report or close answer from another window is refused outright.
+    for (const role of ROLES.filter((candidate) => candidate !== 'main')) {
+      const result = checkSender(
+        { role, frameUrl: goodUrl, isTopFrame: true },
+        defOf('editor:setState').roles,
+        origin,
+      );
+      expect(result?.error.code, role).toBe('FORBIDDEN');
+    }
     // The hidden recorder window may write chunks and nothing that reaches a path.
     for (const channel of ['session:appendChunk', 'session:finish'] as const) {
       expect(defOf(channel).roles).toEqual(['recorder']);
@@ -78,7 +111,7 @@ describe('IPC: every channel is closed to roles the contract does not name', () 
       const { roles } = defOf(channel);
       if (roles.includes('overlay') || roles.includes('toolbar') || roles.includes('countdown')) {
         expect(channel, 'a UI-only window reaches a file or settings channel').toMatch(
-          /^(overlay|recorder|toolbar|app:reportError)/,
+          /^(overlay|recorder|toolbar|steps|app:reportError)/,
         );
       }
     }
@@ -118,6 +151,13 @@ describe('IPC: every channel is closed to roles the contract does not name', () 
 const UUID = '0f0e0d0c-0b0a-4908-8706-050403020100';
 const bytes = (n: number): ArrayBuffer => new ArrayBuffer(n);
 
+const VIDEO_PROJECT = createProject(UUID, {
+  durationMs: 10_000,
+  width: 1280,
+  height: 720,
+  hasAudio: true,
+});
+
 /** One valid payload per representative channel (checked below, so they cannot rot). */
 const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   'app:reportError': { source: 'window-error', message: 'x' },
@@ -128,7 +168,11 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   'shot:get': { sessionId: 'abc' },
   'shot:export': { sessionId: 'abc', format: 'png', bytes: bytes(8) },
   'shot:copy': { sessionId: 'abc', bytes: bytes(8) },
-  'editor:setDirty': { dirty: true },
+  'shot:importImage': { png: bytes(8) },
+  'editor:historyImage': { historyId: UUID },
+  'editor:open': { kind: 'history', historyId: UUID },
+  'editor:setState': { dirty: true },
+  'editor:resolveClose': { discard: true },
   'shell:showItemInFolder': { path: 'C:\\x.png' },
   'overlay:confirm': { displayId: '1', rect: { x: 0, y: 0, width: 10, height: 10 } },
   'worker:frameError': { requestId: 'r', code: 'c', message: 'm' },
@@ -144,14 +188,30 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   },
   'recorder:toggleMute': { source: 'mic' },
   'toolbar:resize': { width: 300 },
+  'steps:setAuto': { auto: true },
+  'flow:get': { historyId: UUID },
+  'flow:update': { historyId: UUID, title: 'T', steps: [{ file: 'step-01.png', caption: 'c' }] },
+  'flow:openStepInEditor': { historyId: UUID, index: 0 },
+  'flow:readStep': { historyId: UUID, index: 0 },
+  'flow:export': { historyId: UUID, kind: 'html', frames: [bytes(8)] },
   'recorder:engineEvent': { type: 'paused' },
   'session:appendChunk': { sessionId: 'abc', seq: 0, bytes: bytes(4) },
   'session:finish': { sessionId: 'abc', lastSeq: 0 },
   'recovery:recover': { sessionId: UUID },
   'history:list': {},
   'history:open': { id: UUID },
+  'library:createFolder': { folder: 'Clients/Acme' },
+  'library:renameFolder': { folder: 'Clients', name: 'Customers' },
+  'library:moveItems': { ids: [UUID], folder: 'Clients/Acme' },
+  'library:setCaptureFolder': { folder: null },
   'export:mp4': { historyId: UUID },
   'export:cancel': { jobId: 'job' },
+  'video:open': { historyId: UUID },
+  'video:save': { historyId: UUID, project: VIDEO_PROJECT },
+  'video:export': { historyId: UUID, project: VIDEO_PROJECT, format: 'mp4' },
+  'video:addImage': { historyId: UUID, png: bytes(8) },
+  'video:pickAudio': { historyId: UUID },
+  'video:addRecordedAudio': { historyId: UUID, bytes: bytes(8) },
   'settings:update': { patch: { general: { theme: 'dark' } } },
   'settings:reset': {},
   'settings:chooseOutputDir': { target: 'screenshots' },
@@ -180,6 +240,33 @@ describe('IPC: payloads are validated strictly', () => {
       const smuggled = { ...valid(channel), path: 'C:\\Windows\\win.ini', cmd: 'calc' };
       expect(parses(channel, smuggled), channel).toBe(false);
     }
+  });
+
+  it('library folders are relative names from a strict grammar: traversal, drives and reserved names are refused', () => {
+    for (const folder of [
+      '..',
+      '../x',
+      'a/../b',
+      '/abs',
+      'C:\\x',
+      'C:/x',
+      'a\\b',
+      'CON',
+      'a/NUL',
+      'a/',
+      '',
+    ]) {
+      expect(parses('library:createFolder', { folder }), JSON.stringify(folder)).toBe(false);
+      expect(parses('library:moveItems', { ids: [UUID], folder }), JSON.stringify(folder)).toBe(
+        false,
+      );
+    }
+    expect(parses('library:renameFolder', { folder: 'a', name: 'b/c' })).toBe(false);
+    expect(parses('library:renameFolder', { folder: 'a', name: '..' })).toBe(false);
+    expect(parses('library:moveItems', { ids: ['C:\\x.png'], folder: null })).toBe(false);
+    expect(parses('library:moveItems', { ids: [], folder: null })).toBe(false);
+    expect(parses('library:moveItems', { ids: [UUID], folder: null })).toBe(true);
+    expect(parses('library:setCaptureFolder', { folder: '../x' })).toBe(false);
   });
 
   it('extra keys are refused inside nested objects too', () => {
@@ -236,9 +323,41 @@ describe('IPC: payloads are validated strictly', () => {
     expect(parses('shot:copy', { ...valid('shot:copy'), bytes: bytes(MAX_EXPORT_BYTES + 1) })).toBe(
       false,
     );
+    expect(
+      parses('shot:importImage', { png: bytes(MAX_FRAME_PNG_BYTES + 1) }),
+      'importImage over the frame cap',
+    ).toBe(false);
+    expect(parses('shot:importImage', { png: bytes(0) })).toBe(false);
     // Typed arrays and strings are not ArrayBuffers: the structured-clone shape is fixed.
     expect(parses('session:appendChunk', chunk(new Uint8Array(4)))).toBe(false);
     expect(parses('session:appendChunk', chunk('AAAA'))).toBe(false);
+  });
+
+  it('image-layer pictures sent with a project are bounded and named by a SHA-256', () => {
+    const id = 'a'.repeat(64);
+    const withAssets = (assets: unknown) => ({
+      ...valid('shot:export'),
+      project: { doc: { schema: 3 }, assets },
+    });
+    const sample = { id, png: bytes(8) };
+    expect(parses('shot:export', withAssets([sample]))).toBe(true);
+    expect(parses('shot:export', withAssets([{ ...sample, id: 'not-a-hash' }]))).toBe(false);
+    expect(parses('shot:export', withAssets([{ ...sample, id: id.toUpperCase() }]))).toBe(false);
+    expect(parses('shot:export', withAssets([{ ...sample, path: 'C:\\x' }]))).toBe(false);
+    expect(parses('shot:export', withAssets([{ id, png: bytes(MAX_ASSET_BYTES + 1) }]))).toBe(
+      false,
+    );
+    expect(parses('shot:export', withAssets([{ id, png: bytes(0) }]))).toBe(false);
+    expect(parses('shot:export', withAssets(Array(MAX_PROJECT_ASSETS + 1).fill(sample)))).toBe(
+      false,
+    );
+    // 3 x 30 MB passes the per-picture cap but not the 64 MB total.
+    expect(
+      parses(
+        'shot:export',
+        withAssets(Array.from({ length: 3 }, () => ({ id, png: bytes(30 * 1024 * 1024) }))),
+      ),
+    ).toBe(false);
   });
 
   it('unbounded strings, numbers and lists are refused', () => {
@@ -263,6 +382,79 @@ describe('IPC: payloads are validated strictly', () => {
     expect(parses('history:list', { query: 'a'.repeat(201) })).toBe(false);
     const long = { action: 'recordScreen', accelerator: 'a'.repeat(65) };
     expect(parses('shortcuts:validate', long)).toBe(false);
+  });
+
+  it('video projects are bounded and carry no strings main would put into a command', () => {
+    const item = newItem('redact', 'r1', { x: 0, y: 0, width: 10, height: 10 }, 0, 1000);
+    const save = (project: unknown) => parses('video:save', { historyId: UUID, project });
+    const withItem = applyCommand(VIDEO_PROJECT, { type: 'addItem', item });
+    expect(save(withItem)).toBe(true);
+    expect(save({ ...withItem, items: [{ ...item, color: "#000000';movie=x" }] })).toBe(false);
+    expect(save({ ...withItem, items: [{ ...item, kind: 'drawtext', text: 'x' }] })).toBe(false);
+    expect(save({ ...withItem, items: [{ ...item, path: 'C:\\x' }] })).toBe(false);
+    expect(
+      save({
+        ...withItem,
+        items: Array.from({ length: 201 }, (_, i) => ({ ...item, id: `i${i}` })),
+      }),
+    ).toBe(false);
+    expect(
+      save({
+        ...withItem,
+        cuts: Array.from({ length: 101 }, (_, i) => ({ id: `c${i}`, startMs: 0, endMs: 1 })),
+      }),
+    ).toBe(false);
+    expect(save({ ...withItem, sourceId: '..\\..\\x' })).toBe(false);
+    expect(save({ ...withItem, source: { ...withItem.source, width: 1e9 } })).toBe(false);
+    expect(save({ ...withItem, export: { format: 'avi' } })).toBe(false);
+    expect(parses('video:export', { historyId: UUID, project: withItem, format: 'mov' })).toBe(
+      false,
+    );
+    expect(parses('video:open', { historyId: '../x' })).toBe(false);
+  });
+
+  it('video assets and text pictures are bounded: bytes only, sha256 ids, no paths', () => {
+    const asset = 'a'.repeat(64);
+    const text = newText('t1', { x: 0, y: 0, width: 10, height: 10 }, 0, 1000);
+    const image = newImage('i1', asset, { x: 0, y: 0, width: 10, height: 10 }, 0, 1000);
+    const clip = newAudio('a1', { assetId: asset, ext: 'mp3', name: 'x.mp3', clipMs: 1000 }, 0);
+    const project = [text, image, clip].reduce(
+      (current, item) => applyCommand(current, { type: 'addItem', item }),
+      VIDEO_PROJECT,
+    );
+    const save = (value: unknown) => parses('video:save', { historyId: UUID, project: value });
+    expect(save(project)).toBe(true);
+    // The words of a text item are stored, but only as text of a bounded length.
+    expect(save({ ...project, items: [{ ...text, text: 'x'.repeat(501) }] })).toBe(false);
+    expect(save({ ...project, items: [{ ...image, assetId: '../../secret.png' }] })).toBe(false);
+    expect(save({ ...project, items: [{ ...clip, assetId: `${asset}.mp3` }] })).toBe(false);
+    expect(save({ ...project, items: [{ ...clip, ext: 'exe' }] })).toBe(false);
+    expect(save({ ...project, items: [{ ...clip, path: 'C:\\x.mp3' }] })).toBe(false);
+
+    const exportWith = (overlays: unknown) =>
+      parses('video:export', { historyId: UUID, project, format: 'mp4', overlays });
+    expect(exportWith([{ itemId: 't1', png: bytes(100) }])).toBe(true);
+    expect(exportWith(undefined)).toBe(true);
+    expect(exportWith([{ itemId: 't1', png: bytes(0) }])).toBe(false);
+    expect(exportWith([{ itemId: 't1', png: bytes(8 * 1024 * 1024 + 1) }])).toBe(false);
+    expect(exportWith([{ itemId: 't1', png: new Uint8Array(100) }])).toBe(false);
+    expect(exportWith([{ itemId: 't1', png: 'C:\\x.png' }])).toBe(false);
+    expect(exportWith([{ itemId: '../x', png: bytes(10) }])).toBe(false);
+    expect(exportWith([{ itemId: 't1', png: bytes(10), path: 'C:\\x' }])).toBe(false);
+    expect(exportWith(Array.from({ length: 41 }, () => ({ itemId: 't1', png: bytes(10) })))).toBe(
+      false,
+    );
+    expect(
+      exportWith(Array.from({ length: 9 }, () => ({ itemId: 't1', png: bytes(8 * 1024 * 1024) }))),
+    ).toBe(false); // 72 MB in all
+
+    const add = (png: unknown) => parses('video:addImage', { historyId: UUID, png });
+    expect(add(bytes(100))).toBe(true);
+    expect(add(bytes(0))).toBe(false);
+    expect(add(bytes(32 * 1024 * 1024 + 1))).toBe(false);
+    expect(add('C:\\x.png')).toBe(false);
+    expect(parses('video:addImage', { historyId: '../x', png: bytes(10) })).toBe(false);
+    expect(parses('video:pickAudio', { historyId: UUID, path: 'C:\\x.mp3' })).toBe(false);
   });
 
   it('ids that are not uuids are refused before main looks anything up (no path, no traversal)', () => {
@@ -369,7 +561,7 @@ function isPlainStrings(payload: unknown): boolean {
     payload !== null &&
     !Array.isArray(payload) &&
     Object.keys(payload).length === 1 &&
-    Object.values(payload).every((value) => typeof value === 'string' && value.length < 64)
+    Object.values(payload).every((value) => typeof value === 'string' && value.length <= 1024)
   );
 }
 

@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Copy, FolderOpen, Info, RotateCw, Search, X } from 'lucide-react';
 import type { AppInfo } from '../../../shared/ipc-contract';
 import {
+  COMPRESSION_LABEL,
+  COMPRESSION_LEVELS,
+  FCAP_FORMAT_HINT,
+  SAVE_FORMATS,
+  SAVE_FORMAT_LABEL,
+  formatHint,
+  type Compression,
+  type SaveFormat,
+} from '../../../shared/recording-format';
+import {
   recordOptionsFromSettings,
   type OutputTarget,
   type Settings,
@@ -21,7 +31,9 @@ import {
   type ShortcutAction,
 } from '../../../shared/shortcuts';
 import { Logo } from '../../components/Logo';
+import { CameraSelect } from '../../components/CameraSelect';
 import { MicrophoneSelect } from '../../components/MicrophoneSelect';
+import { CAMERA_SHAPE_OPTIONS, CAMERA_SIZE_OPTIONS } from '../../components/RecordOptions';
 import { ShortcutField } from '../../components/ShortcutField';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -138,7 +150,6 @@ const FORMATS = [
 
 const AFTER_CAPTURE = [
   { value: 'editor', label: 'Open in the editor' },
-  { value: 'copy-and-editor', label: 'Copy to the clipboard, then open the editor' },
   { value: 'save-and-editor', label: 'Save to the folder, then open the editor' },
 ] as const;
 
@@ -226,7 +237,7 @@ export function ScreenshotsSection({ onReset }: SectionProps) {
       </SettingRow>
       <SettingRow
         label="After a capture"
-        description="Every screenshot opens in the editor; this adds a copy or a save first."
+        description="Every screenshot opens in the editor; this adds a save first."
       >
         {({ labelledBy }) => (
           <Select
@@ -240,18 +251,16 @@ export function ScreenshotsSection({ onReset }: SectionProps) {
         )}
       </SettingRow>
       <SettingRow
-        label="Copy to the clipboard when saving"
-        description="Saving from the editor also puts the image on the clipboard."
+        label="Copy every screenshot to the clipboard"
+        description="Each capture is copied as soon as it is taken, and again after you save an edit (with the redactions applied)."
       >
         {({ labelledBy, describedBy }) => (
           <Switch
             aria-labelledby={labelledBy}
             aria-describedby={describedBy}
-            data-testid="setting-copy-on-save"
-            checked={screenshots.copyToClipboardOnSave}
-            onCheckedChange={(copyToClipboardOnSave) =>
-              void updateSettings({ screenshots: { copyToClipboardOnSave } })
-            }
+            data-testid="setting-auto-copy-screenshots"
+            checked={screenshots.autoCopy}
+            onCheckedChange={(autoCopy) => void updateSettings({ screenshots: { autoCopy } })}
           />
         )}
       </SettingRow>
@@ -282,6 +291,12 @@ const QUALITY = [
   { value: '1080p', label: '1080p' },
   { value: 'source', label: 'Source' },
 ] as const;
+const FOLLOW = [
+  { value: 'off', label: 'Off' },
+  { value: '1.5', label: '1.5×' },
+  { value: '2', label: '2×' },
+  { value: '3', label: '3×' },
+] as const;
 const FPS = [
   { value: 30, label: '30' },
   { value: 60, label: '60' },
@@ -292,7 +307,28 @@ export function RecordingSection({ onReset }: SectionProps) {
   const options = recordOptionsFromSettings(recording);
   const caps = useExportCapabilities();
   const mp4Unavailable = caps !== null && !caps.mp4Available;
+  const webmUnavailable = caps?.webmAvailable === false;
+  const gifUnavailable = caps?.gifAvailable === false;
   const platform = usePlatformCapabilities();
+  // What this FFmpeg build can produce: a choice it cannot make is shown, but not selectable.
+  const canMake = (format: SaveFormat, compression: Compression): boolean => {
+    if (format === 'gif') return !gifUnavailable;
+    if (format === 'webm') return compression === 'off' || !webmUnavailable;
+    if (format === 'mkv' && compression === 'off') return true;
+    return !mp4Unavailable;
+  };
+  const formatOptions = SAVE_FORMATS.map((value) => ({
+    value,
+    label: canMake(value, 'off')
+      ? SAVE_FORMAT_LABEL[value]
+      : `${SAVE_FORMAT_LABEL[value]} (unavailable)`,
+    disabled: !canMake(value, 'off'),
+  }));
+  const compressionOptions = COMPRESSION_LEVELS.map((value) => ({
+    value,
+    label: COMPRESSION_LABEL[value],
+    disabled: !canMake(recording.saveFormat, value),
+  }));
   return (
     <SectionCard
       id="recording"
@@ -326,6 +362,20 @@ export function RecordingSection({ onReset }: SectionProps) {
             value={recording.fps}
             options={FPS}
             onChange={(fps) => void updateSettings({ recording: { fps } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Follow mouse"
+        description="Zoom in and pan smoothly to the mouse, so what you point at stays in view. Screen recordings only."
+      >
+        {() => (
+          <Segmented
+            label="Follow mouse"
+            data-testid="setting-follow"
+            value={recording.followMouseZoom}
+            options={FOLLOW}
+            onChange={(followMouseZoom) => void updateSettings({ recording: { followMouseZoom } })}
           />
         )}
       </SettingRow>
@@ -371,6 +421,66 @@ export function RecordingSection({ onReset }: SectionProps) {
         )}
       </SettingRow>
       <SettingRow
+        label="Camera"
+        description="Show your webcam in a bubble you can drag. It is recorded into the video."
+      >
+        {({ labelledBy, describedBy }) => (
+          <Switch
+            aria-labelledby={labelledBy}
+            aria-describedby={describedBy}
+            data-testid="setting-camera"
+            checked={recording.cameraEnabled}
+            onCheckedChange={(cameraEnabled) =>
+              void updateSettings({ recording: { cameraEnabled } })
+            }
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Camera device"
+        description="Which camera to use. The default follows Windows."
+      >
+        {({ labelledBy }) => (
+          <CameraSelect
+            className="w-72 max-w-full"
+            deviceId={recording.cameraDeviceId}
+            disabled={!recording.cameraEnabled}
+            labelledBy={labelledBy}
+            testId="setting-camera-device"
+            onChange={(deviceId) =>
+              void updateSettings({
+                recording: { cameraEnabled: true, cameraDeviceId: deviceId ?? null },
+              })
+            }
+          />
+        )}
+      </SettingRow>
+      <SettingRow label="Camera shape" description="Circle or rounded square.">
+        {() => (
+          <Segmented
+            label="Camera shape"
+            data-testid="setting-camera-shape"
+            value={recording.cameraShape}
+            options={CAMERA_SHAPE_OPTIONS}
+            onChange={(cameraShape) => void updateSettings({ recording: { cameraShape } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Camera size"
+        description="Small, medium or large. For window recordings the camera sits in the corner you drop the bubble in."
+      >
+        {() => (
+          <Segmented
+            label="Camera size"
+            data-testid="setting-camera-size"
+            value={recording.cameraSize}
+            options={CAMERA_SIZE_OPTIONS}
+            onChange={(cameraSize) => void updateSettings({ recording: { cameraSize } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
         label="System audio"
         description={
           platform.systemAudio
@@ -394,7 +504,9 @@ export function RecordingSection({ onReset }: SectionProps) {
         description={
           mp4Unavailable
             ? (caps?.reason ?? 'MP4 export is not available in this build.')
-            : 'After each recording, convert it to MP4 next to the original. Takes a moment.'
+            : recording.saveFormat === 'mp4'
+              ? 'Not needed: recordings are already saved as MP4.'
+              : 'After each recording, also convert it to MP4 next to it. Takes a moment.'
         }
       >
         {({ labelledBy, describedBy }) => (
@@ -402,11 +514,60 @@ export function RecordingSection({ onReset }: SectionProps) {
             aria-labelledby={labelledBy}
             aria-describedby={describedBy}
             data-testid="setting-auto-mp4"
-            checked={recording.autoExportMp4 && !mp4Unavailable}
-            disabled={mp4Unavailable}
+            checked={recording.autoExportMp4 && !mp4Unavailable && recording.saveFormat !== 'mp4'}
+            disabled={mp4Unavailable || recording.saveFormat === 'mp4'}
             onCheckedChange={(autoExportMp4) =>
               void updateSettings({ recording: { autoExportMp4 } })
             }
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Save recordings as"
+        description={`After you stop, the recording is converted if needed; the original WebM goes to the Recycle Bin once the new file is checked. ${FCAP_FORMAT_HINT}`}
+      >
+        {({ labelledBy }) => (
+          <Select
+            className="w-56 max-w-full"
+            value={recording.saveFormat}
+            options={formatOptions}
+            labelledBy={labelledBy}
+            data-testid="setting-save-format"
+            onChange={(saveFormat) => void updateSettings({ recording: { saveFormat } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Compression"
+        description={
+          recording.saveFormat === 'gif'
+            ? 'Not used for GIF. ' + formatHint(recording.saveFormat, recording.compression)
+            : formatHint(recording.saveFormat, recording.compression)
+        }
+      >
+        {({ labelledBy }) => (
+          <Select
+            className="w-56 max-w-full"
+            value={recording.compression}
+            options={compressionOptions}
+            labelledBy={labelledBy}
+            disabled={recording.saveFormat === 'gif'}
+            data-testid="setting-compression"
+            onChange={(compression) => void updateSettings({ recording: { compression } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Copy every recording to the clipboard (as a file you can paste into folders, chat and email)"
+        description="Also copies exported videos and step guides (as a folder). After a conversion, the new file replaces the old one on the clipboard."
+      >
+        {({ labelledBy, describedBy }) => (
+          <Switch
+            aria-labelledby={labelledBy}
+            aria-describedby={describedBy}
+            data-testid="setting-auto-copy-recordings"
+            checked={recording.autoCopy}
+            onCheckedChange={(autoCopy) => void updateSettings({ recording: { autoCopy } })}
           />
         )}
       </SettingRow>
@@ -423,8 +584,9 @@ interface ShortcutGroup {
 
 const SHORTCUT_GROUPS: ShortcutGroup[] = [
   { title: 'Screenshots', actions: SHORTCUT_ACTIONS.slice(0, 3) },
-  { title: 'Recording', actions: SHORTCUT_ACTIONS.slice(3) },
-  { title: 'Command center', actions: COMMAND_ACTIONS },
+  { title: 'Recording', actions: SHORTCUT_ACTIONS.slice(3, 9) },
+  { title: 'Step guides', actions: SHORTCUT_ACTIONS.slice(9) },
+  { title: 'Main window', actions: COMMAND_ACTIONS },
   { title: 'Editor', actions: EDITOR_ACTIONS.filter((action) => !isCommandAction(action)) },
 ];
 
@@ -555,6 +717,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Open the search box in the title bar: commands and saved captures.';
     case 'commandPalette':
       return 'Open the search box with commands only.';
+    case 'openImage':
+      return 'Pick a picture file and edit it like a screenshot.';
     case 'toolSelect':
       return 'Select and move marks.';
     case 'toolCrop':
@@ -589,6 +753,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Place a check, cross, star or other stamp.';
     case 'toolRuler':
       return 'Measure a distance in pixels.';
+    case 'insertImage':
+      return 'Pick a picture file and place it on the screenshot as a layer.';
     case 'duplicate':
       return 'Copy the selected marks next to the originals.';
     case 'bringForward':
@@ -625,6 +791,8 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Pick a window, then capture it.';
     case 'screenshotRegion':
       return 'Drag over the part of the screen you want.';
+    case 'screenshotAllScreens':
+      return 'Capture every screen in one image.';
     case 'recordScreen':
       return 'Record a whole screen. Press again to stop.';
     case 'recordWindow':
@@ -635,6 +803,10 @@ function describeAction(action: AnyShortcutAction): string {
       return 'Stop and save the recording.';
     case 'pauseRecording':
       return 'Pause the recording, or resume it.';
+    case 'stepsToggle':
+      return 'Start capturing a step guide. Press again to finish and save it.';
+    case 'stepsCapture':
+      return 'Take a step right now, where the pointer is (while a step guide is being captured).';
   }
 }
 
@@ -873,7 +1045,8 @@ export function AboutSection() {
         ) : null}
 
         <p className="mt-5 text-xs text-fg-muted">
-          FrameCapt works fully offline and sends no telemetry. Licensed under GPL-3.0-only.
+          Captures stay on this device. FrameCapt works fully offline and sends no telemetry.
+          Licensed under GPL-3.0-only.
         </p>
       </Card>
     </section>

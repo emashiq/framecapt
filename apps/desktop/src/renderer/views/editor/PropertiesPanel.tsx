@@ -79,6 +79,8 @@ export interface PropertiesPanelProps {
   previewExport: boolean;
   onPreview: (on: boolean) => void;
   onResetSteps: () => void;
+  /** Puts the selected image layer back to its picture's own size (around its center). */
+  onResetImageSize: () => void;
 }
 
 // --- small controls ------------------------------------------------------------------------------
@@ -794,6 +796,24 @@ export function PropertiesPanel(props: PropertiesPanelProps) {
             )}
           </Section>
         )}
+
+      {hasContext && support.image && single?.type === 'image' && (
+        <Section title="Image" testId="panel-image">
+          <p className="text-xs text-fg-subtle" data-testid="panel-image-size">
+            {Math.round(single.rect.width)} × {Math.round(single.rect.height)} px. Drag a corner to
+            resize (Shift frees the proportions).
+          </p>
+          <button
+            type="button"
+            data-testid="panel-image-reset"
+            onClick={props.onResetImageSize}
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-line bg-surface px-2.5 text-xs font-medium text-fg-muted hover:bg-surface-3 hover:text-fg"
+          >
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+            Reset size
+          </button>
+        </Section>
+      )}
 
       <Section title="Arrange" testId="panel-arrange">
         <p className="text-xs text-fg-subtle" data-testid="panel-selection-count">

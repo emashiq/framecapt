@@ -2,8 +2,8 @@ import type { StartRequestEvent } from '../../shared/settings-ipc';
 
 /**
  * Hands a "start this" request from the app root (a tray or shortcut action that needed the main
- * window) to the home view, which owns the window picker and the start buttons. A request that
- * arrives before the home view is on screen waits for it.
+ * window) to Home, which owns the window picker and the start buttons. A request that
+ * arrives before Home is on screen waits for it.
  */
 type Listener = (request: StartRequestEvent) => void;
 

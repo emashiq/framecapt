@@ -3,10 +3,13 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   CheckSquare,
   Copy,
+  CopyPlus,
   Download,
   ExternalLink,
+  FileBox,
   FileX2,
   Film,
+  FolderInput,
   FolderOpen,
   Link2,
   Pencil,
@@ -16,8 +19,15 @@ import {
 } from 'lucide-react';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { cn } from '../../lib/cn';
-import type { ItemActions } from './actions';
+import {
+  canDuplicateItem,
+  canEditItem,
+  canSaveProjectFile,
+  editLabel,
+  type ItemActions,
+} from './actions';
 import { menuItemClass } from './HistoryCard';
+import { canSaveAs } from './SaveAs';
 import { selectionLabel } from './selection';
 
 export interface ContextTarget {
@@ -40,6 +50,8 @@ export interface HistoryContextMenuProps {
   onSaveCopies: (ids: string[]) => void;
   onRemoveMany: (ids: string[]) => void;
   onClearSelection: () => void;
+  /** Opens the folder picker to move these items. */
+  onMoveTo?: ((ids: string[]) => void) | undefined;
   onClose: () => void;
 }
 
@@ -145,6 +157,14 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                 label={`Save ${bulkIds.length} copies…`}
                 onSelect={() => props.onSaveCopies(bulkIds)}
               />
+              {props.onMoveTo ? (
+                <Entry
+                  testId="ctx-bulk-move"
+                  icon={<FolderInput className={ICON} />}
+                  label={`Move ${bulkIds.length} to…`}
+                  onSelect={() => props.onMoveTo?.(bulkIds)}
+                />
+              ) : null}
               <Entry
                 testId="ctx-bulk-remove"
                 icon={<Trash2 className={ICON} />}
@@ -161,11 +181,11 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
             </>
           ) : item ? (
             <>
-              {item.type === 'screenshot' && props.onEdit ? (
+              {canEditItem(item) && props.onEdit ? (
                 <Entry
                   testId="ctx-edit"
                   icon={<Pencil className={ICON} />}
-                  label="Edit"
+                  label={editLabel(item)}
                   reason={missing ? MISSING : null}
                   onSelect={() => props.onEdit?.(item)}
                 />
@@ -199,7 +219,7 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                   reason={missing ? MISSING : null}
                   onSelect={() => actions.saveCopy(item)}
                 />
-              ) : (
+              ) : item.type === 'screenshot' ? (
                 <Entry
                   testId="ctx-save-copy"
                   icon={<Save className={ICON} />}
@@ -207,7 +227,34 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                   reason={missing ? MISSING : null}
                   onSelect={() => props.onSaveCopies([item.id])}
                 />
-              )}
+              ) : null}
+              {canSaveAs(item) ? (
+                <Entry
+                  testId="ctx-save-as"
+                  icon={<Save className={ICON} />}
+                  label="Save in another format…"
+                  reason={missing ? MISSING : null}
+                  onSelect={() => actions.saveAs(item)}
+                />
+              ) : null}
+              {canDuplicateItem(item) ? (
+                <Entry
+                  testId="ctx-duplicate"
+                  icon={<CopyPlus className={ICON} />}
+                  label="Duplicate"
+                  reason={missing ? MISSING : null}
+                  onSelect={() => actions.duplicate(item)}
+                />
+              ) : null}
+              {canSaveProjectFile(item) ? (
+                <Entry
+                  testId="ctx-save-project"
+                  icon={<FileBox className={ICON} />}
+                  label="Save as project file…"
+                  reason={missing ? MISSING : null}
+                  onSelect={() => actions.saveProjectFile(item)}
+                />
+              ) : null}
               {item.type === 'recording' && item.format === 'webm' ? (
                 <Entry
                   testId="ctx-mp4"
@@ -223,6 +270,14 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                   icon={<Link2 className={ICON} />}
                   label="Locate…"
                   onSelect={() => actions.locate(item)}
+                />
+              ) : null}
+              {props.onMoveTo ? (
+                <Entry
+                  testId="ctx-move"
+                  icon={<FolderInput className={ICON} />}
+                  label="Move to…"
+                  onSelect={() => props.onMoveTo?.([item.id])}
                 />
               ) : null}
               <DropdownMenu.Separator className="my-1 h-px bg-line" />

@@ -6,6 +6,7 @@ export interface SelectOption<T extends string> {
   value: T;
   label: string;
   hidden?: boolean;
+  disabled?: boolean;
 }
 
 export interface SelectProps<T extends string> {
@@ -47,7 +48,12 @@ export function Select<T extends string>({
       >
         {children}
         {options.map((option) => (
-          <option key={option.value} value={option.value} hidden={option.hidden}>
+          <option
+            key={option.value}
+            value={option.value}
+            hidden={option.hidden}
+            disabled={option.disabled}
+          >
             {option.label}
           </option>
         ))}

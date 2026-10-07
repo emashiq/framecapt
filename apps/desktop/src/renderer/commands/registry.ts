@@ -38,18 +38,39 @@ export interface Command {
 /** What the commands read to know whether they can run (display state). */
 export interface CommandEnv {
   recorderStatus: RecorderStatus;
+  /** More than one display is connected ("all screens" makes sense). */
+  multiDisplay?: boolean;
 }
 
 export type Target = 'screen' | 'window' | 'region';
 
+/** The sections the pinned Home tab can show. */
+export type NavTarget = 'home' | 'library' | 'guides' | 'settings';
+
 /** The things a command can do: each one is an existing function of the app. */
 export interface CommandActions {
-  /** Same as the Screenshot and Record buttons of the Capture view (and the tray). */
-  startCapture: (kind: 'screenshot' | 'record', target: Target) => void;
+  /** Same as the Screenshot and Record buttons of Home (and the tray). */
+  startCapture: (
+    kind: 'screenshot' | 'record',
+    target: Target | 'multi',
+    allScreens?: boolean,
+  ) => void;
+  /** Same as the Steps button of Home: starts capturing a step guide. */
+  startSteps: () => void;
   stopRecording: () => void;
   togglePause: () => void;
-  navigate: (view: 'capture' | 'history' | 'settings', section?: SettingsSectionId) => void;
+  navigate: (view: NavTarget, section?: SettingsSectionId) => void;
+  /** Shows or hides the Library's folder sidebar (it opens the Library first). */
+  toggleLibrarySidebar: () => void;
   showKeyboardHelp: () => void;
+  /** Opens the latest recording in the video editor (or says there is none). */
+  editVideo: () => void;
+  /** Same as the Open image button of Home (a picture file opens in the editor). */
+  openImage: () => void;
+  /** Same as the Open video button of Home (a video file opens in the video editor). */
+  openVideo: () => void;
+  /** File > Open project: a .fcimage / .fcvideo file opens in its editor. */
+  openProject: () => void;
   toggleTheme: () => void;
   quit: () => void;
   openCommandCenter: () => void;
@@ -104,6 +125,18 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.startCapture('screenshot', target),
     });
   }
+  if (env.multiDisplay) {
+    add({
+      id: 'shot.all',
+      title: 'Take screenshot – all screens',
+      menuLabel: 'New screenshot – all screens',
+      group: 'Capture',
+      keywords: ['capture', 'screen shot', 'snip', 'every screen', 'monitors', 'displays'],
+      hint: { kind: 'global', action: 'screenshotAllScreens' },
+      disabledReason: captureBlockedReason(env),
+      run: () => actions.startCapture('screenshot', 'screen', true),
+    });
+  }
   for (const { target, record } of TARGETS) {
     add({
       id: `rec.${target}`,
@@ -116,6 +149,59 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.startCapture('record', target),
     });
   }
+  // Several sources into one video (a `.fcap`): every screen, or a picker for screens and windows.
+  if (env.multiDisplay) {
+    add({
+      id: 'rec.all',
+      title: 'Record – all screens',
+      menuLabel: 'New recording – all screens',
+      group: 'Capture',
+      keywords: ['video', 'screen recording', 'capture', 'every screen', 'monitors', 'displays'],
+      disabledReason: captureBlockedReason(env),
+      run: () => actions.startCapture('record', 'multi', true),
+    });
+  }
+  add({
+    id: 'rec.multi',
+    title: 'Record – multiple sources…',
+    menuLabel: 'New recording – multiple sources…',
+    group: 'Capture',
+    keywords: ['video', 'screen recording', 'capture', 'several', 'screens and windows', 'fcap'],
+    disabledReason: captureBlockedReason(env),
+    run: () => actions.startCapture('record', 'multi'),
+  });
+  add({
+    id: 'steps.start',
+    title: 'Capture a step guide',
+    menuLabel: 'New step guide',
+    group: 'Capture',
+    keywords: ['steps', 'flow', 'guide', 'tutorial', 'how to', 'walkthrough', 'instructions'],
+    hint: { kind: 'global', action: 'stepsToggle' },
+    disabledReason: captureBlockedReason(env),
+    run: actions.startSteps,
+  });
+  add({
+    id: 'file.openImage',
+    title: 'Open image…',
+    group: 'Capture',
+    keywords: ['picture', 'photo', 'file', 'import', 'edit', 'png', 'jpg'],
+    hint: { kind: 'editor', action: 'openImage' },
+    run: actions.openImage,
+  });
+  add({
+    id: 'file.openVideo',
+    title: 'Open video…',
+    group: 'Capture',
+    keywords: ['movie', 'clip', 'file', 'import', 'edit', 'mp4', 'webm', 'mov', 'mkv'],
+    run: actions.openVideo,
+  });
+  add({
+    id: 'file.openProject',
+    title: 'Open project…',
+    group: 'Capture',
+    keywords: ['project', 'file', 'import', 'edit', 'fcimage', 'fcvideo', 'reopen'],
+    run: actions.openProject,
+  });
   // Stop and pause belong to the recording that runs: they stay available while it runs.
   if (env.recorderStatus === 'recording' || env.recorderStatus === 'paused') {
     add({
@@ -137,20 +223,37 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
   }
 
   add({
-    id: 'nav.capture',
-    title: 'Open Capture',
-    menuLabel: 'Capture',
+    id: 'video.edit',
+    title: 'Edit the latest recording',
+    menuLabel: 'Edit latest recording',
+    group: 'Capture',
+    keywords: ['video', 'editor', 'trim', 'cut', 'crop', 'blur', 'redact', 'mask', 'gif', 'export'],
+    run: actions.editVideo,
+  });
+
+  add({
+    id: 'nav.home',
+    title: 'Open Home',
+    menuLabel: 'Home',
     group: 'Navigate',
-    keywords: ['home', 'new'],
-    run: () => actions.navigate('capture'),
+    keywords: ['capture', 'new', 'dashboard', 'start'],
+    run: () => actions.navigate('home'),
   });
   add({
-    id: 'nav.history',
-    title: 'Open History',
-    menuLabel: 'History',
+    id: 'nav.library',
+    title: 'Open Library',
+    menuLabel: 'Library',
     group: 'Navigate',
-    keywords: ['captures', 'library', 'saved', 'recordings', 'screenshots'],
-    run: () => actions.navigate('history'),
+    keywords: ['history', 'captures', 'folders', 'saved', 'recordings', 'screenshots'],
+    run: () => actions.navigate('library'),
+  });
+  add({
+    id: 'nav.guides',
+    title: 'Open Guides',
+    menuLabel: 'Guides',
+    group: 'Navigate',
+    keywords: ['steps', 'step guides', 'flows', 'tutorials', 'library'],
+    run: () => actions.navigate('guides'),
   });
   add({
     id: 'nav.settings',
@@ -169,6 +272,14 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       run: () => actions.navigate('settings', id),
     });
   }
+  add({
+    id: 'view.toggleSidebar',
+    title: 'Toggle library sidebar',
+    group: 'Navigate',
+    keywords: ['folders', 'panel', 'hide', 'show'],
+    hint: { kind: 'fixed', keys: ['Ctrl', 'B'] },
+    run: actions.toggleLibrarySidebar,
+  });
   add({
     id: 'view.toggleTheme',
     title: 'Toggle light or dark theme',
@@ -299,15 +410,23 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
     id: 'file',
     label: 'File',
     items: [
+      'file.openImage',
+      'file.openVideo',
+      'file.openProject',
+      null,
       'shot.region',
       'shot.window',
       'shot.screen',
+      'shot.all',
       null,
       'rec.region',
       'rec.window',
       'rec.screen',
       null,
-      'nav.history',
+      'video.edit',
+      'steps.start',
+      null,
+      'nav.library',
       'nav.settings',
       null,
       'app.quit',
@@ -317,10 +436,12 @@ export const MENUS: readonly { id: string; label: string; items: readonly (strin
     id: 'view',
     label: 'View',
     items: [
-      'nav.capture',
-      'nav.history',
+      'nav.home',
+      'nav.library',
+      'nav.guides',
       'nav.settings',
       null,
+      'view.toggleSidebar',
       'view.commandCenter',
       'view.toggleTheme',
     ],

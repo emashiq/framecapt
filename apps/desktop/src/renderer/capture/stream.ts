@@ -84,6 +84,32 @@ export async function acquireMicrophoneStream(
   }
 }
 
+/** The recorded picture of the camera: 640 x 480 is plenty for a bubble of at most 28 % of the output. */
+const CAMERA_VIDEO = { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } };
+
+/**
+ * Acquires a camera stream (no audio). A chosen device that is gone falls back to the default
+ * camera; only when that fails too is the camera reported missing (the caller asks the user).
+ */
+export async function acquireCameraStream(deviceId?: string): Promise<MediaStream> {
+  const open = (device?: string): Promise<MediaStream> =>
+    navigator.mediaDevices.getUserMedia({
+      video: { ...CAMERA_VIDEO, ...(device ? { deviceId: { exact: device } } : {}) },
+    });
+  try {
+    let stream: MediaStream;
+    try {
+      stream = await open(deviceId);
+    } catch (error) {
+      if (!deviceId) throw error;
+      stream = await open();
+    }
+    return registerStream(stream);
+  } catch (error) {
+    throw mapMediaError(error);
+  }
+}
+
 /** Stops every track of the stream. Safe to call more than once. */
 export function releaseStream(stream: MediaStream | undefined): void {
   stopStream(stream);

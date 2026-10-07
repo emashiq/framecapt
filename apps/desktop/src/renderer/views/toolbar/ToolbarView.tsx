@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  Camera,
+  Check,
   ChevronsLeft,
   ChevronsRight,
   GripVertical,
@@ -10,9 +12,12 @@ import {
   Play,
   Square,
   TriangleAlert,
+  Video,
+  VideoOff,
   Volume2,
   VolumeX,
 } from 'lucide-react';
+import type { ToastEvent } from '../../../shared/settings-ipc';
 import type { AudioSource } from '../../../shared/recorder-machine';
 import type { RecorderSnapshot } from '../../../shared/recorder-ipc';
 import { formatDuration } from '../../../shared/recording';
@@ -34,6 +39,26 @@ function useLevels(active: boolean): { mic: number; system: number } {
     return window.framecapt.on('recorder:levels', (next) => setLevels(next));
   }, [active]);
   return active ? levels : SILENCE;
+}
+
+const TOAST_MS = 2500;
+
+/** The result of a screenshot taken during the recording, shown for a moment in the pill. */
+function useToast(): ToastEvent | null {
+  const [toast, setToast] = useState<ToastEvent | null>(null);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = window.framecapt.on('recorder:toast', (event) => {
+      setToast(event);
+      clearTimeout(timer);
+      timer = setTimeout(() => setToast(null), TOAST_MS);
+    });
+    return () => {
+      off();
+      clearTimeout(timer);
+    };
+  }, []);
+  return toast;
 }
 
 const iconButton =
@@ -118,6 +143,7 @@ export function ToolbarView() {
   const snapshot = useRecorderState();
   const activeMs = useActiveMs(snapshot);
   const levels = useLevels(snapshot.status === 'recording');
+  const toast = useToast();
   const pillRef = useRef<HTMLDivElement>(null);
   // "Tuck away": the pill shrinks to a recording indicator with one button to bring the controls
   // back. Only this window's layout changes; the recording, its state and the global stop and
@@ -234,6 +260,37 @@ export function ToolbarView() {
                 Paused
               </span>
             ) : null}
+            {snapshot.lostTiles.length > 0 ? (
+              <span
+                role="status"
+                data-testid="badge-lost-tiles"
+                title="A source being recorded went away. The recording continues without it."
+                className="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-warning-soft px-2.5 text-xs font-medium whitespace-nowrap text-warning"
+              >
+                <TriangleAlert className="size-3.5" aria-hidden="true" />
+                {snapshot.lostTiles.length === 1
+                  ? 'A source ended'
+                  : `${snapshot.lostTiles.length} sources ended`}
+              </span>
+            ) : null}
+            {toast ? (
+              <span
+                role="status"
+                data-testid="toolbar-toast"
+                data-level={toast.level}
+                className={cn(
+                  'flex items-center gap-1 text-xs font-semibold whitespace-nowrap',
+                  toast.level === 'error' ? 'text-danger' : 'text-success',
+                )}
+              >
+                {toast.level === 'error' ? (
+                  <TriangleAlert className="size-3.5" aria-hidden="true" />
+                ) : (
+                  <Check className="size-3.5" aria-hidden="true" />
+                )}
+                {toast.message}
+              </span>
+            ) : null}
             <span className="sr-only" role="status" aria-live="polite">
               {label}
             </span>
@@ -269,6 +326,36 @@ export function ToolbarView() {
                   <Pause className="size-4" aria-hidden="true" />
                 )}
               </button>
+
+              <button
+                type="button"
+                className={iconButton}
+                aria-label="Take screenshot"
+                title="Take screenshot"
+                data-testid="toolbar-screenshot"
+                disabled={!recording && !paused}
+                onClick={() => void window.framecapt.invoke('recorder:screenshot')}
+              >
+                <Camera className="size-4" aria-hidden="true" />
+              </button>
+
+              {snapshot.camera ? (
+                <button
+                  type="button"
+                  className={cn(iconButton, !snapshot.camera.visible && 'text-danger')}
+                  aria-pressed={!snapshot.camera.visible}
+                  aria-label={snapshot.camera.visible ? 'Hide camera' : 'Show camera'}
+                  title={snapshot.camera.visible ? 'Hide camera' : 'Show camera'}
+                  data-testid="toolbar-camera"
+                  onClick={() => void window.framecapt.invoke('recorder:toggleCamera')}
+                >
+                  {snapshot.camera.visible ? (
+                    <Video className="size-4" aria-hidden="true" />
+                  ) : (
+                    <VideoOff className="size-4" aria-hidden="true" />
+                  )}
+                </button>
+              ) : null}
 
               <button
                 type="button"

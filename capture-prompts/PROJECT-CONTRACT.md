@@ -10,7 +10,8 @@ MVP:
 - Disk-backed capture, bounded memory, finalized playable exports, error reporting and a documented recovery policy.
 - Tray, configurable shortcuts, floating recording toolbar, settings and local capture history.
 - Windows installer configuration, update integration safely disabled until a real update source exists, build automation, tests and release documentation.
-Defer cloud hosting/sync, AI, OCR, webcam overlays, full timeline, streaming, team accounts, billing integration, macOS/Linux product support and native backend rewrites unless required to solve a measured blocking defect.
+Defer cloud hosting/sync, AI, OCR, streaming, team accounts, billing integration, macOS/Linux product support and native backend rewrites unless required to solve a measured blocking defect.
+Webcam overlays and a full timeline were deferred; the owner lifted both on 2026-10-06 (a camera bubble composited into recordings, ADR-042; a video editor with a timeline, ADR-043/044).
 
 ## Process boundaries
 - Main: source discovery, capture authorization, windows, tray, shortcuts, filesystem and export process lifecycle.

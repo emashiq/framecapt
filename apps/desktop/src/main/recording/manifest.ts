@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { RecordOptionsSchema } from '../../shared/recorder-ipc';
+import { RecordingLayoutSchema } from '../../shared/recording-layout';
 
 export const STREAM_FILE = 'stream.webm';
+/** Multi-source sessions: the remuxed WebM kept in the session directory until it is wrapped as `.fcap`. */
+export const REMUXED_FILE = 'remuxed.webm';
 export const MANIFEST_FILE = 'manifest.json';
 export const CORRUPT_MANIFEST_FILE = 'manifest.corrupt.json';
 export const FINALIZE_LOG_FILE = 'finalize.log';
@@ -55,10 +58,12 @@ export const SessionManifestSchema = z.object({
   state: z.enum(SESSION_STATES),
   mime: z.string(),
   source: z.object({
-    kind: z.enum(['screen', 'window', 'region']),
+    kind: z.enum(['screen', 'window', 'region', 'multi']),
     displayId: z.string().optional(),
     name: z.string(),
   }),
+  /** Multi-source recordings: where each source sits in the picture. Optional, so older manifests parse. */
+  layout: RecordingLayoutSchema.optional(),
   options: RecordOptionsSchema,
   width: z.number(),
   height: z.number(),
@@ -95,7 +100,7 @@ export const CompletionRecordSchema = z.object({
   bytes: z.number(),
   width: z.number(),
   height: z.number(),
-  source: z.object({ kind: z.enum(['screen', 'window', 'region']) }),
+  source: z.object({ kind: z.enum(['screen', 'window', 'region', 'multi']) }),
   hasAudio: z.boolean(),
   mime: z.string(),
   recovered: z.boolean(),
@@ -130,4 +135,16 @@ export function freshStats(): SessionStats {
 /** The name of the temporary remux output: it carries the session id so its session is provable. */
 export function partialFileName(sessionId: string): string {
   return `.framecapt-${sessionId}.partial.webm`;
+}
+
+/** The temporary `.fcap` of a multi-source recording (renamed to its final name when complete). */
+export function fcapPartialFileName(sessionId: string): string {
+  return `.framecapt-${sessionId}.fcap.partial`;
+}
+
+/** The temporary output the manifest of a session names: its `.fcap` partial for a multi-source one. */
+export function partialNameFor(manifest: Pick<SessionManifest, 'sessionId' | 'layout'>): string {
+  return manifest.layout
+    ? fcapPartialFileName(manifest.sessionId)
+    : partialFileName(manifest.sessionId);
 }

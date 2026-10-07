@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from 'electron';
+import type { Rect } from '../../shared/rect';
 import { TOOLBAR_HEIGHT } from '../../shared/toolbar-placement';
 import { log } from '../logger';
 import { loadRenderer, registerWebContents, securePreferences } from '../windows';
@@ -16,16 +17,18 @@ export interface ToolbarWindow {
  * capture with setContentProtection (WDA_EXCLUDEFROMCAPTURE on Windows 10 2004+; measured, see
  * docs/capture-feasibility.md) and, for region recordings, placed outside the recorded area so it
  * is not in the picture even if that exclusion failed. It is created hidden and shown by the
- * caller once recording runs.
+ * caller once recording runs. The same pill, in `steps` mode, is the step-guide controls (the
+ * renderer picks its content from the `mode` of the URL).
  */
 export function createToolbarWindow(
   position: { x: number; y: number },
   width: number,
   onUserClosed: () => void,
+  mode: 'recording' | 'steps' = 'recording',
 ): ToolbarWindow {
   let quiet = false;
   const win = new BrowserWindow({
-    title: 'FrameCapt recording controls',
+    title: mode === 'steps' ? 'FrameCapt step controls' : 'FrameCapt recording controls',
     x: position.x,
     y: position.y,
     width,
@@ -52,7 +55,7 @@ export function createToolbarWindow(
   win.on('closed', () => {
     if (!quiet) onUserClosed();
   });
-  void loadRenderer(win, 'toolbar');
+  void loadRenderer(win, 'toolbar', mode === 'steps' ? '?mode=steps' : '');
 
   return {
     win,
@@ -131,4 +134,37 @@ export function createCountdownWindow(bounds: {
       log.info('Countdown window closed');
     },
   };
+}
+
+/**
+ * The camera bubble: a frameless, transparent, always-on-top square the user drags where the
+ * camera should be. Like the toolbar it is excluded from capture (setContentProtection): the
+ * camera is composited into the video by the recorder, so a window or region recording shows it
+ * exactly where the bubble sits, and the bubble itself can never appear twice. Created hidden.
+ */
+export function createCameraWindow(bounds: Rect): BrowserWindow {
+  const win = new BrowserWindow({
+    title: 'FrameCapt camera',
+    ...bounds,
+    useContentSize: true,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    show: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    alwaysOnTop: true,
+    webPreferences: { ...securePreferences(), backgroundThrottling: false },
+  });
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setContentProtection(true);
+  // Same quirk as the overlays: place again after creation (mixed-DPI displays).
+  win.setBounds(bounds);
+  registerWebContents(win.webContents, 'camera');
+  void loadRenderer(win, 'camera');
+  return win;
 }

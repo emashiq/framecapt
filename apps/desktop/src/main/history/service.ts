@@ -13,14 +13,19 @@ import {
 import { detectImageFormat, validateImageBytes } from '../../shared/shots';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
+import { FLOW_FILE_NAME, isOnlyFlowFiles } from '../../shared/flow';
+import { readFlowFile } from '../flows/flow-store';
 import { thumbnailArgs, type MediaTools } from '../media/ffmpeg';
-import type { ProjectInput, ProjectStore } from '../projects/store';
+import type { ProjectAsset, ProjectInput, ProjectStore } from '../projects/store';
+import type { VideoProjectStore } from '../video-projects/store';
 import type { ProjectDoc } from '../../shared/project-ipc';
 import { writeFileAtomic } from '../shots/atomic-write';
+import { freeFileName } from '../shots/free-name';
+import { readFcapHeader, readFcapHeaderCached } from '../recording/fcap';
 import { CompletionRecordSchema, COMPLETED_DIR } from '../recording/manifest';
 import { HistoryStore, type HistoryItem } from './store';
-import { mapLimit, samePath } from './files';
-import { matchesQuery } from './query';
+import { copyFileAtomic, mapLimit, samePath } from './files';
+import { itemName, matchesQuery } from './query';
 import { ThumbStore, thumbNameFor, THUMBS_CAP_BYTES } from './thumbs';
 
 const STAT_CONCURRENCY = 8;
@@ -34,16 +39,34 @@ const IMAGE_EXTENSIONS: Record<'png' | 'jpeg', readonly string[]> = {
   png: ['.png'],
   jpeg: ['.jpg', '.jpeg'],
 };
-const VIDEO_EXTENSION: Record<'webm' | 'mp4', string> = { webm: '.webm', mp4: '.mp4' };
+const VIDEO_EXTENSION: Record<VideoFormat, string> = {
+  webm: '.webm',
+  mp4: '.mp4',
+  mkv: '.mkv',
+  fcap: '.fcap',
+  gif: '.gif',
+};
+
+/** The formats of a recording's file. */
+export type VideoFormat = 'webm' | 'mp4' | 'mkv' | 'fcap' | 'gif';
 
 export interface HistoryDeps {
   /** `<userData>/history`: `history.json` and `thumbs/`. */
   dir: string;
   tools: MediaTools;
   /** Editable projects of screenshots (`<userData>/projects`). Absent: none are kept. */
-  projects?: Pick<ProjectStore, 'write' | 'updateDoc' | 'remove' | 'sweep'>;
+  projects?: Pick<ProjectStore, 'write' | 'updateDoc' | 'remove' | 'sweep'> &
+    Partial<Pick<ProjectStore, 'copy'>>;
+  /** Video editing projects (`<userData>/video-projects`), removed with their history item. */
+  videoProjects?: Pick<VideoProjectStore, 'remove' | 'sweep'> &
+    Partial<Pick<VideoProjectStore, 'copy' | 'has'>>;
   /** Moves a file to the Recycle Bin (`shell.trashItem`); never a permanent delete. */
   trashItem: (file: string) => Promise<void>;
+  /**
+   * The library folder of a directory: its path relative to the capture folders (empty = the
+   * root), or null when it is outside both ("Other locations"). Absent: no folders are shown.
+   */
+  folderOf?: (dir: string) => string | null;
   /** Called after every change a list may show (add, remove, thumbnail ready). */
   onChange?: () => void;
   now?: () => number;
@@ -66,6 +89,8 @@ export interface NewScreenshot {
   derivedFrom?: string;
   /** The editable project to store with it (id = the item's id). It is written before the item is listed. */
   project?: ProjectInput;
+  /** Opened from a project file: the Library marks it. */
+  projectFile?: boolean;
 }
 
 /** What `overwriteScreenshot` replaces. */
@@ -79,13 +104,15 @@ export interface ScreenshotOverwrite {
   project?: {
     doc: ProjectDoc;
     appVersion: string;
-    base?: Omit<ProjectInput, 'doc' | 'appVersion'>;
+    /** The pictures of the document's image layers. */
+    assets?: ProjectAsset[];
+    base?: Omit<ProjectInput, 'doc' | 'appVersion' | 'assets'>;
   };
 }
 
 export interface NewVideo {
   path: string;
-  format: 'webm' | 'mp4';
+  format: VideoFormat;
   durationMs: number | null;
   width: number;
   height: number;
@@ -94,10 +121,38 @@ export interface NewVideo {
   source: HistorySource;
   derivedFrom?: string;
   createdAt?: number;
+  /** The frame rate the recording was made at (the video editor exports at it). */
+  fps?: number;
 }
 
-function formatOfVideoPath(file: string): 'webm' | 'mp4' {
-  return path.extname(file).toLowerCase() === '.mp4' ? 'mp4' : 'webm';
+/** A finished step guide: `path` is its `flow.json`. */
+export interface NewFlow {
+  path: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  stepCount: number;
+  /** PNG of the first step with the pointer ring, at most 480 px wide (made in main). */
+  thumbnail?: Uint8Array | undefined;
+  createdAt?: number;
+}
+
+/** What a guide edit changes in its entry. */
+export interface FlowChange {
+  width: number;
+  height: number;
+  sizeBytes: number;
+  stepCount: number;
+  /** A new first-step thumbnail; absent keeps the old one. */
+  thumbnail?: Uint8Array | undefined;
+}
+
+function formatOfVideoPath(file: string): VideoFormat {
+  const extension = path.extname(file).toLowerCase();
+  if (extension === '.gif') return 'gif';
+  if (extension === '.fcap') return 'fcap';
+  if (extension === '.mkv') return 'mkv';
+  return extension === '.mp4' ? 'mp4' : 'webm';
 }
 
 /** What the recorder and recovery need of history: adding a finished video. */
@@ -145,15 +200,16 @@ export class HistoryService {
 
   /** Startup housekeeping: projects no history item refers to (older than the grace period) are removed. */
   private async sweepProjects(): Promise<void> {
-    const projects = this.deps.projects;
-    if (!projects) return;
-    try {
-      const known = new Set(this.store.items().map((item) => item.id));
-      const result = await projects.sweep(known);
-      if (result.removed > 0)
-        log.info(`Project sweep: removed ${result.removed} orphaned projects`);
-    } catch (error) {
-      log.warn(`Project sweep failed (${(error as Error).message})`);
+    const known = new Set(this.store.items().map((item) => item.id));
+    for (const projects of [this.deps.projects, this.deps.videoProjects]) {
+      if (!projects) continue;
+      try {
+        const result = await projects.sweep(known);
+        if (result.removed > 0)
+          log.info(`Project sweep: removed ${result.removed} orphaned projects`);
+      } catch (error) {
+        log.warn(`Project sweep failed (${(error as Error).message})`);
+      }
     }
   }
 
@@ -189,6 +245,34 @@ export class HistoryService {
     return this.store.get(id);
   }
 
+  /** Every item, newest first (the library counts and moves them). */
+  items(): readonly HistoryItem[] {
+    return this.store.items();
+  }
+
+  /** Points items at their moved files in one write; nothing else about them changes. */
+  async rewritePaths(changes: readonly { id: string; path: string }[]): Promise<void> {
+    await this.ready;
+    if (changes.length === 0) return;
+    await this.store.updatePaths(changes);
+    this.changed();
+  }
+
+  /** The item that points at `file` (same path, any case on Windows), if any. */
+  findByPath(file: string): HistoryItem | undefined {
+    return this.existingFor(file);
+  }
+
+  /** Items in the list; unlisted items of a newer build are not counted here. */
+  get size(): number {
+    return this.store.count;
+  }
+
+  /** True when `history.json` did not exist at load and nothing was backfilled yet (a fresh start). */
+  get isFirstRun(): boolean {
+    return !this.existedAtLoad && !this.store.backfilled;
+  }
+
   /** The file of an item, for the media protocol (history items only). */
   filePathOf(id: string): string | undefined {
     return this.get(id)?.path;
@@ -215,16 +299,18 @@ export class HistoryService {
   private async view(item: HistoryItem): Promise<HistoryItemView> {
     const stat = await fs.promises.stat(item.path).catch(() => null);
     const exists = stat?.isFile() ?? false;
+    // A guide is a folder: its size is the total of its files, kept with the entry.
+    const sizeBytes = exists && stat && item.type !== 'flow' ? stat.size : item.sizeBytes;
     return {
       id: item.id,
       type: item.type,
       createdAt: item.createdAt,
       path: item.path,
-      fileName: path.basename(item.path),
+      fileName: itemName(item),
       width: item.width,
       height: item.height,
       durationMs: item.durationMs,
-      sizeBytes: exists && stat ? stat.size : item.sizeBytes,
+      sizeBytes,
       format: item.format,
       hasThumb: item.thumbnail !== null,
       hasAudio: item.hasAudio,
@@ -232,7 +318,26 @@ export class HistoryService {
       derivedFrom: item.derivedFrom,
       exists,
       editable: item.type === 'screenshot' && item.projectId !== undefined,
+      ...(this.hasEditState(item) && { hasEditState: true }),
+      ...(item.projectFile && { projectFile: true }),
+      ...(item.format === 'fcap' && { layout: exists ? await fcapLayout(item.path) : null }),
+      ...(item.stepCount !== undefined && { stepCount: item.stepCount }),
+      ...this.folderFields(item),
     };
+  }
+
+  private hasEditState(item: HistoryItem): boolean {
+    if (item.type === 'screenshot') return item.projectId !== undefined;
+    return item.type === 'recording' && (this.deps.videoProjects?.has?.(item.id) ?? false);
+  }
+
+  private folderFields(item: HistoryItem): Pick<HistoryItemView, 'folder' | 'outside'> {
+    if (!this.deps.folderOf) return {};
+    // A guide's file sits in its own folder, which is the item: its library folder is that one's parent.
+    const dir = path.dirname(item.type === 'flow' ? path.dirname(item.path) : item.path);
+    const folder = this.deps.folderOf(dir);
+    if (folder === null) return { outside: true };
+    return folder === '' ? {} : { folder };
   }
 
   // --- adding -----------------------------------------------------------------------------
@@ -291,8 +396,69 @@ export class HistoryService {
       source: input.source,
       derivedFrom: input.derivedFrom ?? null,
       ...(projectId && { projectId }),
+      ...(input.projectFile && { projectFile: true }),
     });
     return { id };
+  }
+
+  /** Adds a step guide (or refreshes the entry of the same `flow.json`). */
+  async addFlow(input: NewFlow): Promise<{ id: string }> {
+    await this.ready;
+    const existing = this.existingFor(input.path);
+    const id = existing?.id ?? randomUUID();
+    const thumbnail = await this.storeThumbnail(id, input.thumbnail, existing?.thumbnail ?? null);
+    await this.put({
+      id,
+      type: 'flow',
+      createdAt: input.createdAt ?? this.now(),
+      path: input.path,
+      width: input.width,
+      height: input.height,
+      durationMs: null,
+      sizeBytes: input.sizeBytes,
+      format: 'flow',
+      thumbnail,
+      hasAudio: null,
+      source: 'screen',
+      derivedFrom: null,
+      stepCount: input.stepCount,
+    });
+    return { id };
+  }
+
+  /** A guide was edited (steps reordered, deleted, a step replaced): the entry follows. */
+  async updateFlow(id: string, change: FlowChange): Promise<void> {
+    await this.ready;
+    const item = this.get(id);
+    if (!item || item.type !== 'flow') {
+      throw new IpcError('NOT_FOUND', 'That guide is not in history.');
+    }
+    const thumbnail = await this.storeThumbnail(id, change.thumbnail, item.thumbnail);
+    await this.store.update(id, {
+      width: change.width,
+      height: change.height,
+      sizeBytes: change.sizeBytes,
+      stepCount: change.stepCount,
+      thumbnail,
+    });
+    await this.collectThumbs();
+    this.changed();
+  }
+
+  /** Writes a thumbnail PNG under the item's name; keeps `previous` when there is none or it is not valid. */
+  private async storeThumbnail(
+    id: string,
+    bytes: Uint8Array | undefined,
+    previous: string | null,
+  ): Promise<string | null> {
+    if (!bytes || !validThumbnail(bytes)) return previous;
+    try {
+      await this.thumbs.write(thumbNameFor(id), bytes);
+      return thumbNameFor(id);
+    } catch (error) {
+      log.warn(`Could not store a thumbnail (${(error as Error).message})`);
+      return previous;
+    }
   }
 
   /**
@@ -348,12 +514,18 @@ export class HistoryService {
       try {
         const updated =
           projectId !== undefined &&
-          (await projects.updateDoc(id, input.project.doc, input.project.appVersion));
+          (await projects.updateDoc(
+            id,
+            input.project.doc,
+            input.project.appVersion,
+            input.project.assets,
+          ));
         if (!updated && input.project.base) {
           await projects.write(id, {
             ...input.project.base,
             doc: input.project.doc,
             appVersion: input.project.appVersion,
+            ...(input.project.assets && { assets: input.project.assets }),
           });
           projectId = id;
         }
@@ -373,6 +545,77 @@ export class HistoryService {
     return { path: item.path, editable: projectId !== undefined };
   }
 
+  /**
+   * Copies a screenshot or recording to a free "<name> (copy)" file next to it, with its thumbnail
+   * and its edits (the editable project, or the video project and its assets), as a new item.
+   */
+  async duplicate(id: string): Promise<{ id: string }> {
+    await this.ready;
+    const item = this.get(id);
+    if (!item) throw new IpcError('NOT_FOUND', 'That item is not in history.');
+    if (item.type !== 'screenshot' && item.type !== 'recording') {
+      throw new IpcError('INVALID_PAYLOAD', 'Only screenshots and recordings can be duplicated.');
+    }
+    const present = await fs.promises.stat(item.path).then(
+      (stat) => stat.isFile(),
+      () => false,
+    );
+    if (!present) throw new IpcError('NOT_FOUND', 'The file was moved or deleted.');
+    const extension = path.extname(item.path);
+    const target = await freeFileName(
+      path.dirname(item.path),
+      `${path.basename(item.path, extension)} (copy)${extension}`,
+    );
+    try {
+      await copyFileAtomic(item.path, target);
+    } catch (error) {
+      log.warn(`Duplicate failed (${(error as Error).message})`);
+      throw new IpcError('INTERNAL', 'The copy could not be made.');
+    }
+    const copyId = randomUUID();
+    let thumbnail: string | null = null;
+    const thumbSource = item.thumbnail ? this.thumbs.pathOf(item.thumbnail) : undefined;
+    if (thumbSource) {
+      try {
+        await this.thumbs.write(thumbNameFor(copyId), await fs.promises.readFile(thumbSource));
+        thumbnail = thumbNameFor(copyId);
+      } catch {
+        // a recording's thumbnail is made again below; a screenshot shows a placeholder
+      }
+    }
+    let projectId: string | undefined;
+    try {
+      if (item.projectId !== undefined && (await this.deps.projects?.copy?.(id, copyId))) {
+        projectId = copyId;
+      }
+      await this.deps.videoProjects?.copy?.(id, copyId);
+    } catch (error) {
+      log.warn(`Could not copy the edits of an item (${(error as Error).message})`);
+    }
+    const copy: HistoryItem = {
+      ...item,
+      id: copyId,
+      path: target,
+      createdAt: this.now(),
+      thumbnail,
+      derivedFrom: null,
+    };
+    delete copy.projectId;
+    delete copy.projectFile;
+    if (projectId) copy.projectId = projectId;
+    await this.put(copy);
+    if (item.type === 'recording' && thumbnail === null) this.queueThumbnail(copy);
+    return { id: copyId };
+  }
+
+  /** Marks an item as saved to a project file (the Library shows a project badge). */
+  async markProjectFile(id: string): Promise<void> {
+    await this.ready;
+    if (!this.get(id)) throw new IpcError('NOT_FOUND', 'That item is not in history.');
+    await this.store.update(id, { projectFile: true });
+    this.changed();
+  }
+
   /** Deletes the editable project of an item; the exported image and the entry stay. */
   async deleteProject(id: string): Promise<void> {
     await this.ready;
@@ -386,9 +629,10 @@ export class HistoryService {
   }
 
   private async dropProjects(ids: readonly string[]): Promise<void> {
-    const projects = this.deps.projects;
-    if (!projects) return;
-    for (const id of ids) await projects.remove(id).catch(() => undefined);
+    for (const projects of [this.deps.projects, this.deps.videoProjects]) {
+      if (!projects) continue;
+      for (const id of ids) await projects.remove(id).catch(() => undefined);
+    }
   }
 
   /**
@@ -413,10 +657,28 @@ export class HistoryService {
       hasAudio: input.hasAudio,
       source: input.source,
       derivedFrom: input.derivedFrom ?? null,
+      ...(input.fps !== undefined && { fps: input.fps }),
     };
     await this.put(item);
     this.queueThumbnail(item);
     return { id };
+  }
+
+  /**
+   * Points a recording at its converted file (the save format and compression settings): same id,
+   * thumbnail and creation time, new path, format and size. False when the item is gone.
+   */
+  async replaceVideoFile(
+    id: string,
+    input: Pick<
+      NewVideo,
+      'path' | 'format' | 'durationMs' | 'width' | 'height' | 'sizeBytes' | 'hasAudio'
+    >,
+  ): Promise<boolean> {
+    await this.ready;
+    const updated = await this.store.update(id, input);
+    if (updated) this.changed();
+    return updated !== undefined;
   }
 
   private queueThumbnail(item: HistoryItem): void {
@@ -435,7 +697,7 @@ export class HistoryService {
     try {
       await fs.promises.mkdir(this.thumbs.dir, { recursive: true });
       const result = await this.deps.tools.run(
-        thumbnailArgs(item.path, partial, seek, MAX_THUMBNAIL_WIDTH),
+        thumbnailArgs(item.path, partial, seek, MAX_THUMBNAIL_WIDTH, item.format),
         { timeoutMs: THUMB_TIMEOUT_MS },
       );
       const size = result.code === 0 ? (await fs.promises.stat(partial)).size : 0;
@@ -510,8 +772,10 @@ export class HistoryService {
       () => false,
     );
     if (present) {
+      // A guide is a folder: all of it goes, but only a folder that holds nothing else.
+      const target = item.type === 'flow' ? await flowFolderToTrash(item.path) : item.path;
       try {
-        await this.deps.trashItem(item.path);
+        await this.deps.trashItem(target);
       } catch (error) {
         log.warn(`Could not move a file to the Recycle Bin (${(error as Error).message})`);
         throw new IpcError('INTERNAL', 'The file could not be moved to the Recycle Bin.');
@@ -575,12 +839,32 @@ export class HistoryService {
         );
       }
       await this.store.update(id, { path: resolved, sizeBytes: stat.size });
+    } else if (item.format === 'flow') {
+      if (path.basename(resolved).toLowerCase() !== FLOW_FILE_NAME) {
+        throw new IpcError('INVALID_PAYLOAD', 'Pick the flow.json file of the guide.');
+      }
+      const flow = await readFlowFile(resolved);
+      const first = flow?.steps[0];
+      if (!flow || !first) {
+        throw new IpcError('INVALID_PAYLOAD', 'That file is not a FrameCapt step guide.');
+      }
+      await this.store.update(id, {
+        path: resolved,
+        width: first.width,
+        height: first.height,
+        stepCount: flow.steps.length,
+      });
     } else {
       if (extension !== VIDEO_EXTENSION[item.format]) {
         throw new IpcError('INVALID_PAYLOAD', `Pick a ${item.format.toUpperCase()} video.`);
       }
-      const probe = await this.deps.tools.probe(resolved, { timeoutMs: 30_000 }).catch(() => null);
-      if (!probe?.hasVideo || !probe.formatName.split(',').includes(item.format)) {
+      // A `.fcap` must have a valid header first; its payload is then probed as Matroska.
+      if (item.format === 'fcap') await readFcapHeader(resolved).catch(() => notVideo(item.format));
+      const probe = await this.deps.tools
+        .probe(resolved, { timeoutMs: 30_000, format: item.format })
+        .catch(() => null);
+      const container = item.format === 'fcap' || item.format === 'mkv' ? 'matroska' : item.format;
+      if (!probe?.hasVideo || !probe.formatName.split(',').includes(container)) {
         throw new IpcError(
           'INVALID_PAYLOAD',
           `That file is not a ${item.format.toUpperCase()} video.`,
@@ -642,6 +926,33 @@ export class HistoryService {
     await this.store.markBackfilled();
     return added;
   }
+}
+
+function notVideo(format: string): never {
+  throw new IpcError('INVALID_PAYLOAD', `That file is not a ${format.toUpperCase()} video.`);
+}
+
+/** The picture layout of a `.fcap` (its header), or null when the header cannot be read. */
+async function fcapLayout(file: string): Promise<NonNullable<HistoryItemView['layout']> | null> {
+  try {
+    const { width, height, sources } = await readFcapHeaderCached(file);
+    return { width, height, sources };
+  } catch {
+    return null;
+  }
+}
+
+/** The folder of a guide when it holds only `flow.json` and step images; otherwise it is left alone. */
+async function flowFolderToTrash(flowFile: string): Promise<string> {
+  const dir = path.dirname(flowFile);
+  const names = await fs.promises.readdir(dir).catch(() => [] as string[]);
+  if (path.basename(flowFile) !== FLOW_FILE_NAME || !isOnlyFlowFiles(names)) {
+    throw new IpcError(
+      'INVALID_PAYLOAD',
+      'That folder holds other files, so FrameCapt leaves it alone. Remove the guide from history, or delete the folder yourself.',
+    );
+  }
+  return dir;
 }
 
 async function readHead(file: string, bytes: number): Promise<Uint8Array> {

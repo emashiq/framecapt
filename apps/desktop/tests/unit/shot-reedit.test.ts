@@ -31,11 +31,8 @@ vi.mock('../../src/main/logger', () => ({
   log: { info: () => undefined, warn: () => undefined, error: () => undefined },
 }));
 vi.mock('../../src/main/windows', () => ({
-  closeGuard: { setDirty: () => undefined, resolve: () => false },
-  getMainWindow: () => undefined,
+  dialogParent: () => undefined,
   onMainWindowClosed: () => undefined,
-  setEditorState: () => undefined,
-  setQuitting: () => undefined,
 }));
 vi.mock('../../src/main/shots/after-capture', () => ({
   writePngToClipboard: async () => undefined,
@@ -63,6 +60,8 @@ beforeEach(() => {
 
 async function setup(keep = true) {
   const settings: Settings = structuredClone(DEFAULT_SETTINGS);
+  /** The PNGs the auto-copy rule was asked to put on the clipboard. */
+  const copied: Buffer[] = [];
   settings.screenshots.keepEditableOriginals = keep;
   const store = new ShotSessionStore(path.join(root, 'shots'));
   const projects = new ProjectStore(path.join(root, 'projects'));
@@ -78,14 +77,21 @@ async function setup(keep = true) {
     store,
     { selecting: false } as never,
     history,
-    { get: () => settings, screenshotsDir: () => path.join(root, 'out') },
+    {
+      get: () => settings,
+      screenshotsDir: () => path.join(root, 'out'),
+      copyImage: async (png) => {
+        copied.push(Buffer.from(png));
+        return true;
+      },
+    },
     { store: projects, appVersion: '1.0.0' },
   );
   // Handler results are checked field by field below; their types are the channels' own.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = (channel: string, request: unknown): Promise<any> =>
     Promise.resolve(hoisted.handlers.get(channel)?.(request, ctx));
-  return { call, store, projects, history, settings };
+  return { call, store, projects, history, settings, copied };
 }
 
 /** A capture session saved through shot:export, as the editor does (with a project). */
@@ -228,6 +234,40 @@ describe('saving a re-edit', () => {
     expect(read.ok && read.doc).toEqual({ schema: 2, annotations: [] });
     expect(read.ok && read.png.toString('latin1')).toContain('original');
     expect((await s.history.list()).items).toHaveLength(1);
+  });
+
+  it('auto-copy puts the SAVED (flattened, redacted) image on the clipboard after an edit, never the original', async () => {
+    const s = await setup();
+    const { item } = await exportCapture(s);
+    // The export itself copied the flattened pixels, not the unredacted original of the session.
+    expect(s.copied).toHaveLength(1);
+    expect(s.copied[0]?.toString('latin1')).toContain('flat');
+    expect(s.copied[0]?.toString('latin1')).not.toContain('original');
+    const opened = await s.call('shot:openFromHistory', { historyId: item!.id });
+    const next = pngBytes(30, 20, 'redacted-edit');
+    await s.call('shot:saveOver', {
+      sessionId: opened.session.id,
+      format: 'png',
+      bytes: arrayBuffer(next),
+      project: { doc: { schema: 2, annotations: [] } },
+    });
+    expect(s.copied).toHaveLength(2);
+    expect(s.copied[1]?.equals(next)).toBe(true);
+    expect(s.copied[1]?.toString('latin1')).not.toContain('original');
+  });
+
+  it('with auto-copy off nothing is copied on save', async () => {
+    const s = await setup();
+    s.settings.screenshots.autoCopy = false;
+    const { item } = await exportCapture(s);
+    const opened = await s.call('shot:openFromHistory', { historyId: item!.id });
+    await s.call('shot:saveOver', {
+      sessionId: opened.session.id,
+      format: 'png',
+      bytes: arrayBuffer(pngBytes(30, 20, 'second')),
+      project: { doc: { schema: 2, annotations: [] } },
+    });
+    expect(s.copied).toEqual([]);
   });
 
   it('Save over an old flattened item creates a project from the base image', async () => {

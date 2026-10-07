@@ -3,7 +3,9 @@ import {
   defaultShotFileName,
   detectImageFormat,
   isBlankBitmap,
+  isImportableImage,
   MAX_EXPORT_BYTES,
+  ShotKindSchema,
   validateImageBytes,
 } from '../../src/shared/shots';
 import {
@@ -99,6 +101,23 @@ describe('screenshot IPC schemas', () => {
       StartScreenshotRequestSchema.safeParse({ target: 'window', sourceId: '../etc' }).success,
     ).toBe(false);
     expect(StartScreenshotRequestSchema.safeParse({ target: 'video' }).success).toBe(false);
+    // "import" is where a session came from, not something to capture.
+    expect(StartScreenshotRequestSchema.safeParse({ target: 'import' }).success).toBe(false);
+    expect(ShotKindSchema.safeParse('import').success).toBe(true);
+  });
+
+  it('isImportableImage knows the opened formats by magic bytes, not by name', () => {
+    const bytes = (...values: number[]) => Uint8Array.from([...values, 0, 0, 0, 0, 0, 0]);
+    expect(isImportableImage(PNG)).toBe(true);
+    expect(isImportableImage(JPEG)).toBe(true);
+    expect(isImportableImage(bytes(0x47, 0x49, 0x46, 0x38, 0x39, 0x61))).toBe(true); // GIF89a
+    expect(isImportableImage(bytes(0x42, 0x4d))).toBe(true); // BMP
+    const webp = Uint8Array.from([0x52, 0x49, 0x46, 0x46, 9, 9, 9, 9, 0x57, 0x45, 0x42, 0x50]);
+    expect(isImportableImage(webp)).toBe(true);
+    const wav = Uint8Array.from([0x52, 0x49, 0x46, 0x46, 9, 9, 9, 9, 0x57, 0x41, 0x56, 0x45]);
+    expect(isImportableImage(wav)).toBe(false); // RIFF, but not WebP
+    expect(isImportableImage(Uint8Array.from([0x4d, 0x5a, 0x90, 0]))).toBe(false); // an .exe
+    expect(isImportableImage(new Uint8Array())).toBe(false);
   });
 
   it('bounds worker frames (size and dimensions)', () => {

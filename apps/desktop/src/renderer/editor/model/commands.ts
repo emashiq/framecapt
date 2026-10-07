@@ -125,6 +125,7 @@ const ALLOWED: Record<Annotation['type'], readonly (keyof AnnotationPatch)[]> = 
   magnifier: ['rect', 'zoom', 'color', 'width', ...SHAPE_STYLE],
   stamp: ['at', 'stamp', 'size', 'color', ...SHAPE_STYLE],
   ruler: ['from', 'to', 'color', 'width', ...SHAPE_STYLE],
+  image: ['rect', 'radius', ...SHAPE_STYLE],
   redact: ['rect'],
 };
 
@@ -148,6 +149,8 @@ const clamp = (value: number, min: number, max: number): number =>
 /** Largest number of points of one freehand stroke (keeps documents and hit tests bounded). */
 export const MAX_PEN_POINTS = 4000;
 export const MAX_TEXT_LENGTH = 2000;
+/** Largest width or height of an image layer in image px (keeps hit tests and drawing bounded). */
+export const MAX_IMAGE_SIDE = 32768;
 
 /** Brings every numeric field into its allowed range. Only touches fields the type has. */
 function clampAnnotation(annotation: Annotation): Annotation {
@@ -226,6 +229,15 @@ function isValid(annotation: Annotation): boolean {
       );
     case 'text':
       return finitePoint(annotation.at) && finite(annotation.fontSize) && annotation.fontSize > 0;
+    case 'image':
+      return (
+        finiteRect(annotation.rect) &&
+        annotation.rect.width >= 1 &&
+        annotation.rect.height >= 1 &&
+        annotation.rect.width <= MAX_IMAGE_SIDE &&
+        annotation.rect.height <= MAX_IMAGE_SIDE &&
+        /^[0-9a-f]{64}$/.test(annotation.assetId)
+      );
   }
 }
 

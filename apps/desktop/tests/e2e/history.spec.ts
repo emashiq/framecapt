@@ -21,6 +21,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 import { makeWebm, newId, seedHistory } from './history-fixtures';
 import { probeFile } from './media-fixtures';
 
@@ -87,9 +88,9 @@ const thumbFiles = (): string[] => {
 };
 const videosDir = (): string => path.join(userDataDir, 'videos', 'FrameCapt');
 
-async function goTo(name: 'Capture' | 'History', target: Page = page): Promise<void> {
+async function goTo(name: 'Home' | 'Library', target: Page = page): Promise<void> {
   await target.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
-  if (name === 'History') await expect(target.getByTestId('history-view')).toBeVisible();
+  if (name === 'Library') await expect(target.getByTestId('history-view')).toBeVisible();
   else await expect(target.getByTestId('shot-screen')).toBeVisible();
 }
 
@@ -151,8 +152,12 @@ async function canvasView(target: Page = page): Promise<CanvasView> {
   };
 }
 
-async function dragImage(from: { x: number; y: number }, to: { x: number; y: number }) {
-  const view = await canvasView();
+async function dragImage(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  target: Page = page,
+) {
+  const view = await canvasView(target);
   const scale = view.zoom / view.dpr;
   const at = (p: { x: number; y: number }) => ({
     x: view.left + view.panX + p.x * scale,
@@ -160,11 +165,11 @@ async function dragImage(from: { x: number; y: number }, to: { x: number; y: num
   });
   const a = at(from);
   const b = at(to);
-  await page.mouse.move(a.x, a.y);
-  await page.mouse.down();
-  await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 4 });
-  await page.mouse.move(b.x, b.y, { steps: 4 });
-  await page.mouse.up();
+  await target.mouse.move(a.x, a.y);
+  await target.mouse.down();
+  await target.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 4 });
+  await target.mouse.move(b.x, b.y, { steps: 4 });
+  await target.mouse.up();
 }
 
 async function decode(file: string) {
@@ -215,7 +220,7 @@ async function recordFor(ms: number): Promise<void> {
 
 test('a new history is empty and invites the first capture', async () => {
   await expect(page.getByTestId('recent-captures')).toContainText('No captures yet');
-  await goTo('History');
+  await goTo('Library');
   await expect(page.getByText('Your captures will appear here')).toBeVisible();
   await expect(page.getByTestId('history-empty-shot')).toBeVisible();
   await expect(page.getByTestId('history-empty-record')).toBeVisible();
@@ -228,25 +233,27 @@ let shotFile: string;
 let shotId: string;
 
 test('a saved screenshot appears in history with a thumbnail of the flattened image', async () => {
-  await goTo('Capture');
+  await goTo('Home');
   await page.getByTestId('shot-screen').click();
-  await expect(page.getByTestId('editor-view')).toBeVisible();
-  await expect(page.getByTestId('editor-dimensions')).toHaveText(
+  const editor = await editorPage(app);
+  await expect(editor.getByTestId('editor-view')).toBeVisible();
+  await expect(editor.getByTestId('editor-dimensions')).toHaveText(
     `${FRAME.width} × ${FRAME.height}`,
   );
   // A redaction over the middle of the picture: the history thumbnail must show it black.
-  await page.getByTestId('tool-redact').click();
-  await dragImage({ x: 900, y: 500 }, { x: 1500, y: 900 });
-  await expect(page.getByTestId('editor-canvas')).toHaveAttribute('data-annotations', '1');
+  await editor.getByTestId('tool-redact').click();
+  await dragImage({ x: 900, y: 500 }, { x: 1500, y: 900 }, editor);
+  await expect(editor.getByTestId('editor-canvas')).toHaveAttribute('data-annotations', '1');
 
   shotFile = path.join(outDir, 'Login screen.png');
   await stubSaveDialog(shotFile);
-  await page.getByTestId('editor-save').click();
+  await editor.getByTestId('editor-save').click();
   await expect.poll(() => fs.existsSync(shotFile), { timeout: 15_000 }).toBe(true);
-  await expect(page.getByText(/Saved to/).first()).toBeVisible();
+  await expect(editor.getByText(/Saved to/).first()).toBeVisible();
 
-  await page.getByTestId('editor-done').click();
-  await goTo('History');
+  await editor.getByTestId('editor-done').click();
+  await expectEditorClosed(app);
+  await goTo('Library');
   await expect(cards()).toHaveCount(1);
   const card = cards().first();
   await expect(card).toContainText('Login screen');
@@ -285,14 +292,14 @@ let recordingFile: string;
 let recordingId: string;
 
 test('a finished recording appears with a duration chip and a thumbnail, and the result view offers MP4', async () => {
-  await goTo('Capture');
+  await goTo('Home');
   await recordFor(1800);
   // MP4 export is offered right on the result view (this build has H.264).
   await expect(page.getByTestId('mp4-export')).toBeVisible();
   await page.getByTestId('result-new').click();
   await expect(page.getByTestId('record-screen')).toBeVisible();
 
-  await goTo('History');
+  await goTo('Library');
   await expect(cards()).toHaveCount(2);
   const card = cards().first(); // newest first
   await expect(card.getByTestId('history-type')).toContainText('webm');
@@ -314,13 +321,22 @@ test('a finished recording appears with a duration chip and a thumbnail, and the
     .toBeGreaterThan(0);
 });
 
-test('Recent captures on the home view shows the latest items and opens them', async () => {
-  await goTo('Capture');
+test('Recent captures on Home shows the latest items and opens them', async () => {
+  await goTo('Home');
   const recent = page.getByTestId('recent-captures');
   await expect(recent.getByTestId('recent-item')).toHaveCount(2);
   await expect(recent.getByTestId('recent-item').first()).toHaveAttribute('data-type', 'recording');
   await expect(recent.getByText(/^00:0[1-4]$/)).toBeVisible(); // the duration badge
-  await recent.getByTestId('recent-item').nth(1).click(); // the screenshot
+  // A screenshot opens as an editor tab, named after its file; the Library has its details.
+  await recent.getByTestId('recent-item').nth(1).click();
+  await expect(page.getByTestId('editor-tab')).toHaveCount(1);
+  await expect(page.getByTestId('editor-tab').getByTestId('tab-title')).toHaveText(
+    'Login screen.png',
+  );
+  await page.getByTestId('editor-tab').getByTestId('tab-close').click();
+  await expectEditorClosed(app);
+  await goTo('Library');
+  await cards().filter({ hasText: 'Login screen' }).locator('[data-card-main]').click();
   await expect(page.getByTestId('history-details')).toBeVisible();
   await expect(page.getByTestId('history-details')).toContainText('Login screen.png');
   await expect(page.getByTestId('history-image')).toHaveAttribute(
@@ -338,15 +354,17 @@ test('Recent captures on the home view shows the latest items and opens them', a
 
 test('filter and search narrow the list; an empty result says so', async () => {
   await expect(page.getByTestId('history-count')).toHaveText('2 items');
-  const filter = page.getByTestId('history-filter');
-  await filter.getByRole('radio', { name: 'Screenshots' }).click();
+  // The kinds are the sidebar's smart items (they replaced the filter chips).
+  const kind = (key: string) => page.locator(`[data-testid="folder-row"][data-path=":${key}"]`);
+  await kind('type:screenshot').click();
   await expect(cards()).toHaveCount(1);
   await expect(cards().first()).toContainText('Login screen');
-  await expect(page.getByTestId('history-count')).toHaveText('1 of 2 items');
-  await filter.getByRole('radio', { name: 'Recordings' }).click();
+  await expect(page.getByTestId('history-count')).toHaveText('1 item');
+  await expect(kind('type:screenshot').getByTestId('folder-count')).toHaveText('1');
+  await kind('type:recording').click();
   await expect(cards()).toHaveCount(1);
   await expect(cards().first().getByTestId('history-type')).toContainText('webm');
-  await filter.getByRole('radio', { name: 'All' }).click();
+  await kind('all').click();
   await expect(cards()).toHaveCount(2);
 
   const search = page.getByTestId('history-search');
@@ -513,8 +531,8 @@ test('a file deleted outside FrameCapt shows a calm missing state; nothing else 
   const othersBefore = [sha(recordingFile)];
   fs.rmSync(shotFile);
   // History checks the files whenever it loads: leaving and returning reloads it.
-  await goTo('Capture');
-  await goTo('History');
+  await goTo('Home');
+  await goTo('Library');
   const missing = page.locator('[data-card-main][data-missing]');
   await expect(missing).toHaveCount(1);
   const card = cards().filter({ has: missing });
@@ -522,12 +540,14 @@ test('a file deleted outside FrameCapt shows a calm missing state; nothing else 
   await expect(card).toContainText('Login screen');
   // The app is fine and the other files are untouched.
   expect(sha(recordingFile)).toBe(othersBefore[0]);
+  await page.getByTestId('library-more').click();
   await expect(page.getByTestId('history-clear-missing')).toHaveText('Clear 1 missing');
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('history-grid')).toBeVisible();
-  // The home strip says so as well.
-  await goTo('Capture');
-  await expect(page.getByTestId('recent-captures')).toContainText('File missing');
-  await goTo('History');
+  // Home's recent captures say so as well.
+  await goTo('Home');
+  await expect(page.getByTestId('recent-captures')).toContainText('File moved or deleted');
+  await goTo('Library');
 });
 
 test('Locate re-links a moved file, and refuses one of the wrong kind', async () => {
@@ -593,9 +613,10 @@ test('Delete file… asks first, names the file, and moves it to the Recycle Bin
 test('Remove on a missing card drops the entry and "Clear missing" cleans up several', async () => {
   const exported = path.join(outDir, 'Exported clip.mp4');
   fs.rmSync(exported);
-  await goTo('Capture');
-  await goTo('History');
+  await goTo('Home');
+  await goTo('Library');
   await expect(page.locator('[data-card-main][data-missing]')).toHaveCount(1);
+  await page.getByTestId('library-more').click();
   await page.getByTestId('history-clear-missing').click();
   await expect(page.getByText('Removed 1 missing item from history')).toBeVisible();
   await expect(cards()).toHaveCount(1);
@@ -610,7 +631,7 @@ test('a damaged history file is set aside at startup: one notice, files untouche
   await expect(
     page.getByText('History was reset because its file was damaged. Your files were not touched.'),
   ).toBeVisible();
-  await goTo('History');
+  await goTo('Library');
   await expect(page.getByText('Your captures will appear here')).toBeVisible();
   expect(
     fs.readdirSync(historyDir()).some((name) => name.startsWith('history.json.corrupt-')),
@@ -648,7 +669,7 @@ test('without an H.264 encoder MP4 export is explained and WebM stays the delive
       },
     ]);
     ({ app, page } = await launch(dir, { FRAMECAPT_E2E_NO_H264: '1' }));
-    await goTo('History');
+    await goTo('Library');
     await cards().first().locator('[data-card-main]').click();
     await expect(page.getByTestId('mp4-unavailable')).toHaveText(
       'MP4 export needs an FFmpeg build with H.264 — your recording is saved as WebM',

@@ -43,9 +43,9 @@ The clipboard: "Copy" puts the (flattened) image on the Windows clipboard, which
 
 ## Deleting your data
 
-- **Your captures**: delete the files in your screenshots and recordings folders (or use "Delete file" in History, which moves a file to the Recycle Bin). Uninstalling never deletes them.
+- **Your captures**: delete the files in your screenshots and recordings folders (or use "Delete file" in the Library, which moves a file to the Recycle Bin). Uninstalling never deletes them.
 - **FrameCapt's own data**: quit FrameCapt, then delete `%APPDATA%\FrameCapt`. This removes settings, history, thumbnails, unfinished recordings, logs and test clips. Uninstalling FrameCapt keeps this folder on purpose so a reinstall continues where it left off.
-- **History only**: remove entries in the History view ("Remove from history" keeps the file; "Clear missing" removes entries whose files are gone).
+- **History only**: remove entries in the Library ("Remove from history" keeps the file; "Clear missing" removes entries whose files are gone).
 - **Launch at login**: switch it off in Settings (uninstalling also removes the entry).
 
 ## Changes to this statement

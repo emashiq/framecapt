@@ -107,6 +107,14 @@ The Capture view shows one calm card per candidate: "We found an unfinished reco
 
 `before-quit` stops the recording and waits for finalization with a hard cap of 15 s. When the cap is exceeded the running ffmpeg process is killed, the app quits, and the manifest stays `stopping`/`finalizing` for the next start. The renderer is never asked to quit before the recorder had the chance to flush.
 
+### 7.1 Save format and compression (post-processing)
+
+Since ADR-049 the single setting below is two: `recording.saveFormat` (webm, mp4, mkv, gif) and `recording.compression` (off, light, balanced, strong). `FinalizeService` (src/main/history/finalize-service.ts, the old compress service generalized) runs after a saved single-source WebM; WebM + off does nothing. `convertArgs` (src/main/media/convert.ts) builds the ffmpeg arguments: MKV + off is `-map 0 -c copy`; MP4/MKV re-encode with libx264 medium (CRF 23/28/32, AAC 128/96/64 k; MP4 + off is CRF 20 veryfast, AAC 160 k); WebM with libvpx-vp9 `-b:v 0` (CRF 33/38/43, row-mt, good, cpu-used 4, Opus 96/64/48 k); GIF is `fps=12`, width at most 1280, `palettegen`/`paletteuse`, no audio, a recording over 60 s is skipped. `verifyConvert` checks the container, codecs, audio and length (GIF: 5 % or 0.6 s). The `.fcap` is never converted. The live recorder's bitrate factor is off/light 1.0, balanced 0.6, strong 0.45 (`recording.compression` option; the older boolean `compressed` still parses and means balanced). The rest of this section describes the original MP4-only job, whose verify-then-trash sequence still applies.
+
+#### Original description (compressed storage)
+
+With the setting `recording.storage = 'compressed'`, a saved single-source WebM is queued as a compress job (`CompressService`, on the shared `JobRunner`) after the session was finalized and added to history. The job writes `<name>.mp4` through a `.partial` file (libx264 medium, CRF 28, yuv420p, even scale, AAC 96 kbps, `+faststart`), probes it (H.264, audio kept, duration within 0.5 s), renames it, updates the history item in place (path, format, size; id, thumbnail and date kept) and only then moves the WebM to the Recycle Bin (`shell.trashItem`). Failure, cancel or quit leave the WebM and its history item unchanged and remove the partial file; quitting cancels the running job like a running MP4 export. The setting is read at save time and is not part of the session manifest; the recorder only gets an optional `compressed` option (video bitrate x 0.6), so older manifests parse unchanged. Sessions that are recovered are not compressed automatically.
+
 ## 8. Measured limits
 
 Host: Windows 11 Pro 10.0.26300, AMD Ryzen 7 7700, 63 GB RAM, Electron 44.5.1, FFmpeg 9.0.2 essentials, userData volume with 242.7 GB free (`fs.statfs` works there: `bavail * bsize`). Evidence: `docs/evidence/phase06/ffmpeg-integration.json` (real ffmpeg, synthetic VP9 + Opus live stream cut at arbitrary points) and `docs/evidence/phase06/recovery-native.json` (real screen + system audio recordings, process tree killed).
@@ -159,3 +167,94 @@ A stream cut inside a block or cluster is repaired up to the last complete clust
 ## 9. Verification
 
 Unit and integration (`npm test`, including the real-ffmpeg tests, skipped with a message when `vendor/ffmpeg` is absent), `npm run test:e2e` (banner, Recover/Discard, quit cap and resume, low-disk start refusal and stop, normal finalization probes) and `npm run test:native` (normal recording probes, forced kill and recovery on the real host). The packaged app was started once from `out/FrameCapt-win32-x64/FrameCapt.exe`; its `main.log` showed `ffmpeg ok ffmpeg version 9.0.2-essentials_build-www.gyan.dev ...` (the packaged path `resources/ffmpeg/win32-x64` resolves).
+
+## 10. Multi-source recordings and the `.fcap` container (2026-10-07)
+
+Owner request: record several screens or windows together and keep them in a format that only FrameCapt plays, from which a source (or a part of the time) can be extracted. A single-source recording is unchanged (`.webm`, `.mp4`); only a recording of 2 to 4 sources becomes a `.fcap`.
+
+### 10.1 What is recorded
+
+- `recorder:start` takes `target: 'multi'` with `sources: [{ sourceId }]`, 2 to 4 entries, no duplicates, ids of the usual `screen:<n>:<n>` / `window:<n>:<n>` shape. The controller checks every source against a fresh `listSources` (screens and windows) before anything starts and again after the selection step (`SOURCE_MISSING`), opens no overlay, ignores follow-mouse, runs the countdown on the primary display and places the toolbar as usual.
+- The engine acquires the display streams **one after the other** (a capture grant is one-shot per webContents). System audio is requested for the first source only; the microphone is as usual.
+- One canvas, one MediaRecorder: every source is a tile of one picture (`createCompositor`). Screens only: layout `virtual`, each display at its physical position on the virtual desktop (`bounds * scaleFactor`, negative origins included). Any window among the sources: layout `grid` of equal cells, every tile fitted into its cell. A tile fits ("letterboxed") its cell at the size its source has **now**, so a window that is resized while recorded keeps its shape.
+- The **whole** picture is capped (`mosaicLimit`): quality `1080p` allows at most 3840 x 2160 and 3840 x 1080 pixels; `source` allows at most 7680 across and 8.3 million pixels. Sides are even; nothing is upscaled. The video bitrate comes from the output size (`videoBitrate`, times 0.6 with compressed storage).
+- A source that ends (screen unplugged, window closed) blanks its tile (a neutral "Source ended" tile), the engine sends `tileLost { index }`, main logs it and the toolbar shows a warning badge; the recording goes on. When **every** source has ended the recording stops as it does today (`sourceLost`).
+
+### 10.2 Session and manifest
+
+`manifest.source.kind` and `completed/<id>.json` `source.kind` accept `multi`, and the manifest gets an optional `layout: { width, height, sources: [{ name, kind, rect }] }`, so older manifests still parse. The names are generic (`Screen 1`, `Window 2`, by position): window titles are never written (security review S-05, extended in section 15). The rectangles are the tiles the engine reports in its `prepared` event.
+
+### 10.3 Finalization
+
+1. The usual remux of `stream.webm` (section 5), but into `remuxed.webm` **inside the session directory**, never the output folder.
+2. A `.fcap` is written to `<outputDir>/.framecapt-<sessionId>.fcap.partial` (header, then the remuxed WebM copied in 1 MB pieces, flushed), checked (the header is parsed back against the file size) and renamed to a free `FrameCapt YYYY-MM-DD at HH.mm.ss.fcap` (` (2)`, ... on a collision, never overwritten).
+3. The temporary WebM and the partial are removed on every path; then the session completes as in section 5 (record `completed/<id>.json` with the `.fcap` path, session directory deleted).
+
+A failed remux of a multi-source session does **not** fall back to the raw copy of section 5 (a raw stream has no header and would be an orphan): the data is kept and Recover is offered. Not enough free space for the `.fcap` is `LOW_DISK`. The thumbnail is made by history from the `.fcap` payload through `mediaInputArgs` (10.5), not from a separate temporary file.
+
+### 10.4 The `.fcap` format, version 1
+
+All integers are little-endian. A file is exactly the header block (4096 bytes) followed by the payload.
+
+| Bytes   | Content                                                                                 |
+| ------- | --------------------------------------------------------------------------------------- |
+| 0..4    | `46 43 41 50 00` = ASCII `FCAP` and a zero byte                                         |
+| 5       | format version, `1`                                                                     |
+| 6..7    | reserved, `00 00`                                                                       |
+| 8..11   | `u32` length of the JSON header in bytes (1 .. 65536, and it must end before byte 4096) |
+| 12 ..   | the JSON header, UTF-8                                                                  |
+| ..4095  | zero padding                                                                            |
+| 4096 .. | the payload: an ordinary WebM, `payloadLength` bytes                                    |
+
+JSON header (strict: no other keys):
+
+```json
+{
+  "version": 1,
+  "width": 3840,
+  "height": 1080,
+  "durationMs": 12345,
+  "hasAudio": true,
+  "createdAt": 1760000000000,
+  "sources": [
+    {
+      "name": "Screen 1",
+      "kind": "screen",
+      "rect": { "x": 0, "y": 0, "width": 1920, "height": 1080 }
+    },
+    {
+      "name": "Window 2",
+      "kind": "window",
+      "rect": { "x": 1920, "y": 0, "width": 1920, "height": 1080 }
+    }
+  ],
+  "payloadOffset": 4096,
+  "payloadLength": 5000000,
+  "payloadType": "video/webm"
+}
+```
+
+`rect` is the source's tile in the recorded picture, in pixels. Window titles are never stored.
+
+Reader rules (`src/main/recording/fcap.ts`, `parseFcapHeader`): wrong magic, a short file or a non-zero byte after the magic -> `NOT_FCAP`; a version other than 1 -> `UNSUPPORTED_VERSION`; a JSON length of 0 or above 64 KB or beyond byte 4096, non-zero reserved bytes, invalid JSON, any schema violation (types, extra keys, 1..4 sources, a source outside the picture, `payloadOffset != 4096`, another `payloadType`) -> `CORRUPT`; a header that needs more bytes than the file has, or a payload that ends past the end of the file -> `TRUNCATED`. Version 1 fixes the payload offset at 4096, so a reader needs no more than the first 4096 bytes. A future incompatible version gets a new version byte.
+
+### 10.5 Reading it
+
+- **Media protocol** (`media-protocol.ts`, `range.ts`): for a `.fcap` the protocol serves the **payload** only, as a file that starts at byte 0 and is `payloadLength` long, `Content-Type: video/webm`. `Range` requests are answered in payload coordinates (`planMediaSlice`: `206` with `Content-Range: bytes a-b/<payloadLength>`, suffix ranges count from the payload's end, `416` with `bytes */<payloadLength>`), read from the file at `offset + a`. The header is cached by path, size and modification time. A file with an invalid header is `404`.
+- **ffmpeg** (`src/main/media/ffmpeg.ts`): `mediaInputArgs({ path, format })` is the one function that builds an input; for `fcap` it is `-protocol_whitelist file -skip_initial_bytes 4096 -f matroska -i <path>` (the same absolute-path and file-protocol rules as every other input). `-ss` before it seeks inside the payload. Used for the history thumbnail, `ffprobe` (the `format` option of `MediaTools.probe`), relinking and extracting. `tests/unit/fcap-integration.test.ts` runs the real ffmpeg: probe, `-ss` into the middle with a decoded frame that differs from the first one, a full decode without errors, a thumbnail and an extract. `skip_initial_bytes` and seeking work together, so no temporary payload file is needed.
+- **Other players** cannot open the file (by design); "Open" in History shows the details view in FrameCapt instead of calling the shell.
+
+### 10.6 Recovery, History, Extract
+
+- An interrupted multi-source session (`manifest.layout` present) is finished the same way by startup recovery and by **Recover** (`... (recovered).fcap`); its partial file is `.framecapt-<id>.fcap.partial`, the only temporary name recovery deletes for such a session (the usual rule: the name must match the manifest's plan and carry the session id).
+- History: `format: 'fcap'`, `source: 'multi'`. `HistoryItemView.layout` carries the picture size and the sources from the header (null when the header cannot be read: the card stays, the details view says the file cannot be read). Rescan reads the header instead of running ffprobe. MP4 export and compressed storage accept WebM only and skip an `.fcap`.
+- **Extract** (`history:extractFcap { id, sourceIndex | null, startMs, endMs, format: 'mp4' | 'webm' }`, role `main`, strict): one `JobRunner` job (one ffmpeg job at a time, shared with exports; progress and cancel use the `export:*` events and `export:cancel`, kind `extract`). The ffmpeg arguments seek the payload, cut a length (`-ss` before the input, `-t`), crop the source's rectangle (`crop=w:h:x:y`) and make the sides even; MP4 is H.264 + AAC, WebM is VP9 + Opus. The output is `<name> - Screen 1.mp4` (`<name> - All.mp4` for the whole picture) next to the `.fcap`, written through a partial file, probed (container, codec, size, length within 0.6 s, audio kept) and renamed; it becomes a new history item with `derivedFrom` = the `.fcap`. The `.fcap` is only read.
+- Hook for editing: `layoutSourceRect(layout, index)` (`src/shared/recording-layout.ts`) returns a source's crop rectangle; a later editor opens a source through it and `mediaInputArgs`.
+
+### 10.7 Not covered
+
+- Windows are captured as the OS delivers them (a minimized window may deliver nothing: its tile stays black until it returns); a window that is resized is letterboxed, not re-laid-out.
+- Mixed-DPI screens are placed by `bounds * scaleFactor`; two displays whose physical edges differ by a pixel overlap by up to that pixel.
+- The screenshot button of the toolbar takes a still of the **first** source only.
+- No per-source audio: one mixed track (first source's system audio, microphone).
+- Real capture of several screens/windows and a real unplugged source were not run in this change (native checks pending); the unit, real-ffmpeg and mock-capture E2E layers are covered.

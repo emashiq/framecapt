@@ -23,6 +23,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from '../e2e/app-exit';
+import { editorPage, expectEditorClosed } from '../e2e/editor-window';
 import { redactPaths, writeEvidenceJson, evidenceDirFor } from './evidence';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -313,17 +314,20 @@ async function closeColorWindow(id: number): Promise<void> {
 }
 
 async function leaveResult(): Promise<void> {
-  await page.getByTestId('editor-done').click();
-  const confirm = page.getByTestId('confirm-yes');
-  if (await confirm.isVisible().catch(() => false)) await confirm.click();
-  await expect(page.getByTestId('editor-view')).toHaveCount(0);
+  const editor = await editorPage(app);
+  await editor.getByTestId('editor-done').click();
+  await editor
+    .getByTestId('confirm-yes')
+    .click({ timeout: 1500 })
+    .catch(() => undefined);
+  await expectEditorClosed(app);
   await expect(page.getByTestId('shot-region')).toBeVisible();
 }
 
 async function saveCurrentResult(name: string): Promise<string> {
   const target = path.join(outDir, name);
   await stubSaveDialog(target);
-  await page.getByTestId('editor-save').click();
+  await (await editorPage(app)).getByTestId('editor-save').click();
   await expect.poll(() => fs.existsSync(target), { timeout: 15_000 }).toBe(true);
   return target;
 }
@@ -402,7 +406,7 @@ test('(a) Screenshot > Screen: picking each display exports its exact physical s
       await expect(overlay.getByTestId('overlay-pick')).toHaveAttribute('data-active', 'true');
       const clicked = Date.now();
       await overlay.mouse.click(300, 300);
-      await expect(page.getByTestId('editor-dimensions')).toHaveText(
+      await expect((await editorPage(app)).getByTestId('editor-dimensions')).toHaveText(
         `${display.physicalSize.width} × ${display.physicalSize.height}`,
         { timeout: 20_000 },
       );
@@ -427,7 +431,7 @@ test('(a) Screenshot > Screen: picking each display exports its exact physical s
 
       // Copy puts the same image on the clipboard.
       if (display === displays[0]) {
-        await page.getByTestId('editor-copy').click();
+        await (await editorPage(app)).getByTestId('editor-copy').click();
         await expect(page.getByText('Copied to clipboard')).toBeVisible();
         const clip = await app.evaluate(async ({ clipboard, nativeImage }) => {
           const items = await clipboard.read();
@@ -502,9 +506,12 @@ test('(b)+(d) Region fidelity on every display: exact size, exact inset, no over
       await expect(overlay.getByTestId('size-label')).toHaveText('400 × 300');
       const enterAt = Date.now();
       await pressClosing(overlay, 'Enter');
-      await expect(page.getByTestId('editor-dimensions')).toHaveText('400 × 300', {
-        timeout: 15_000,
-      });
+      await expect((await editorPage(app)).getByTestId('editor-dimensions')).toHaveText(
+        '400 × 300',
+        {
+          timeout: 15_000,
+        },
+      );
       timings[`regionConfirmToResultMs_${display.id}`] = Date.now() - enterAt;
       await expectNoOverlays();
       const exact = await saveCurrentResult(`region-exact-${display.id}.png`);
@@ -520,9 +527,12 @@ test('(b)+(d) Region fidelity on every display: exact size, exact inset, no over
       await drag(overlay2, [180, 130], [620, 470]);
       await expect(overlay2.getByTestId('size-label')).toHaveText('440 × 340');
       await pressClosing(overlay2, 'Enter');
-      await expect(page.getByTestId('editor-dimensions')).toHaveText('440 × 340', {
-        timeout: 15_000,
-      });
+      await expect((await editorPage(app)).getByTestId('editor-dimensions')).toHaveText(
+        '440 × 340',
+        {
+          timeout: 15_000,
+        },
+      );
       const wide = await saveCurrentResult(`region-expanded-${display.id}.png`);
       expect(pngSize(wide)).toEqual({ width: 440, height: 340 });
       keepEvidence(wide, `region-expanded-${display.id}.png`);
@@ -605,7 +615,7 @@ test('(d) The hint pill and dim never reach the output (selection under the pill
       clip: { x: centerX - 700, y: 0, width: 1400, height: 420 },
     });
     await pressClosing(overlay, 'Enter');
-    await expect(page.getByTestId('editor-dimensions')).toHaveText('600 × 152', {
+    await expect((await editorPage(app)).getByTestId('editor-dimensions')).toHaveText('600 × 152', {
       timeout: 15_000,
     });
     const file = await saveCurrentResult('region-under-pill.png');
@@ -635,7 +645,7 @@ test('region selection can be dragged past the screen edge and is clamped to the
   );
   await expect(overlay.getByTestId('overlay-hint')).toContainText('Selections stay on one screen');
   await pressClosing(overlay, 'Enter');
-  await expect(page.getByTestId('editor-dimensions')).toHaveText(
+  await expect((await editorPage(app)).getByTestId('editor-dimensions')).toHaveText(
     `${display.physicalSize.width} × ${display.physicalSize.height}`,
     { timeout: 20_000 },
   );
@@ -687,11 +697,12 @@ test('(c) Window screenshot of a real external window; minimized and vanished wi
     const sourceId = (await card.getAttribute('data-source-id')) as string;
     const started = Date.now();
     await card.click();
-    await expect(page.getByTestId('editor-dimensions')).toHaveText(/\d+ × \d+/, {
+    await expect((await editorPage(app)).getByTestId('editor-dimensions')).toHaveText(/\d+ × \d+/, {
       timeout: 20_000,
     });
     timings.windowCaptureMs = Date.now() - started;
-    const dims = (await page.getByTestId('editor-dimensions').textContent()) ?? '';
+    const dims =
+      (await (await editorPage(app)).getByTestId('editor-dimensions').textContent()) ?? '';
     const [capturedW, capturedH] = (/(\d+) × (\d+)/.exec(dims) ?? []).slice(1).map(Number) as [
       number,
       number,
@@ -742,7 +753,7 @@ test('(c) Window screenshot of a real external window; minimized and vanished wi
       const error = page.getByText(
         "That window is minimized or can't be captured. Restore it and try again.",
       );
-      const result = page.getByTestId('editor-dimensions');
+      const result = (await editorPage(app)).getByTestId('editor-dimensions');
       await expect
         .poll(async () => (await error.count()) + (await result.count()), { timeout: 20_000 })
         .toBeGreaterThan(0);

@@ -48,7 +48,7 @@ Fuses (read back from the **installed** exe by `smoke:installed`): RunAsNode off
 
 Observed on this host: a silent install takes about 6 s. **A silent install does not start the app** (Squirrel launches the app with `--squirrel-firstrun` only after an interactive install); `smoke:installed` therefore starts `FrameCapt.exe --squirrel-firstrun` itself to prove that flag starts the UI normally (it used to quit: fixed).
 
-Squirrel runs the app with `--squirrel-install` / `--squirrel-updated` (create shortcuts and exit), `--squirrel-uninstall` (remove shortcuts and the launch-at-login entry, exit) and `--squirrel-obsolete` (exit); `src/main/squirrel.ts` handles them without starting the UI (spawn with `shell: false`).
+Squirrel runs the app with `--squirrel-install` / `--squirrel-updated` (create shortcuts and exit), `--squirrel-uninstall` (remove shortcuts and the launch-at-login entry, ask whether to remove user data, exit) and `--squirrel-obsolete` (exit); `src/main/squirrel.ts` handles them without starting the UI (spawn with `shell: false`).
 
 ### Defect found and fixed: the installer made a network request
 
@@ -63,21 +63,21 @@ Following the Electron docs literally (`args: ['--processStart', '"FrameCapt.exe
 `Update.exe --uninstall -s` (also what Programs and Features runs). Verified on this host:
 
 - Removed: the program files, both shortcuts, the Programs and Features entry, the launch-at-login entry.
-- **Kept on purpose**: `%APPDATA%\FrameCapt` (settings, history database, unfinished sessions, logs: the user's data, and a reinstall continues where it left off) and every capture folder (`Pictures\FrameCapt`, `Videos\FrameCapt`, or the folders chosen in Settings). The uninstall never touches them: `smoke:installed` puts sentinel files in both default capture folders and in `%APPDATA%\FrameCapt` and checks them afterwards.
+- **Asked, default Keep**: the uninstall hook asks "Remove your FrameCapt data too?" (Keep my data / Remove; no answer within 8 s means Keep). Keep leaves `%APPDATA%\FrameCapt` (settings, history database, unfinished sessions, logs) and every capture folder (`Pictures\FrameCapt`, `Videos\FrameCapt`, or the folders chosen in Settings) untouched, and a reinstall continues where it left off. Remove deletes `%APPDATA%\FrameCapt`; the box "Also move my screenshots and recordings to the Recycle Bin" (unchecked by default) additionally sends the captures to the Recycle Bin (a default folder as a whole only if it holds nothing but FrameCapt's own files, otherwise only the files listed in history). No question is asked while FrameCapt is running, when there is no data folder, or when `FRAMECAPT_UNINSTALL_KEEP=1` is set. `smoke:installed` sets that variable, puts sentinel files in both default capture folders and in `%APPDATA%\FrameCapt`, and checks them afterwards. The dialog itself needs a person and is a manual check (see ADR-034).
 - Known Squirrel.Windows behavior, not a FrameCapt defect: the running updater cannot delete itself, so about 3.8 MB remain in `%LOCALAPPDATA%\FrameCapt` (`Update.exe`, a `.dead` marker, `app-<v>\squirrel.exe`) and an empty `FrameCapt contributors` Start Menu folder is left. No FrameCapt file (exe, asar, FFmpeg) remains. Deleting that folder by hand is safe.
 
-To remove user data as well, delete `%APPDATA%\FrameCapt` after uninstalling (the capture folders are yours: delete them only if you mean to).
+To remove user data later (after choosing Keep, or with the portable zip), delete `%APPDATA%\FrameCapt` (the capture folders are yours: delete them only if you mean to).
 
 ## Data locations
 
-| Location                                           | Holds                                                                                     | On uninstall           |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------- |
-| `%LOCALAPPDATA%\FrameCapt`                         | The program (Squirrel)                                                                    | removed (stub remains) |
-| `%APPDATA%\FrameCapt`                              | `settings.json`, history, `recordings`/`shots` sessions, `logs\main.log`, Chromium caches | **kept**               |
-| `Pictures\FrameCapt`, `Videos\FrameCapt` (default) | Screenshots, recordings, MP4 exports                                                      | **kept**               |
-| `HKCU\...\Run`                                     | Launch at login entry (optional)                                                          | removed                |
+| Location                                           | Holds                                                                                     | On uninstall                                  |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `%LOCALAPPDATA%\FrameCapt`                         | The program (Squirrel)                                                                    | removed (stub remains)                        |
+| `%APPDATA%\FrameCapt`                              | `settings.json`, history, `recordings`/`shots` sessions, `logs\main.log`, Chromium caches | kept unless you choose Remove                 |
+| `Pictures\FrameCapt`, `Videos\FrameCapt` (default) | Screenshots, recordings, MP4 exports                                                      | kept unless you also tick the Recycle Bin box |
+| `HKCU\...\Run`                                     | Launch at login entry (optional)                                                          | removed                                       |
 
-Output folders can be moved in Settings; the app never deletes a capture on uninstall, history cleanup or export.
+Output folders can be moved in Settings; the app never permanently deletes a capture: history cleanup and export leave files alone, and the uninstall option only moves them to the Recycle Bin.
 
 ## Network behavior
 

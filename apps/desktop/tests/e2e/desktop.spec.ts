@@ -18,6 +18,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { exitApp } from './app-exit';
+import { editorPage, expectEditorClosed } from './editor-window';
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 
@@ -90,7 +91,7 @@ const settingsFile = (dir: string): string => path.join(dir, 'settings.json');
 const readSettings = (dir: string): Record<string, Record<string, unknown>> =>
   fs.existsSync(settingsFile(dir)) ? JSON.parse(fs.readFileSync(settingsFile(dir), 'utf8')) : {};
 
-async function goTo(page: Page, name: 'Capture' | 'History' | 'Settings'): Promise<void> {
+async function goTo(page: Page, name: 'Home' | 'Library' | 'Settings'): Promise<void> {
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name }).click();
 }
 
@@ -348,7 +349,7 @@ test.describe('settings', () => {
     await openSettings(page, 'storage');
     await page.getByTestId('folder-change-screenshots').click();
     await expect.poll(() => readSettings(dir).screenshots?.outputDir).toBe(out);
-    await goTo(page, 'Capture');
+    await goTo(page, 'Home');
 
     await app.evaluate(({ dialog }) => {
       (globalThis as unknown as { __saveOptions: unknown }).__saveOptions = null;
@@ -365,8 +366,9 @@ test.describe('settings', () => {
     await overlay.mouse.move(700, 450, { steps: 5 });
     await overlay.mouse.up();
     await overlay.keyboard.press('Enter').catch(() => undefined);
-    await expect(page.getByTestId('editor-view')).toBeVisible();
-    await page.getByTestId('editor-save').click();
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-view')).toBeVisible();
+    await editor.getByTestId('editor-save').click();
     await expect
       .poll(() => fs.readdirSync(out).filter((name) => name.endsWith('.png')).length)
       .toBe(1);
@@ -388,16 +390,17 @@ test.describe('settings', () => {
     await overlay.mouse.move(800, 500, { steps: 5 });
     await overlay.mouse.up();
     await overlay.keyboard.press('Enter').catch(() => undefined);
-    await expect(page.getByTestId('editor-view')).toBeVisible();
-    await expect(page.getByText('Saved to', { exact: false })).toBeVisible();
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-view')).toBeVisible();
+    await expect(editor.getByText('Saved to', { exact: false })).toBeVisible();
     const folder = path.join(dir, 'pictures', 'FrameCapt');
     await expect.poll(() => fs.existsSync(folder) && fs.readdirSync(folder).length).toBe(1);
     expect(fs.readdirSync(folder)[0]).toMatch(/\.jpg$/);
     // Nothing is unsaved yet: leaving the editor does not ask.
-    await page.getByTestId('editor-done').click();
-    await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
+    await editor.getByTestId('editor-done').click();
+    await expectEditorClosed(app); // closed on its own: nothing was asked
     await expect(page.getByTestId('shot-region')).toBeVisible();
-    await goTo(page, 'History');
+    await goTo(page, 'Library');
     await expect(page.getByTestId('history-grid').locator('li')).toHaveCount(1);
   });
 });
@@ -414,9 +417,11 @@ test.describe('shortcuts', () => {
         'Ctrl+Shift+1',
         'Ctrl+Shift+2',
         'Ctrl+Shift+3',
+        'Ctrl+Shift+4',
         'Ctrl+Shift+5',
         'Ctrl+Shift+6',
         'Ctrl+Shift+7',
+        'Ctrl+Shift+8',
         'Ctrl+Shift+9',
       ].sort(),
     );
@@ -451,9 +456,9 @@ test.describe('shortcuts', () => {
       .poll(() => hooks(app, (h) => [...h.heldShortcuts()].includes('Ctrl+Alt+Q')))
       .toBe(true);
     expect(await hooks(app, (h) => [...h.heldShortcuts()].includes('Ctrl+Shift+7'))).toBe(false);
-    expect(await hooks(app, (h) => h.heldShortcuts().size)).toBe(8);
+    expect(await hooks(app, (h) => h.heldShortcuts().size)).toBe(10);
 
-    await goTo(page, 'Capture');
+    await goTo(page, 'Home');
     await expect(page.getByTestId('hint-recordRegion')).toContainText('Q');
     const menu = await hooks(app, (h) => h.trayMenu());
     const record = menu.find((item) => item.label === 'Record')?.submenu as {
@@ -495,7 +500,7 @@ test.describe('shortcuts', () => {
     await expect(page.getByTestId('shortcut-value-recordWindow')).toHaveText('Not set');
     await expect.poll(() => readSettings(dir).shortcuts?.recordWindow).toBeNull();
     expect(await hooks(app, (h) => [...h.heldShortcuts()].includes('Ctrl+Shift+6'))).toBe(false);
-    await goTo(page, 'Capture');
+    await goTo(page, 'Home');
     await expect(page.getByTestId('hint-recordWindow')).toHaveText('Not set');
     // And back to the default.
     await openSettings(page, 'shortcuts');
@@ -719,14 +724,15 @@ test.describe('keyboard and focus', () => {
       if (id === 'shot-region') break;
     }
     expect(order.at(-1)).toBe('shot-region');
-    // A fresh profile: skip link, the title bar's menu bar (one tab stop), command center and
-    // three tabs, help, the first-run card's "Got it", the tip's "Got it", then
-    // the three screenshot buttons (was 11 before the menu bar and the command center).
-    expect(order.length).toBeLessThanOrEqual(13);
-    // Skip link, then the title bar, then the navigation, then the content.
+    // A fresh profile: skip link, the title bar's menu bar (one tab stop) and command center, the
+    // icon rail (one tab stop), the Home tab, the "Change" link of the save location, the first-run
+    // card's "Got it", the tip's "Got it", then the first screenshot tile.
+    expect(order.length).toBeLessThanOrEqual(10);
+    // Skip link, then the title bar, then the rail and the tab strip, then the content.
     expect(order[0]).toBe('skip-link');
     expect(order.slice(1, 5).join(' ')).toContain('menubar-file');
-    expect(order.slice(1, 6).join(' ')).toContain('Capture');
+    expect(order.slice(1, 6).join(' ')).toContain('rail-home');
+    expect(order.slice(1, 7)).toContain('home-tab');
 
     await page.keyboard.press('Enter');
     const overlay = await overlayFor(app, '1001');
@@ -746,13 +752,16 @@ test.describe('keyboard and focus', () => {
     await expect(overlay.getByTestId('size-label')).toHaveText('1279 × 710');
     await pressClosing(overlay, 'Enter');
 
-    await expect(page.getByTestId('editor-view')).toBeVisible();
-    await expect(page.getByTestId('editor-dimensions')).toHaveText('1279 × 710');
+    const editor = await editorPage(app);
+    await expect(editor.getByTestId('editor-view')).toBeVisible();
+    await expect(editor.getByTestId('editor-dimensions')).toHaveText('1279 × 710');
     // The canvas has the focus, so the keyboard works without a click.
-    await expect(page.getByTestId('editor-canvas')).toBeFocused();
-    await page.keyboard.press('Control+s');
-    await expect.poll(() => fs.existsSync(out)).toBe(true);
-    await expect(page.getByText('Saved to', { exact: false })).toBeVisible();
+    await expect(editor.getByTestId('editor-canvas')).toBeFocused();
+    await editor.keyboard.press('Control+s');
+    // Normally well under a second; about one run in twenty the export (OffscreenCanvas
+    // convertToBlob) stalls for about 6 s (measured), so the default 5 s poll was too tight.
+    await expect.poll(() => fs.existsSync(out), { timeout: 20_000 }).toBe(true);
+    await expect(editor.getByText('Saved to', { exact: false })).toBeVisible();
   });
 
   test('Esc on the overlay returns focus to the trigger; the main window is focused again', async () => {
@@ -783,7 +792,7 @@ test.describe('keyboard and focus', () => {
     await second.keyboard.press('ArrowRight');
     await pressClosing(second, 'Enter');
     await expect.poll(async () => (await mainWindowState(app, page)).visible).toBe(true);
-    await expect(page.getByTestId('editor-view')).toBeVisible();
+    await expect((await editorPage(app)).getByTestId('editor-view')).toBeVisible();
   });
 
   test('the overlay ignores the pointer until it is on screen (data-ready)', async () => {
@@ -857,7 +866,7 @@ test.describe('keyboard and focus', () => {
     const { page } = await start();
     const trigger = page
       .getByRole('navigation', { name: 'Primary' })
-      .getByRole('button', { name: 'History' });
+      .getByRole('button', { name: 'Library' });
     await trigger.focus();
     await page.keyboard.press('?');
     const help = page.getByTestId('keyboard-help');
@@ -879,7 +888,7 @@ test.describe('keyboard and focus', () => {
     await page.keyboard.press('Escape');
     // Typing a question mark in a text field does not open it.
     await page.getByTestId('settings-nav-general').count();
-    await goTo(page, 'History');
+    await goTo(page, 'Library');
   });
 
   test('every settings control has an accessible name and a description', async () => {
@@ -999,7 +1008,7 @@ test.describe('idle', () => {
     expect(after.activeIntervals).toBe(0);
 
     // Settings and History are idle too.
-    for (const name of ['Settings', 'History'] as const) {
+    for (const name of ['Settings', 'Library'] as const) {
       await goTo(page, name);
       await page.waitForTimeout(800);
       const start0 = await readLog();

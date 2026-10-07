@@ -12,6 +12,7 @@ const SOURCE_TEXT: Record<RecoveryCandidate['sourceKind'], string> = {
   screen: 'Screen',
   window: 'Window',
   region: 'Region',
+  multi: 'Multiple sources',
   unknown: 'Unknown',
 };
 
