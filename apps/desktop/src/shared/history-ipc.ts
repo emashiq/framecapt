@@ -62,6 +62,10 @@ export const HistoryItemViewSchema = z.object({
   layout: RecordingLayoutSchema.nullable().optional(),
   /** Steps of a step guide (type `flow`); absent for everything else. */
   stepCount: z.number().int().min(0).optional(),
+  /** The library folder the file sits in (`Clients/Acme`); absent = the library root. */
+  folder: z.string().optional(),
+  /** The file is outside both capture folders ("Other locations"). */
+  outside: z.boolean().optional(),
 });
 export type HistoryItemView = z.infer<typeof HistoryItemViewSchema>;
 

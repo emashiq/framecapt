@@ -56,6 +56,14 @@ describe('ipc contract', () => {
       'history:saveCopy',
       'history:startDrag',
       'history:undoRemove',
+      'library:createFolder',
+      'library:deleteFolder',
+      'library:moveContentsUp',
+      'library:moveItems',
+      'library:renameFolder',
+      'library:reveal',
+      'library:setCaptureFolder',
+      'library:tree',
       'overlay:cancel',
       'overlay:confirm',
       'overlay:getInit',
@@ -133,6 +141,7 @@ describe('ipc contract', () => {
       'export:progress',
       'history:bulkProgress',
       'history:changed',
+      'library:changed',
       'overlay:clearSelection',
       'recorder:engineCommand',
       'recorder:levels',
@@ -171,6 +180,7 @@ describe('ipc contract', () => {
       // History and export take history ids from the main window only (never paths).
       if (
         channel.startsWith('history:') ||
+        channel.startsWith('library:') ||
         channel.startsWith('export:') ||
         channel.startsWith('video:')
       ) {

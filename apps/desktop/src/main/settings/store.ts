@@ -132,6 +132,13 @@ export class SettingsStore {
     return this.commit(next);
   }
 
+  /** Where new captures are saved, inside the capture folders (a validated relative folder, or null). */
+  setCaptureFolder(folder: string | null): Settings {
+    const next = structuredClone(this.value);
+    next.general.captureFolder = folder;
+    return this.commit(next);
+  }
+
   /** Main-owned notices (the tray hint): not part of the renderer's patch. */
   markTrayHintShown(): void {
     if (this.value.notices.trayHintShown) return;

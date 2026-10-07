@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { announce, notify } from '../lib/notify';
-import { Camera, Clock, FolderSearch, Search, SearchX, Video, X } from 'lucide-react';
+import { Camera, Clock, FolderOpen, FolderSearch, Search, SearchX, Video, X } from 'lucide-react';
 import type { HistoryItemView, HistoryType } from '../../shared/history-ipc';
 import { AlertConfirm } from '../components/ui/AlertConfirm';
 import { Button } from '../components/ui/Button';
@@ -15,6 +15,11 @@ import {
 } from '../history/bulk-store';
 import { useExportCapabilities } from '../history/use-export-capabilities';
 import { useHistory } from '../history/use-history';
+import { moveItemsTo } from '../library/actions';
+import { startItemsDrag } from '../library/dnd';
+import { FolderPickerDialog } from '../library/FolderPickerDialog';
+import { ALL_SELECTION, selectionMatches, type FolderSelection } from '../library/tree';
+import { useLibrary } from '../library/use-library';
 import { recordOptionsFromSettings } from '../../shared/settings';
 import { getSettings } from '../settings/store';
 import {
@@ -39,6 +44,7 @@ import {
   type Selection,
 } from './history/selection';
 import { SelectionBar } from './history/SelectionBar';
+import { FolderPane } from './history/FolderPane';
 import { HistoryCard } from './history/HistoryCard';
 import { HistoryDetails } from './history/HistoryDetails';
 import { useNow } from './history/use-now';
@@ -87,6 +93,22 @@ export function HistoryView({
   const [rawSelection, setRawSelection] = useState<Selection>(EMPTY_SELECTION);
   const [menu, setMenu] = useState<ContextTarget | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string[] | null>(null);
+  const [folderSel, setFolderSel] = useState<FolderSelection>(ALL_SELECTION);
+  const [includeSub, setIncludeSub] = useState(true);
+  const [moveIds, setMoveIds] = useState<string[] | null>(null);
+  const { tree } = useLibrary();
+  // A selected folder that no longer exists (deleted, or renamed elsewhere) falls back to All captures.
+  const [seenTree, setSeenTree] = useState(tree);
+  if (tree !== seenTree) {
+    setSeenTree(tree);
+    if (
+      tree &&
+      folderSel.kind === 'folder' &&
+      !tree.folders.some((info) => info.path.toLowerCase() === folderSel.path.toLowerCase())
+    ) {
+      setFolderSel(ALL_SELECTION);
+    }
+  }
   const bulk = useBulkState();
   const bulkSummary = useBulkSummary();
   const gridRef = useRef<HTMLUListElement>(null);
@@ -104,7 +126,16 @@ export function HistoryView({
           ...(query && { query }),
         },
   );
-  const { items, total, loaded, failed, reload } = list;
+  const { items: listed, total, loaded, failed, reload } = list;
+  // The folder pane filters the list here; an open item needs the whole list (its original may be elsewhere).
+  const folderFiltered = folderSel.kind !== 'all' && !selectedId;
+  const items = useMemo(
+    () =>
+      folderFiltered
+        ? listed.filter((item) => selectionMatches(item, folderSel, includeSub))
+        : listed,
+    [listed, folderFiltered, folderSel, includeSub],
+  );
   const order = useMemo(() => items.map((item) => item.id), [items]);
   // Cards that are no longer listed (removed, filtered out) leave the selection, so a bulk action
   // can only ever touch what the grid shows.
@@ -179,7 +210,7 @@ export function HistoryView({
 
   const mp4Available = caps?.mp4Available ?? false;
   const missingCount = items.filter((item) => !item.exists).length;
-  const filtering = filter !== 'all' || query !== '';
+  const filtering = filter !== 'all' || query !== '' || folderFiltered;
 
   const onGridKeyDown = (event: KeyboardEvent<HTMLUListElement>): void => {
     const target = event.target as HTMLElement;
@@ -375,236 +406,273 @@ export function HistoryView({
     });
   };
 
+  const dragIds = (item: HistoryItemView): string[] =>
+    selection.ids.has(item.id) && selection.ids.size > 1 ? [...selection.ids] : [item.id];
   const activeId = tabStopId && items.some((i) => i.id === tabStopId) ? tabStopId : items[0]?.id;
 
   return (
-    <div data-testid="history-view">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-fg">History</h1>
-          <p
-            className="mt-1 text-[15px] text-fg-muted"
-            data-testid="history-count"
-            aria-live="polite"
-          >
-            {!loaded
-              ? ' '
-              : total === 0
-                ? 'Everything you capture is listed here.'
-                : filtering
-                  ? `${items.length} of ${total} ${total === 1 ? 'item' : 'items'}`
-                  : `${total} ${total === 1 ? 'item' : 'items'}`}
-          </p>
-        </div>
-        {total > 0 ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <Segmented
-              label="Filter by type"
-              value={filter}
-              options={FILTERS}
-              onChange={setFilter}
-              data-testid="history-filter"
-            />
-            <label className="relative block">
-              <span className="sr-only">Search history</span>
-              <Search
-                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-fg-subtle"
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                data-testid="history-search"
-                value={queryInput}
-                onChange={(event) => setQueryInput(event.target.value)}
-                placeholder="Search name, date or type"
-                className="selectable h-9 w-60 rounded-lg border border-control bg-surface pr-8 pl-8 text-[13px] text-fg shadow-card placeholder:text-fg-subtle focus-visible:border-accent [&::-webkit-search-cancel-button]:hidden"
-              />
-              {queryInput ? (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setQueryInput('')}
-                  className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-3 hover:text-fg"
-                >
-                  <X className="size-3.5" aria-hidden="true" />
-                </button>
-              ) : null}
-            </label>
-            <Button
-              size="sm"
-              variant="ghost"
-              data-testid="history-find-existing"
-              icon={<FolderSearch className="size-4" aria-hidden="true" />}
-              onClick={findExisting}
+    <div data-testid="history-view" className="flex items-start gap-5">
+      <FolderPane
+        tree={tree}
+        selection={folderSel}
+        onSelect={setFolderSel}
+        includeSubfolders={includeSub}
+        onIncludeSubfolders={setIncludeSub}
+        onMoved={clearSelection}
+      />
+      <div className="min-w-0 flex-1" data-testid="history-main">
+        <header className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-fg">History</h1>
+            <p
+              className="mt-1 text-[15px] text-fg-muted"
+              data-testid="history-count"
+              aria-live="polite"
             >
-              Find existing captures
-            </Button>
-            {missingCount > 0 ? (
+              {!loaded
+                ? ' '
+                : total === 0
+                  ? 'Everything you capture is listed here.'
+                  : filtering
+                    ? `${items.length} of ${total} ${total === 1 ? 'item' : 'items'}`
+                    : `${total} ${total === 1 ? 'item' : 'items'}`}
+            </p>
+          </div>
+          {total > 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Segmented
+                label="Filter by type"
+                value={filter}
+                options={FILTERS}
+                onChange={setFilter}
+                data-testid="history-filter"
+              />
+              <label className="relative block">
+                <span className="sr-only">Search history</span>
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-fg-subtle"
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  data-testid="history-search"
+                  value={queryInput}
+                  onChange={(event) => setQueryInput(event.target.value)}
+                  placeholder="Search name, date or type"
+                  className="selectable h-9 w-60 rounded-lg border border-control bg-surface pr-8 pl-8 text-[13px] text-fg shadow-card placeholder:text-fg-subtle focus-visible:border-accent [&::-webkit-search-cancel-button]:hidden"
+                />
+                {queryInput ? (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setQueryInput('')}
+                    className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-3 hover:text-fg"
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                  </button>
+                ) : null}
+              </label>
               <Button
                 size="sm"
                 variant="ghost"
-                data-testid="history-clear-missing"
-                onClick={() =>
-                  void window.framecapt.invoke('history:clearMissing').then((response) => {
-                    if (!response.ok) notify.error(response.error);
-                    else {
-                      notify.info(
-                        `Removed ${response.data.removed} missing ${response.data.removed === 1 ? 'item' : 'items'} from history`,
-                      );
-                      reload();
-                    }
-                  })
-                }
-              >
-                Clear {missingCount} missing
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </header>
-
-      {selectedCount > 0 ? (
-        <SelectionBar
-          count={selectedCount}
-          listed={items.length}
-          bulk={bulk}
-          onSaveCopies={() => saveCopies([...selection.ids])}
-          onRemove={() => setConfirmRemove([...selection.ids])}
-          onSelectAll={() => setRawSelection(selectAll(order))}
-          onClear={clearSelection}
-          onCancelBulk={() => void cancelBulk()}
-        />
-      ) : null}
-
-      {loaded && failed ? (
-        <EmptyState
-          icon={<SearchX className="size-6" />}
-          title="History could not be loaded"
-          description="Something went wrong while reading your history. Your files are safe. Try again, and if it keeps happening open Settings, Advanced to see the log."
-          action={
-            <Button variant="primary" data-testid="history-retry" onClick={reload}>
-              Try again
-            </Button>
-          }
-        />
-      ) : loaded && total === 0 ? (
-        <EmptyState
-          icon={<Clock className="size-6" />}
-          title="Your captures will appear here"
-          description="Take a screenshot or record your screen. Everything you save is listed here so you can find it again, copy it or open its folder."
-          action={
-            <div className="flex flex-wrap justify-center gap-2.5">
-              <Button
-                variant="primary"
-                data-testid="history-empty-shot"
-                icon={<Camera className="size-4" aria-hidden="true" />}
-                onClick={startScreenshot}
-              >
-                Take a screenshot
-              </Button>
-              <Button
-                variant="secondary"
-                data-testid="history-empty-record"
-                icon={<Video className="size-4" aria-hidden="true" />}
-                onClick={startRecording}
-              >
-                Record your screen
-              </Button>
-              <Button
-                variant="ghost"
-                data-testid="history-empty-find"
+                data-testid="history-find-existing"
                 icon={<FolderSearch className="size-4" aria-hidden="true" />}
                 onClick={findExisting}
               >
                 Find existing captures
               </Button>
+              {missingCount > 0 ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid="history-clear-missing"
+                  onClick={() =>
+                    void window.framecapt.invoke('history:clearMissing').then((response) => {
+                      if (!response.ok) notify.error(response.error);
+                      else {
+                        notify.info(
+                          `Removed ${response.data.removed} missing ${response.data.removed === 1 ? 'item' : 'items'} from history`,
+                        );
+                        reload();
+                      }
+                    })
+                  }
+                >
+                  Clear {missingCount} missing
+                </Button>
+              ) : null}
             </div>
-          }
+          ) : null}
+        </header>
+
+        {selectedCount > 0 ? (
+          <SelectionBar
+            count={selectedCount}
+            listed={items.length}
+            bulk={bulk}
+            onSaveCopies={() => saveCopies([...selection.ids])}
+            onRemove={() => setConfirmRemove([...selection.ids])}
+            onMoveTo={() => setMoveIds([...selection.ids])}
+            onSelectAll={() => setRawSelection(selectAll(order))}
+            onClear={clearSelection}
+            onCancelBulk={() => void cancelBulk()}
+          />
+        ) : null}
+
+        {loaded && failed ? (
+          <EmptyState
+            icon={<SearchX className="size-6" />}
+            title="History could not be loaded"
+            description="Something went wrong while reading your history. Your files are safe. Try again, and if it keeps happening open Settings, Advanced to see the log."
+            action={
+              <Button variant="primary" data-testid="history-retry" onClick={reload}>
+                Try again
+              </Button>
+            }
+          />
+        ) : loaded && total === 0 ? (
+          <EmptyState
+            icon={<Clock className="size-6" />}
+            title="Your captures will appear here"
+            description="Take a screenshot or record your screen. Everything you save is listed here so you can find it again, copy it or open its folder."
+            action={
+              <div className="flex flex-wrap justify-center gap-2.5">
+                <Button
+                  variant="primary"
+                  data-testid="history-empty-shot"
+                  icon={<Camera className="size-4" aria-hidden="true" />}
+                  onClick={startScreenshot}
+                >
+                  Take a screenshot
+                </Button>
+                <Button
+                  variant="secondary"
+                  data-testid="history-empty-record"
+                  icon={<Video className="size-4" aria-hidden="true" />}
+                  onClick={startRecording}
+                >
+                  Record your screen
+                </Button>
+                <Button
+                  variant="ghost"
+                  data-testid="history-empty-find"
+                  icon={<FolderSearch className="size-4" aria-hidden="true" />}
+                  onClick={findExisting}
+                >
+                  Find existing captures
+                </Button>
+              </div>
+            }
+          />
+        ) : loaded && items.length === 0 && folderFiltered && query === '' && filter === 'all' ? (
+          <EmptyState
+            icon={<FolderOpen className="size-6" />}
+            title="Nothing in this folder yet"
+            description="Drag captures onto the folder, or choose Move to… on a capture. New captures land here when you set it as the save location."
+          />
+        ) : loaded && items.length === 0 ? (
+          <EmptyState
+            icon={<SearchX className="size-6" />}
+            title="No matches"
+            description={
+              query
+                ? 'Nothing in your history fits this search.'
+                : 'Nothing in your history fits this filter.'
+            }
+            action={
+              <Button
+                variant="secondary"
+                data-testid="history-clear-filters"
+                onClick={() => {
+                  setFilter('all');
+                  setQueryInput('');
+                  setFolderSel(ALL_SELECTION);
+                }}
+              >
+                {query ? 'Clear search' : 'Show everything'}
+              </Button>
+            }
+          />
+        ) : (
+          <ul
+            ref={gridRef}
+            data-testid="history-grid"
+            aria-label="Captures"
+            onKeyDown={onGridKeyDown}
+            onKeyUp={onGridKeyUp}
+            className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-4"
+          >
+            {items.map((item) => (
+              <HistoryCard
+                key={item.id}
+                item={item}
+                now={now}
+                tabStop={item.id === activeId}
+                mp4Available={mp4Available}
+                actions={actions}
+                onSelect={select}
+                onAskDelete={setConfirmDelete}
+                onEdit={onEdit}
+                selected={selection.ids.has(item.id)}
+                selectMode={selectedCount > 0}
+                onSelectClick={selectClick}
+                onToggleSelect={toggleSelect}
+                onContextMenu={(target, point) => setMenu({ item: target, ...point })}
+                onDragOut={startItemDrag}
+                onItemsDrag={(dragged, transfer) => startItemsDrag(transfer, dragIds(dragged))}
+                onMoveTo={(target) => setMoveIds([target.id])}
+              />
+            ))}
+          </ul>
+        )}
+        {confirmDialog}
+        {projectDialog}
+        <HistoryContextMenu
+          target={menu}
+          selectedIds={selection.ids}
+          mp4Available={mp4Available}
+          actions={actions}
+          onEdit={onEdit}
+          onAskDelete={setConfirmDelete}
+          onAskDeleteProject={setConfirmProject}
+          onToggleSelect={toggleSelect}
+          onSaveCopies={saveCopies}
+          onRemoveMany={setConfirmRemove}
+          onClearSelection={clearSelection}
+          onMoveTo={setMoveIds}
+          onClose={() => setMenu(null)}
         />
-      ) : loaded && items.length === 0 ? (
-        <EmptyState
-          icon={<SearchX className="size-6" />}
-          title="No matches"
-          description={
-            query
-              ? 'Nothing in your history fits this search.'
-              : 'Nothing in your history fits this filter.'
-          }
-          action={
-            <Button
-              variant="secondary"
-              data-testid="history-clear-filters"
-              onClick={() => {
-                setFilter('all');
-                setQueryInput('');
-              }}
-            >
-              {query ? 'Clear search' : 'Show everything'}
-            </Button>
-          }
+        <AlertConfirm
+          open={confirmRemove !== null}
+          title={`Remove ${confirmRemove?.length ?? 0} items from history?`}
+          description="The files stay on your disk. You can undo this for a few seconds."
+          cancelLabel="Keep them"
+          confirmLabel="Remove"
+          onConfirm={() => {
+            const ids = confirmRemove ?? [];
+            setConfirmRemove(null);
+            clearSelection();
+            void removeItems(ids, reload);
+          }}
+          onCancel={() => setConfirmRemove(null)}
         />
-      ) : (
-        <ul
-          ref={gridRef}
-          data-testid="history-grid"
-          aria-label="Captures"
-          onKeyDown={onGridKeyDown}
-          onKeyUp={onGridKeyUp}
-          className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-4"
-        >
-          {items.map((item) => (
-            <HistoryCard
-              key={item.id}
-              item={item}
-              now={now}
-              tabStop={item.id === activeId}
-              mp4Available={mp4Available}
-              actions={actions}
-              onSelect={select}
-              onAskDelete={setConfirmDelete}
-              onEdit={onEdit}
-              selected={selection.ids.has(item.id)}
-              selectMode={selectedCount > 0}
-              onSelectClick={selectClick}
-              onToggleSelect={toggleSelect}
-              onContextMenu={(target, point) => setMenu({ item: target, ...point })}
-              onDragOut={startItemDrag}
-            />
-          ))}
-        </ul>
-      )}
-      {confirmDialog}
-      {projectDialog}
-      <SaveAsHost />
-      <HistoryContextMenu
-        target={menu}
-        selectedIds={selection.ids}
-        mp4Available={mp4Available}
-        actions={actions}
-        onEdit={onEdit}
-        onAskDelete={setConfirmDelete}
-        onAskDeleteProject={setConfirmProject}
-        onToggleSelect={toggleSelect}
-        onSaveCopies={saveCopies}
-        onRemoveMany={setConfirmRemove}
-        onClearSelection={clearSelection}
-        onClose={() => setMenu(null)}
-      />
-      <AlertConfirm
-        open={confirmRemove !== null}
-        title={`Remove ${confirmRemove?.length ?? 0} items from history?`}
-        description="The files stay on your disk. You can undo this for a few seconds."
-        cancelLabel="Keep them"
-        confirmLabel="Remove"
-        onConfirm={() => {
-          const ids = confirmRemove ?? [];
-          setConfirmRemove(null);
-          clearSelection();
-          void removeItems(ids, reload);
-        }}
-        onCancel={() => setConfirmRemove(null)}
-      />
-      <BulkResultDialog summary={bulkSummary} nameOf={nameOf} onClose={dismissBulkSummary} />
+        <SaveAsHost />
+        <BulkResultDialog summary={bulkSummary} nameOf={nameOf} onClose={dismissBulkSummary} />
+        <FolderPickerDialog
+          open={moveIds !== null}
+          title={`Move ${moveIds?.length ?? 0} ${moveIds?.length === 1 ? 'item' : 'items'} to`}
+          confirmLabel="Move here"
+          rootLabel="All captures (no folder)"
+          tree={tree}
+          initial={null}
+          onClose={() => setMoveIds(null)}
+          onConfirm={(folder) => {
+            const ids = moveIds;
+            setMoveIds(null);
+            if (ids) void moveItemsTo(ids, folder).then((moved) => moved && clearSelection());
+          }}
+        />
+      </div>
     </div>
   );
 }

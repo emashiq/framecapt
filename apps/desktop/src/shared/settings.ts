@@ -6,6 +6,7 @@ import {
   DEFAULT_CAMERA_STYLE,
 } from './camera';
 import type { FollowZoom } from './compositor-layout';
+import { LibraryFolderSchema } from './library';
 import type { RecordOptions } from './recorder-ipc';
 import { COMPRESSION_LEVELS, SAVE_FORMATS } from './recording-format';
 import {
@@ -37,6 +38,8 @@ export const GeneralSettingsSchema = z.object({
   launchAtLogin: z.boolean(),
   closeToTray: z.boolean(),
   showNotifications: z.boolean(),
+  /** The library folder new captures are saved to (relative, validated); null = the capture folders themselves. Set only through `library:setCaptureFolder`. */
+  captureFolder: LibraryFolderSchema.nullable(),
 });
 
 export const ScreenshotSettingsSchema = z.object({
@@ -138,7 +141,13 @@ export type SettingsSection = Exclude<keyof Settings, 'version'>;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
-  general: { theme: 'system', launchAtLogin: false, closeToTray: true, showNotifications: true },
+  general: {
+    theme: 'system',
+    launchAtLogin: false,
+    closeToTray: true,
+    showNotifications: true,
+    captureFolder: null,
+  },
   screenshots: {
     format: 'png',
     jpegQuality: 0.92,
@@ -180,7 +189,7 @@ export const DEFAULT_SETTINGS: Settings = {
  * counterparts that main owns (`trayHintShown`).
  */
 export const SettingsPatchSchema = z.strictObject({
-  general: GeneralSettingsSchema.partial().strict().optional(),
+  general: GeneralSettingsSchema.omit({ captureFolder: true }).partial().strict().optional(),
   screenshots: ScreenshotSettingsSchema.omit({ outputDir: true }).partial().strict().optional(),
   recording: RecordingSettingsSchema.omit({ outputDir: true })
     .extend({
@@ -396,7 +405,7 @@ export function resetSection(current: Settings, section: ResetSection | undefine
   const next: Settings = structuredClone(current);
   switch (section) {
     case 'general':
-      next.general = defaults.general;
+      next.general = { ...defaults.general, captureFolder: current.general.captureFolder };
       break;
     case 'screenshots':
       next.screenshots = { ...defaults.screenshots, outputDir: current.screenshots.outputDir };

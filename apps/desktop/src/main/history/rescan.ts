@@ -7,6 +7,7 @@ import { detectImageFormat, MAX_EXPORT_BYTES, readImageSize } from '../../shared
 import { flowBytes, readFlowFile } from '../flows/flow-store';
 import { log } from '../logger';
 import type { MediaTools } from '../media/ffmpeg';
+import { listScanDirs } from '../library/scan';
 import { readFcapHeader } from '../recording/fcap';
 import { samePath } from './files';
 import type { HistoryService } from './service';
@@ -29,7 +30,7 @@ const PROBE_TIMEOUT_MS = 30_000;
 const HEADER_BYTES = 64 * 1024;
 
 export interface RescanDeps {
-  /** Folders to look in (non-recursive); the screenshot and recording output folders. */
+  /** Folders to look in: the screenshot and recording output folders, and the library folders inside them (8 levels, no links). */
   dirs: readonly string[];
   history: Pick<
     HistoryService,
@@ -50,11 +51,14 @@ interface Candidate {
   sizeBytes: number;
 }
 
-/** Candidates: files the app would have made, not yet in history. Links and folders are skipped. */
+/** Candidates: files the app would have made, not yet in history. Links are skipped; guide folders are items. */
 async function findCandidates(deps: RescanDeps): Promise<Candidate[]> {
-  const folders = deps.dirs.filter(
+  const roots = deps.dirs.filter(
     (dir, index) => deps.dirs.findIndex((d) => samePath(d, dir)) === index,
   );
+  const all: string[] = [];
+  for (const root of roots) all.push(...(await listScanDirs(root)));
+  const folders = all.filter((dir, index) => all.findIndex((d) => samePath(d, dir)) === index);
   const found: Candidate[] = [];
   for (const dir of folders) {
     const entries = await fs.promises.readdir(dir, { withFileTypes: true }).catch(() => []);

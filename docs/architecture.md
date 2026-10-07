@@ -238,6 +238,15 @@ Files: `src/main/history/{store,thumbs,query,files,service,export-service,handle
 - New IPC: `history:list | consumeNotice | open | reveal | copyImage | copyPath | remove | undoRemove | deleteFile | relink | clearMissing | rescan | saveCopy`, `export:capabilities | mp4 | cancel` (all `main` role), events `history:changed`, `export:progress | done | failed`; `shot:export` takes an optional `thumbnail`.
 - E2E-build-only hook (compiled out of normal builds): `FRAMECAPT_E2E_NO_H264=1` behaves like a build without an H.264 encoder.
 
+## Capture library: folders (ADR-048)
+
+Files: `src/shared/library.ts` (grammar and IPC schemas), `src/main/library/{paths,scan,store,service,handlers}.ts`, `src/renderer/library/*`, `src/renderer/views/history/FolderPane.tsx`.
+
+- **Model.** One logical tree mirrored as real folders inside the screenshots root and the recordings root. The tree is the union of the subfolders on disk (`listSubfolders`: 8 levels, no links or junctions, no hidden, system or step-guide folders) and the folders recorded in `<userData>/library.json` (zod, atomic; only a hint for empty folders). A history item's folder is computed from its path (`locateDir`); `HistoryItemView` carries `folder` (absent = root) and `outside` (Other locations), filled through `HistoryDeps.folderOf`.
+- **Service** (`LibraryService`, one change at a time): `tree`, `createFolder`, `renameFolder` (both roots, one `HistoryService.rewritePaths` write, rollback on failure), `deleteFolder` (empty only), `moveContentsUp`, `moveItems` (rename, EXDEV fallback: copy, size check, Recycle Bin; free names), `setCaptureFolder`, `saveDir(kind)`. `saveDir` is what `handlers.ts` hands to after-capture, quick save, the recorder and recovery, and the step-guide save; the pickers and the rescan keep the roots (`rescanLibrary` expands them with `listScanDirs`).
+- **IPC** (role `main`, strict zod): `library:tree | createFolder | renameFolder | deleteFolder | moveContentsUp | moveItems | setCaptureFolder | reveal`, event `library:changed`. Settings gained `general.captureFolder` (not part of the settings patch; only `library:setCaptureFolder` writes it).
+- **UI.** `FolderPane` is a flat ARIA tree (`role=tree`, `treeitem` with `aria-level`, `aria-expanded`, `aria-setsize`, `aria-posinset`) with drop targets (`application/x-framecapt-items`, ids only), an inline rename field and a context menu. `FolderPickerDialog` serves Move to... and Save new captures to... (the Capture view's `SavingTo`). History filters its grid with `selectionMatches`. A plain card drag moves to a folder; Alt+drag starts the OS file drag.
+
 ## Video editor (core: trim, cuts, masks, crop, fades, volume, export)
 
 Files: `src/shared/{video-edit,video-edit-history,video-ipc}.ts` (model, undo history, IPC schemas), `src/main/media/{edit-graph,edit-export}.ts`, `src/main/video-projects/{store,service,handlers}.ts`, `src/renderer/views/video-editor/*`, `src/renderer/history/video-export-store.ts`.

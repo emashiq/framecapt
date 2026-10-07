@@ -80,7 +80,9 @@ describe('IPC: every channel is closed to roles the contract does not name', () 
 
   it('privileged actions belong to the main window alone (files, folders, settings, history, export)', () => {
     const mainOnly = IPC_CHANNELS.filter((channel) =>
-      /^(history|export|settings|shortcuts|recovery|diagnostics|shot|editor|shell):/.test(channel),
+      /^(history|library|export|settings|shortcuts|recovery|diagnostics|shot|editor|shell):/.test(
+        channel,
+      ),
     );
     expect(mainOnly.length).toBeGreaterThan(30);
     for (const channel of mainOnly) expect(defOf(channel).roles, channel).toEqual(['main']);
@@ -180,6 +182,10 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
   'recovery:recover': { sessionId: UUID },
   'history:list': {},
   'history:open': { id: UUID },
+  'library:createFolder': { folder: 'Clients/Acme' },
+  'library:renameFolder': { folder: 'Clients', name: 'Customers' },
+  'library:moveItems': { ids: [UUID], folder: 'Clients/Acme' },
+  'library:setCaptureFolder': { folder: null },
   'export:mp4': { historyId: UUID },
   'export:cancel': { jobId: 'job' },
   'video:open': { historyId: UUID },
@@ -215,6 +221,33 @@ describe('IPC: payloads are validated strictly', () => {
       const smuggled = { ...valid(channel), path: 'C:\\Windows\\win.ini', cmd: 'calc' };
       expect(parses(channel, smuggled), channel).toBe(false);
     }
+  });
+
+  it('library folders are relative names from a strict grammar: traversal, drives and reserved names are refused', () => {
+    for (const folder of [
+      '..',
+      '../x',
+      'a/../b',
+      '/abs',
+      'C:\\x',
+      'C:/x',
+      'a\\b',
+      'CON',
+      'a/NUL',
+      'a/',
+      '',
+    ]) {
+      expect(parses('library:createFolder', { folder }), JSON.stringify(folder)).toBe(false);
+      expect(parses('library:moveItems', { ids: [UUID], folder }), JSON.stringify(folder)).toBe(
+        false,
+      );
+    }
+    expect(parses('library:renameFolder', { folder: 'a', name: 'b/c' })).toBe(false);
+    expect(parses('library:renameFolder', { folder: 'a', name: '..' })).toBe(false);
+    expect(parses('library:moveItems', { ids: ['C:\\x.png'], folder: null })).toBe(false);
+    expect(parses('library:moveItems', { ids: [], folder: null })).toBe(false);
+    expect(parses('library:moveItems', { ids: [UUID], folder: null })).toBe(true);
+    expect(parses('library:setCaptureFolder', { folder: '../x' })).toBe(false);
   });
 
   it('extra keys are refused inside nested objects too', () => {

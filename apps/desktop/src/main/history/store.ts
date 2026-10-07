@@ -147,6 +147,16 @@ export class HistoryStore {
     return next;
   }
 
+  /** Points items at new files in one write (a library move); unknown ids are ignored. */
+  async updatePaths(changes: readonly { id: string; path: string }[]): Promise<void> {
+    const paths = new Map(changes.map((change) => [change.id, change.path]));
+    this.list = this.list.map((item) => {
+      const next = paths.get(item.id);
+      return next === undefined ? item : { ...item, path: next };
+    });
+    await this.save();
+  }
+
   async remove(ids: readonly string[]): Promise<HistoryItem[]> {
     const wanted = new Set(ids);
     const removed = this.list.filter((item) => wanted.has(item.id));
