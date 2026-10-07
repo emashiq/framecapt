@@ -105,6 +105,18 @@ describe('isPermissionAllowed', () => {
     ).toBe(false);
   });
 
+  it('fullscreen (the video player) is for the main window only, and only for the app origin', () => {
+    for (const role of ROLES) {
+      expect(isPermissionAllowed('fullscreen', url, prod, undefined, role, 'request'), role).toBe(
+        role === 'main',
+      );
+    }
+    expect(isPermissionAllowed('fullscreen', url, prod)).toBe(false);
+    expect(isPermissionAllowed('fullscreen', 'http://evil.example/', prod, undefined, 'main')).toBe(
+      false,
+    );
+  });
+
   it('denies other permissions and foreign origins', () => {
     for (const permission of [
       'geolocation',

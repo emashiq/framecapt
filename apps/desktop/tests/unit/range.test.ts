@@ -38,6 +38,7 @@ describe('mediaContentType', () => {
     expect(mediaContentType('C:\\x\\a.webm')).toBe('video/webm');
     expect(mediaContentType('a.WEBM')).toBe('video/webm');
     expect(mediaContentType('a.mp4')).toBe('video/mp4');
+    expect(mediaContentType('a.mkv')).toBe('video/x-matroska');
     expect(mediaContentType('a.fcap')).toBe('video/webm'); // served as its WebM payload
     expect(mediaContentType('a.GIF')).toBe('image/gif');
     expect(mediaContentType('a.bin')).toBe('application/octet-stream');

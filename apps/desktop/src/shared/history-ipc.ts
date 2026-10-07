@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  COMPRESSION_LEVELS,
+  MAX_OUTPUT_WIDTH,
+  MIN_OUTPUT_WIDTH,
+  SAVE_FORMATS,
+} from './recording-format';
 import { RecordingLayoutSchema } from './recording-layout';
 
 /** History ids are random uuids made by main; the renderer only ever sends them back. */
@@ -11,7 +17,16 @@ export type HistoryType = z.infer<typeof HistoryTypeSchema>;
 export const HistorySourceSchema = z.enum(['screen', 'window', 'region', 'multi', 'unknown']);
 export type HistorySource = z.infer<typeof HistorySourceSchema>;
 
-export const HISTORY_FORMATS = ['png', 'jpeg', 'webm', 'mp4', 'fcap', 'gif', 'flow'] as const;
+export const HISTORY_FORMATS = [
+  'png',
+  'jpeg',
+  'webm',
+  'mp4',
+  'mkv',
+  'fcap',
+  'gif',
+  'flow',
+] as const;
 export const HistoryFormatSchema = z.enum(HISTORY_FORMATS);
 export type HistoryFormat = z.infer<typeof HistoryFormatSchema>;
 
@@ -72,6 +87,10 @@ export const HistoryCancelledSchema = z.object({ cancelled: z.literal(true) });
 
 export const ExportCapabilitiesSchema = z.object({
   mp4Available: z.boolean(),
+  /** libvpx-vp9 + libopus: WebM can be produced (re-encoded). Absent in answers of older builds: assume true. */
+  webmAvailable: z.boolean().optional(),
+  /** The GIF encoder is present. */
+  gifAvailable: z.boolean().optional(),
   reason: z.string().optional(),
 });
 export type ExportCapabilities = z.infer<typeof ExportCapabilitiesSchema>;
@@ -83,8 +102,11 @@ export const ExportMp4ResponseSchema = z.union([
 ]);
 export const ExportCancelRequestSchema = z.strictObject({ jobId: z.string().min(1).max(64) });
 
-/** What the job is: the user's MP4 export (default), the compressed-storage re-encode, a `.fcap` extract or a step-guide slideshow. */
-const ExportKindSchema = z.enum(['export', 'compress', 'extract', 'guide']).optional();
+/**
+ * What the job is: the user's MP4 export (default), the post-save format/compression job that
+ * replaces the recording's file, a "Save as…" copy, a `.fcap` extract or a step-guide slideshow.
+ */
+const ExportKindSchema = z.enum(['export', 'compress', 'convert', 'extract', 'guide']).optional();
 
 export const ExportProgressEventSchema = z.object({
   kind: ExportKindSchema,
@@ -112,6 +134,19 @@ export const ExportFailedEventSchema = z.object({
 export type ExportProgressEvent = z.infer<typeof ExportProgressEventSchema>;
 export type ExportDoneEvent = z.infer<typeof ExportDoneEventSchema>;
 export type ExportFailedEvent = z.infer<typeof ExportFailedEventSchema>;
+
+// --- Save as… (a new file in another format) -------------------------------------------------
+
+/** `history:saveAs`: a copy of a recording in another format; the source is never replaced. */
+export const SaveAsRequestSchema = z.strictObject({
+  id: HistoryIdSchema,
+  format: z.enum(SAVE_FORMATS),
+  compression: z.enum(COMPRESSION_LEVELS),
+  /** The picture is made at most this wide (never larger than the source). Absent: keep the size. */
+  maxWidth: z.number().int().min(MIN_OUTPUT_WIDTH).max(MAX_OUTPUT_WIDTH).optional(),
+});
+export type SaveAsRequest = z.infer<typeof SaveAsRequestSchema>;
+export const SaveAsResponseSchema = z.strictObject({ jobId: z.string() });
 
 // --- extracting from a multi-source recording ---------------------------------------------------
 

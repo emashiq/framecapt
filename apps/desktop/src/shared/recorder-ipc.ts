@@ -35,7 +35,9 @@ export const RecordOptionsSchema = z.strictObject({
    * manifests written before it existed still parse.
    */
   follow: z.strictObject({ zoom: z.union(FOLLOW_ZOOM_LITERALS) }).optional(),
-  /** Compressed storage: record at a lower bitrate. Optional, so older manifests still parse. */
+  /** Compression level: balanced and strong record at a lower bitrate. Optional, so older manifests still parse. */
+  compression: z.enum(['light', 'balanced', 'strong']).optional(),
+  /** Legacy (before save formats): read as "balanced". Never written. */
   compressed: z.boolean().optional(),
   /**
    * The webcam overlay: composited into the picture. `corner` places it for window recordings.

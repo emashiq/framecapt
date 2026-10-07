@@ -30,7 +30,6 @@ import { freeFileName } from './shots/free-name';
 import type { ShotSessionStore } from './shots/session-store';
 import type { Settings } from '../shared/settings';
 import { rememberExported, wasExported } from './shots/exported-paths';
-import { writePngToClipboard } from './shots/after-capture';
 import {
   closeGuard,
   getMainWindow,
@@ -122,7 +121,12 @@ export function registerShotHandlers(
   store: ShotSessionStore,
   recorder: RecorderController,
   history: Pick<HistoryService, 'addScreenshot' | 'get' | 'overwriteScreenshot'>,
-  settings: { get(): Settings; screenshotsDir(): string },
+  settings: {
+    get(): Settings;
+    screenshotsDir(): string;
+    /** The auto-copy rule (`AutoCopy.screenshot`): copies the PNG when the setting is on. */
+    copyImage(png: Uint8Array, options?: { quiet?: boolean }): Promise<boolean>;
+  },
   projects?: { store: ProjectStore; appVersion: string },
   flows?: Pick<FlowService, 'readStep' | 'replaceStep'>,
 ): void {
@@ -265,14 +269,16 @@ export function registerShotHandlers(
     return { path: saved.path, ...(saved.itemId && { historyId: saved.itemId }) };
   });
 
-  /** The "copy to clipboard on save" setting; the clipboard takes PNG (a JPEG is decoded and re-encoded). */
+  /**
+   * The auto-copy rule after an edit is saved: the exported bytes (flattened, redactions in the
+   * pixels), never the unredacted original. The clipboard takes PNG (a JPEG is decoded and
+   * re-encoded). The editor says "Saved" itself, so this one is quiet.
+   */
   async function copyOnSave(bytes: Buffer, format: ImageFormat): Promise<void> {
-    if (!settings.get().screenshots.copyToClipboardOnSave) return;
+    if (!settings.get().screenshots.autoCopy) return;
     const png =
       format === 'png' ? bytes : nativeImage.createFromBuffer(bytes, { scaleFactor: 1 }).toPNG();
-    await writePngToClipboard(png).catch((error: unknown) =>
-      log.warn(`Copy on save failed: ${String(error)}`),
-    );
+    await settings.copyImage(png, { quiet: true });
   }
 
   handle('shot:openFromHistory', { roles: ['main'] }, async (request) => {

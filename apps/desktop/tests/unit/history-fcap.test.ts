@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CompressService } from '../../src/main/history/compress-service';
+import { FinalizeService } from '../../src/main/history/finalize-service';
 import { ExportService } from '../../src/main/history/export-service';
 import { ExtractService } from '../../src/main/history/extract-service';
 import { isOpenableMedia } from '../../src/main/history/files';
@@ -234,9 +234,10 @@ describe('what an fcap is never given', () => {
   it('the shell never opens it (it plays only in FrameCapt)', () => {
     expect(isOpenableMedia('C:\\v\\a.fcap')).toBe(false);
     expect(isOpenableMedia('C:\\v\\a.webm')).toBe(true);
+    expect(isOpenableMedia('C:\\v\\a.mkv')).toBe(true);
   });
 
-  it('MP4 export and compression skip it', async () => {
+  it('MP4 export, save format and Save as… skip it', async () => {
     const { history } = service();
     const { id } = await addFcap(history);
     const runner = new JobRunner();
@@ -249,18 +250,21 @@ describe('what an fcap is never given', () => {
       runner,
     });
     await expect(exports.start(id)).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' });
-    const compress = new CompressService({
+    const finalize = new FinalizeService({
       history,
       tools: fakeTools(),
-      capability: async () => ({ available: true }),
-      storage: () => 'compressed',
+      encoders: async () => ({ h264: true, vp9: true, gif: true }),
+      settings: () => ({ saveFormat: 'mp4', compression: 'balanced' }),
       destination: async () => path.join(files, 'x.mp4'),
       trashItem: vi.fn(),
       runner,
       emit: { progress: vi.fn(), done: vi.fn(), failed: vi.fn() },
     });
-    await compress.startIfEnabled(id);
+    await finalize.startAfterSave(id);
     expect(runner.busy).toBe(false);
+    await expect(finalize.saveAs({ id, format: 'mp4', compression: 'off' })).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD',
+    });
   });
 });
 

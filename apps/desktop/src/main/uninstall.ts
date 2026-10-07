@@ -3,7 +3,7 @@ import path from 'node:path';
 import { isCaptureFileName } from '../shared/capture-names';
 
 /** Media types a history item may point at; the same set `history:open` hands to the shell. */
-const MEDIA_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webm', '.mp4']);
+const MEDIA_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webm', '.mp4', '.mkv']);
 /** Temp files FrameCapt leaves when interrupted, and the folder metadata Windows adds on its own. */
 const LEFTOVER_PATTERN = /^(?:\.framecapt-.+|\.FrameCapt .+\.tmp|desktop\.ini|thumbs\.db)$/i;
 

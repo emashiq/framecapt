@@ -1,6 +1,7 @@
 import { announce, notify } from '../../lib/notify';
 import type { HistoryItemView } from '../../../shared/history-ipc';
 import { startMp4Export } from '../../history/export-store';
+import { openSaveAs } from '../../history/save-as-store';
 
 type Outcome = { ok: boolean; error?: { message: string } };
 
@@ -25,6 +26,8 @@ export interface ItemActions {
   locate(item: HistoryItemView): void;
   exportMp4(item: HistoryItemView): void;
   saveCopy(item: HistoryItemView): void;
+  /** Opens the "Save in another format" dialog (a new file next to the recording). */
+  saveAs(item: HistoryItemView): void;
 }
 
 /**
@@ -71,6 +74,7 @@ export function createItemActions(
         reload();
       }),
     exportMp4: (item) => void startMp4Export(item.id),
+    saveAs: (item) => openSaveAs(item),
     saveCopy: (item) =>
       void window.framecapt.invoke('history:saveCopy', { id: item.id }).then((response) => {
         if (!response.ok) notify.error(response.error);

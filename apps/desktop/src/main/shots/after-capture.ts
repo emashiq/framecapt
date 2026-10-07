@@ -20,6 +20,8 @@ export interface AfterCaptureDeps {
   settings: () => Settings;
   screenshotsDir: () => string;
   history: Pick<HistoryService, 'addScreenshot'>;
+  /** The auto-copy rule (`AutoCopy.screenshot`): copies the PNG when the setting is on; true when it did. */
+  copyImage: (png: Uint8Array, options?: { quiet?: boolean }) => Promise<boolean>;
 }
 
 type Shot = { kind: CaptureTarget; width: number; height: number; png: Buffer };
@@ -63,20 +65,15 @@ async function saveToFolder(deps: AfterCaptureDeps, shot: Shot): Promise<string>
 }
 
 /**
- * What the "after a capture" setting asks for, before the editor opens: copy the image, or save it
- * to the screenshots folder (and list it in history). Returns the saved path when it saved. A
- * failure is logged and never stops the editor from opening: the capture is still in its session.
+ * Before the editor opens: the capture goes to the clipboard (the auto-copy setting; no toast, the
+ * editor opening is the feedback), and the "after a capture" setting may also save it to the
+ * screenshots folder (and list it in history). Returns the saved path when it saved. A failure is
+ * logged and never stops the editor from opening: the capture is still in its session.
  */
 export function createAfterCapture(deps: AfterCaptureDeps) {
   return async (shot: Shot): Promise<{ savedPath?: string }> => {
-    const { afterCapture } = deps.settings().screenshots;
-    if (afterCapture === 'editor') return {};
-    if (afterCapture === 'copy-and-editor') {
-      await writePngToClipboard(shot.png).catch((error: unknown) =>
-        log.warn(`Copy after capture failed: ${String(error)}`),
-      );
-      return {};
-    }
+    await deps.copyImage(shot.png, { quiet: true });
+    if (deps.settings().screenshots.afterCapture === 'editor') return {};
     try {
       return { savedPath: await saveToFolder(deps, shot) };
     } catch (error) {
@@ -87,17 +84,13 @@ export function createAfterCapture(deps: AfterCaptureDeps) {
 }
 
 /**
- * A capture with no editor to open (a screenshot taken while recording): always saved to the
- * screenshots folder and listed in history, and also copied when the setting asks for a copy.
- * Throws when it could not be saved.
+ * A capture with no editor to open (a screenshot taken while recording, or All screens): always
+ * saved to the screenshots folder and listed in history, and copied when auto-copy is on (`copied`
+ * lets the caller say "saved and copied" in one toast). Throws when it could not be saved.
  */
 export function createSaveCaptureDirect(deps: AfterCaptureDeps) {
-  return async (shot: Shot): Promise<{ savedPath: string }> => {
-    if (deps.settings().screenshots.afterCapture === 'copy-and-editor') {
-      await writePngToClipboard(shot.png).catch((error: unknown) =>
-        log.warn(`Copy after capture failed: ${String(error)}`),
-      );
-    }
-    return { savedPath: await saveToFolder(deps, shot) };
+  return async (shot: Shot): Promise<{ savedPath: string; copied: boolean }> => {
+    const copied = await deps.copyImage(shot.png, { quiet: true });
+    return { savedPath: await saveToFolder(deps, shot), copied };
   };
 }

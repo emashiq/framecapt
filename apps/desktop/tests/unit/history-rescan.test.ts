@@ -132,6 +132,17 @@ describe('rescanLibrary', () => {
     expect(items[0]).toMatchObject({ type: 'recording', format: 'gif' });
   });
 
+  it('adds an MKV as a recording of format mkv, linked to the WebM of the same name', async () => {
+    fs.writeFileSync(path.join(videos, defaultRecordingFileName(at(7))), 'webm');
+    fs.writeFileSync(path.join(videos, defaultRecordingFileName(at(7), 'mkv')), 'mkv');
+    const { history, run } = setup();
+    expect(await run()).toBe(2);
+    const { items } = await history.list();
+    const mkv = items.find((item) => item.format === 'mkv');
+    const webm = items.find((item) => item.format === 'webm');
+    expect(mkv).toMatchObject({ type: 'recording', derivedFrom: webm?.id });
+  });
+
   it('links an MP4 to the WebM of the same name', async () => {
     fs.writeFileSync(path.join(videos, defaultRecordingFileName(at(5))), 'webm');
     fs.writeFileSync(path.join(videos, defaultRecordingFileName(at(5), 'mp4')), 'mp4');

@@ -5,15 +5,16 @@ Install from the repository root with `npm ci`. Root commands forward to
 `apps/desktop/vendor/ffmpeg/`, and checked-in evidence remains under root `docs/`.
 For a focused unit selector, use `npm run test:desktop -- tests/unit/<name>.test.ts`.
 
-| Suite               | Command                                    | Needs                                           | What it proves                                                                                      |
-| ------------------- | ------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Lint / types        | `npm run lint`, `npm run typecheck`        | Node 24                                         | Style and the three TypeScript projects (main/shared, renderer, e2e)                                |
-| Unit + integration  | `npm test`                                 | the vendored FFmpeg for the integration files   | Pure logic, IPC security, the app:// resolver, the update adapter, real-FFmpeg finalize and export  |
-| E2E (mock capture)  | `npm run test:e2e`                         | Windows desktop; builds the E2E app first       | The real UI, IPC, recorder pipeline and session service with a synthetic capture provider           |
-| Native              | `npm run test:native`                      | an interactive desktop, real screens and audio  | Real capture, SendInput shortcuts, forced-kill recovery, failure modes                              |
-| Packaged smoke      | `npm run smoke:packaged` (after `package`) | Windows                                         | The fused, packaged exe loads its UI from app://framecapt and keeps its security properties         |
-| Installed smoke     | `npm run smoke:installed` (after `make`)   | an interactive desktop; **installs on this PC** | Silent Squirrel install, real capture through the shortcuts, FFmpeg export, 60 s offline, uninstall |
-| Recording benchmark | `npm run bench:recording`                  | an interactive desktop, 30 minutes              | `docs/performance.md`                                                                               |
+| Suite               | Command                                    | Needs                                                | What it proves                                                                                                                |
+| ------------------- | ------------------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Lint / types        | `npm run lint`, `npm run typecheck`        | Node 24                                              | Style and the three TypeScript projects (main/shared, renderer, e2e)                                                          |
+| Unit + integration  | `npm test`                                 | the vendored FFmpeg for the integration files        | Pure logic, IPC security, the app:// resolver, the update adapter, real-FFmpeg finalize and export                            |
+| E2E (mock capture)  | `npm run test:e2e`                         | Windows desktop; builds the E2E app first            | The real UI, IPC, recorder pipeline and session service with a synthetic capture provider                                     |
+| Native              | `npm run test:native`                      | an interactive desktop, real screens and audio       | Real capture, SendInput shortcuts, forced-kill recovery, failure modes                                                        |
+| Clipboard files     | `npm run check:clipboard`                  | Windows or Linux desktop; **replaces the clipboard** | A file and a folder put on the real clipboard read back as a URI list and, on Windows, as a real CF_HDROP file list (ADR-049) |
+| Packaged smoke      | `npm run smoke:packaged` (after `package`) | Windows                                              | The fused, packaged exe loads its UI from app://framecapt and keeps its security properties                                   |
+| Installed smoke     | `npm run smoke:installed` (after `make`)   | an interactive desktop; **installs on this PC**      | Silent Squirrel install, real capture through the shortcuts, FFmpeg export, 60 s offline, uninstall                           |
+| Recording benchmark | `npm run bench:recording`                  | an interactive desktop, 30 minutes                   | `docs/performance.md`                                                                                                         |
 
 Run order used for a release candidate: `lint`, `typecheck`, `test`, `test:e2e`, `test:native`, `make`, `smoke:installed`.
 

@@ -23,6 +23,7 @@ import { TypeIcon } from '../../history/type-icon';
 import { Button } from '../../components/ui/Button';
 import { IconButton } from '../../components/ui/IconButton';
 import { canEditItem, editLabel, type ItemActions } from './actions';
+import { canSaveAs } from './SaveAs';
 import { Thumb } from './Thumb';
 
 export interface HistoryCardProps {
@@ -324,6 +325,16 @@ export function HistoryCard({
                   >
                     <Film className="size-4 text-fg-subtle" aria-hidden="true" />
                     Export MP4…
+                  </DropdownMenu.Item>
+                ) : null}
+                {canSaveAs(item) ? (
+                  <DropdownMenu.Item
+                    data-testid="history-menu-save-as"
+                    onSelect={() => actions.saveAs(item)}
+                    className={menuItemClass}
+                  >
+                    <Save className="size-4 text-fg-subtle" aria-hidden="true" />
+                    Save in another format…
                   </DropdownMenu.Item>
                 ) : null}
                 {item.type === 'recording' ? (

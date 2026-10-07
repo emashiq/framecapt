@@ -38,12 +38,16 @@ const IMAGE_EXTENSIONS: Record<'png' | 'jpeg', readonly string[]> = {
   png: ['.png'],
   jpeg: ['.jpg', '.jpeg'],
 };
-const VIDEO_EXTENSION: Record<'webm' | 'mp4' | 'fcap' | 'gif', string> = {
+const VIDEO_EXTENSION: Record<VideoFormat, string> = {
   webm: '.webm',
   mp4: '.mp4',
+  mkv: '.mkv',
   fcap: '.fcap',
   gif: '.gif',
 };
+
+/** The formats of a recording's file. */
+export type VideoFormat = 'webm' | 'mp4' | 'mkv' | 'fcap' | 'gif';
 
 export interface HistoryDeps {
   /** `<userData>/history`: `history.json` and `thumbs/`. */
@@ -98,7 +102,7 @@ export interface ScreenshotOverwrite {
 
 export interface NewVideo {
   path: string;
-  format: 'webm' | 'mp4' | 'fcap' | 'gif';
+  format: VideoFormat;
   durationMs: number | null;
   width: number;
   height: number;
@@ -133,10 +137,11 @@ export interface FlowChange {
   thumbnail?: Uint8Array | undefined;
 }
 
-function formatOfVideoPath(file: string): 'webm' | 'mp4' | 'fcap' | 'gif' {
+function formatOfVideoPath(file: string): VideoFormat {
   const extension = path.extname(file).toLowerCase();
   if (extension === '.gif') return 'gif';
   if (extension === '.fcap') return 'fcap';
+  if (extension === '.mkv') return 'mkv';
   return extension === '.mp4' ? 'mp4' : 'webm';
 }
 
@@ -548,15 +553,18 @@ export class HistoryService {
   }
 
   /**
-   * Points a recording at its compressed MP4 (compressed storage): same id, thumbnail and
-   * creation time, new path, format and size. False when the item is gone.
+   * Points a recording at its converted file (the save format and compression settings): same id,
+   * thumbnail and creation time, new path, format and size. False when the item is gone.
    */
   async replaceVideoFile(
     id: string,
-    input: Pick<NewVideo, 'path' | 'durationMs' | 'width' | 'height' | 'sizeBytes' | 'hasAudio'>,
+    input: Pick<
+      NewVideo,
+      'path' | 'format' | 'durationMs' | 'width' | 'height' | 'sizeBytes' | 'hasAudio'
+    >,
   ): Promise<boolean> {
     await this.ready;
-    const updated = await this.store.update(id, { ...input, format: 'mp4' });
+    const updated = await this.store.update(id, input);
     if (updated) this.changed();
     return updated !== undefined;
   }
@@ -743,7 +751,7 @@ export class HistoryService {
       const probe = await this.deps.tools
         .probe(resolved, { timeoutMs: 30_000, format: item.format })
         .catch(() => null);
-      const container = item.format === 'fcap' ? 'matroska' : item.format;
+      const container = item.format === 'fcap' || item.format === 'mkv' ? 'matroska' : item.format;
       if (!probe?.hasVideo || !probe.formatName.split(',').includes(container)) {
         throw new IpcError(
           'INVALID_PAYLOAD',

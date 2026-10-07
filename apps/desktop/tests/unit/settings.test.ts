@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   SettingsPatchSchema,
   applyPatch,
+  migrateLegacySettings,
   migrateSettings,
   parseSettings,
   patchFromRecordOptions,
@@ -10,6 +11,7 @@ import {
   resetSection,
 } from '../../src/shared/settings';
 import { DEFAULT_RECORD_OPTIONS } from '../../src/shared/recorder-ipc';
+import { bitrateFactorOf } from '../../src/shared/recording-format';
 import { DEFAULT_SHORTCUTS } from '../../src/shared/shortcuts';
 
 /** The unversioned flat layout the migration scaffold understands (no such file was ever shipped). */
@@ -41,7 +43,7 @@ describe('defaults', () => {
       jpegQuality: 0.92,
       outputDir: null,
       afterCapture: 'editor',
-      copyToClipboardOnSave: false,
+      autoCopy: true,
       keepEditableOriginals: true,
     });
     expect(DEFAULT_SETTINGS.recording).toMatchObject({
@@ -52,7 +54,9 @@ describe('defaults', () => {
       systemAudio: false,
       outputDir: null,
       autoExportMp4: false,
-      storage: 'original',
+      saveFormat: 'webm',
+      compression: 'off',
+      autoCopy: true,
     });
     expect(DEFAULT_SETTINGS.shortcuts).toEqual(DEFAULT_SHORTCUTS);
   });
@@ -197,15 +201,94 @@ describe('record options', () => {
     });
   });
 
-  it('storage defaults to original, patches to compressed and reaches the recorder as an optional flag', () => {
-    expect(DEFAULT_SETTINGS.recording.storage).toBe('original');
+  it('save format and compression default to WebM and off, patch, validate and reach the recorder as the compression level', () => {
     const loaded = parseSettings({ version: 1, recording: { fps: 60 } });
-    expect(loaded.ok && loaded.settings.recording.storage).toBe('original');
-    const next = applyPatch(DEFAULT_SETTINGS, { recording: { storage: 'compressed' } });
-    expect(next.recording.storage).toBe('compressed');
-    expect(recordOptionsFromSettings(next.recording)).toMatchObject({ compressed: true });
-    expect('compressed' in recordOptionsFromSettings(DEFAULT_SETTINGS.recording)).toBe(false);
-    expect(SettingsPatchSchema.safeParse({ recording: { storage: 'zip' } }).success).toBe(false);
+    expect(loaded.ok && loaded.settings.recording).toMatchObject({
+      saveFormat: 'webm',
+      compression: 'off',
+    });
+    const next = applyPatch(DEFAULT_SETTINGS, {
+      recording: { saveFormat: 'mkv', compression: 'strong' },
+    });
+    expect(next.recording).toMatchObject({ saveFormat: 'mkv', compression: 'strong' });
+    expect(recordOptionsFromSettings(next.recording)).toMatchObject({ compression: 'strong' });
+    expect('compression' in recordOptionsFromSettings(DEFAULT_SETTINGS.recording)).toBe(false);
+    for (const recording of [
+      { saveFormat: 'avi' },
+      { compression: 'max' },
+      { storage: 'original' },
+    ]) {
+      expect(SettingsPatchSchema.safeParse({ recording }).success).toBe(false);
+    }
+  });
+
+  it('the realtime bitrate factor follows the compression level (off/light 1, balanced 0.6, strong 0.45; legacy flag = balanced)', () => {
+    expect(bitrateFactorOf({})).toBe(1);
+    expect(bitrateFactorOf({ compression: 'light' })).toBe(1);
+    expect(bitrateFactorOf({ compression: 'balanced' })).toBe(0.6);
+    expect(bitrateFactorOf({ compression: 'strong' })).toBe(0.45);
+    expect(bitrateFactorOf({ compressed: true })).toBe(0.6);
+  });
+
+  describe('migration of replaced keys', () => {
+    const recordingOf = (recording: Record<string, unknown>) => {
+      const parsed = parseSettings({ version: 1, recording });
+      if (!parsed.ok) throw new Error(parsed.reason);
+      return parsed.settings.recording;
+    };
+
+    it("storage 'compressed' becomes MP4 + balanced, 'original' becomes WebM + off", () => {
+      expect(recordingOf({ storage: 'compressed' })).toMatchObject({
+        saveFormat: 'mp4',
+        compression: 'balanced',
+      });
+      expect(recordingOf({ storage: 'original' })).toMatchObject({
+        saveFormat: 'webm',
+        compression: 'off',
+      });
+    });
+
+    it('an explicit save format wins over a stale storage key, and storage is dropped', () => {
+      const recording = recordingOf({
+        storage: 'compressed',
+        saveFormat: 'gif',
+        compression: 'off',
+      });
+      expect(recording).toMatchObject({ saveFormat: 'gif', compression: 'off' });
+      expect('storage' in recording).toBe(false);
+    });
+
+    it("afterCapture 'copy-and-editor' keeps behaving the same: the editor opens and auto-copy is on", () => {
+      const parsed = parseSettings({
+        version: 1,
+        screenshots: { afterCapture: 'copy-and-editor', copyToClipboardOnSave: false },
+      });
+      expect(parsed.ok && parsed.settings.screenshots).toMatchObject({
+        afterCapture: 'editor',
+        autoCopy: true,
+      });
+      expect(parsed.ok && 'copyToClipboardOnSave' in parsed.settings.screenshots).toBe(false);
+    });
+
+    it('the other after-capture choices and an explicit autoCopy are kept; copyToClipboardOnSave is dropped', () => {
+      const parsed = parseSettings({
+        version: 1,
+        screenshots: {
+          afterCapture: 'save-and-editor',
+          autoCopy: false,
+          copyToClipboardOnSave: true,
+        },
+      });
+      expect(parsed.ok && parsed.settings.screenshots).toMatchObject({
+        afterCapture: 'save-and-editor',
+        autoCopy: false,
+      });
+    });
+
+    it('a new file written by this build is not changed by the migration', () => {
+      const first = parseSettings({ version: 1 });
+      expect(first.ok && migrateLegacySettings(first.settings)).toEqual(first.ok && first.settings);
+    });
   });
 
   it('carries the phase-05 localStorage options over', () => {

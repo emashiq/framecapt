@@ -11,7 +11,9 @@ import type { Mp4Capability } from '../media/export';
 import { getMainWindow } from '../windows';
 import type { BulkExportService } from './bulk-export';
 import { planDrag } from './drag';
+import type { EncoderCapability } from '../media/convert';
 import type { ExportService } from './export-service';
+import type { FinalizeService } from './finalize-service';
 import type { ExtractService } from './extract-service';
 import { copyFileAtomic, isOpenableMedia } from './files';
 import type { HistoryService } from './service';
@@ -93,6 +95,8 @@ export function registerHistoryHandlers(
   capability: () => Promise<Mp4Capability>,
   recordingsDir: () => string,
   rescan: () => Promise<number>,
+  finalize: FinalizeService,
+  encoders: () => Promise<EncoderCapability>,
 ): void {
   handle('history:list', { roles: ['main'] }, (request) => history.list(request));
   handle('history:consumeNotice', { roles: ['main'] }, async () => ({
@@ -222,11 +226,13 @@ export function registerHistoryHandlers(
           name:
             extension === '.mp4'
               ? 'MP4 video'
-              : extension === '.fcap'
-                ? 'FrameCapt multi-source recording'
-                : extension === '.gif'
-                  ? 'GIF'
-                  : 'WebM video',
+              : extension === '.mkv'
+                ? 'MKV video'
+                : extension === '.fcap'
+                  ? 'FrameCapt multi-source recording'
+                  : extension === '.gif'
+                    ? 'GIF'
+                    : 'WebM video',
           extensions: [extension.slice(1)],
         },
       ],
@@ -248,8 +254,15 @@ export function registerHistoryHandlers(
 
   handle('export:capabilities', { roles: ['main'] }, async () => {
     const result = await capability();
-    return { mp4Available: result.available, ...(result.reason && { reason: result.reason }) };
+    const found = await encoders();
+    return {
+      mp4Available: result.available,
+      webmAvailable: found.vp9,
+      gifAvailable: found.gif,
+      ...(result.reason && { reason: result.reason }),
+    };
   });
+  handle('history:saveAs', { roles: ['main'] }, (request) => finalize.saveAs(request));
   handle('export:mp4', { roles: ['main'] }, (request) => exports.start(request.historyId));
   handle('export:cancel', { roles: ['main'] }, (request) => exports.cancel(request.jobId));
 }

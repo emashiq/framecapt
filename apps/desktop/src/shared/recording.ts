@@ -39,7 +39,7 @@ export function qualityLimit(quality: RecordQuality): Size | null {
   return quality === '1080p' ? MAX_1080P : null;
 }
 
-/** The recording bitrate factor for compressed storage. */
+/** The recording bitrate factor of the "balanced" compression level (see REALTIME_BITRATE_FACTOR). */
 export const COMPRESSED_BITRATE_FACTOR = 0.6;
 
 /**

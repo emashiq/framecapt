@@ -61,7 +61,13 @@ export function isNetworkRequestAllowed(url: string, config: AppOriginConfig): b
   }
 }
 
-const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write']);
+const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write', 'fullscreen']);
+
+/**
+ * Windows whose pages may go fullscreen (the History video player's fullscreen button). Add the
+ * editor role here when it exists; the capture overlays, toolbar and camera never need it.
+ */
+const FULLSCREEN_ROLES: readonly Role[] = ['main'];
 
 /** Windows that may ask for the camera (getUserMedia video): the recorder and the camera bubble. */
 const CAMERA_REQUEST_ROLES: readonly Role[] = ['recorder', 'camera'];
@@ -69,7 +75,8 @@ const CAMERA_REQUEST_ROLES: readonly Role[] = ['recorder', 'camera'];
 const CAMERA_CHECK_ROLES: readonly Role[] = ['main', 'recorder', 'camera'];
 
 /**
- * Permission policy: only `media` and `clipboard-sanitized-write`, only for the app's own pages.
+ * Permission policy: only `media`, `clipboard-sanitized-write` and `fullscreen` (main window only),
+ * only for the app's own pages.
  * `media` is the microphone for every app page. Video (the camera) depends on the window: a
  * request (getUserMedia) only from the recorder and camera windows, a check (device labels in
  * enumerateDevices) also from the main window. Display capture is not a permission request; it is
@@ -84,6 +91,7 @@ export function isPermissionAllowed(
   mode: 'request' | 'check' = 'request',
 ): boolean {
   if (!ALLOWED_PERMISSIONS.has(permission) || !isAppUrl(requestingUrl, config)) return false;
+  if (permission === 'fullscreen') return role !== undefined && FULLSCREEN_ROLES.includes(role);
   if (permission === 'media' && mediaTypes?.includes('video')) {
     const roles = mode === 'request' ? CAMERA_REQUEST_ROLES : CAMERA_CHECK_ROLES;
     return role !== undefined && roles.includes(role);

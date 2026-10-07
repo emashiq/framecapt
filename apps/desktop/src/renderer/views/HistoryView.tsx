@@ -27,6 +27,7 @@ import {
 } from './history/actions';
 import { BulkResultDialog } from './history/BulkResultDialog';
 import { HistoryContextMenu, type ContextTarget } from './history/HistoryContextMenu';
+import { SaveAsHost } from './history/SaveAs';
 import {
   clickSelect,
   EMPTY_SELECTION,
@@ -354,6 +355,7 @@ export function HistoryView({
         />
         {confirmDialog}
         {projectDialog}
+        <SaveAsHost />
       </>
     );
   }
@@ -573,6 +575,7 @@ export function HistoryView({
       )}
       {confirmDialog}
       {projectDialog}
+      <SaveAsHost />
       <HistoryContextMenu
         target={menu}
         selectedIds={selection.ids}

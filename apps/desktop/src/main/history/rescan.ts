@@ -17,10 +17,11 @@ import { MAX_HISTORY_ITEMS } from './store';
  * this is the one place a new format is registered (the multi-source `.fcap` and the animated `.gif` are the latest).
  */
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
-const VIDEO_EXTENSIONS = new Set(['.webm', '.mp4', '.fcap', '.gif']);
+const VIDEO_EXTENSIONS = new Set(['.webm', '.mp4', '.mkv', '.fcap', '.gif']);
 
-const FORMAT_BY_EXTENSION: Record<string, 'webm' | 'mp4' | 'gif'> = {
+const FORMAT_BY_EXTENSION: Record<string, 'webm' | 'mp4' | 'mkv' | 'gif'> = {
   '.mp4': 'mp4',
+  '.mkv': 'mkv',
   '.gif': 'gif',
 };
 
@@ -156,9 +157,9 @@ async function addVideoFile(deps: RescanDeps, candidate: Candidate): Promise<boo
   const probe = await deps.tools.probe(candidate.file, { timeoutMs: PROBE_TIMEOUT_MS });
   if (!probe.hasVideo) return false;
   const format = FORMAT_BY_EXTENSION[candidate.extension] ?? 'webm';
-  // An MP4 next to a WebM of the same name is that recording's export.
+  // An MP4 or MKV next to a WebM of the same name is that recording's conversion.
   const webm =
-    format === 'mp4'
+    format === 'mp4' || format === 'mkv'
       ? deps.history.findByPath(candidate.file.slice(0, -candidate.extension.length) + '.webm')
       : undefined;
   await deps.history.addVideo({
@@ -188,11 +189,10 @@ export async function rescanLibrary(deps: RescanDeps): Promise<number> {
   const candidates = (await findCandidates(deps))
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, room);
-  // WebM before MP4, so an export finds the recording it came from.
-  const ordered = [
-    ...candidates.filter((c) => c.extension !== '.mp4'),
-    ...candidates.filter((c) => c.extension === '.mp4'),
-  ];
+  // WebM before MP4 and MKV, so a conversion finds the recording it came from.
+  const converted = (c: { extension: string }): boolean =>
+    c.extension === '.mp4' || c.extension === '.mkv';
+  const ordered = [...candidates.filter((c) => !converted(c)), ...candidates.filter(converted)];
   let added = 0;
   // One at a time: each probe is an ffprobe process and each add rewrites history.json.
   for (const candidate of ordered) {

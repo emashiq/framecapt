@@ -229,6 +229,13 @@ describe('session policies', () => {
       expect(check({}, 'media', app, { requestingUrl: app, mediaType: 'video' }), role).toBe(false);
     }
     roleOfContents.value = undefined;
+    expect(ask('fullscreen', app)).toBe(false);
+    roleOfContents.value = 'main';
+    expect(ask('fullscreen', app)).toBe(true);
+    expect(ask('fullscreen', 'https://evil.example/')).toBe(false);
+    roleOfContents.value = 'overlay';
+    expect(ask('fullscreen', app)).toBe(false);
+    roleOfContents.value = undefined;
     expect(ask('clipboard-sanitized-write', app)).toBe(true);
     for (const permission of [
       'geolocation',
@@ -242,7 +249,6 @@ describe('session policies', () => {
       'clipboard-read',
       'display-capture',
       'openExternal',
-      'fullscreen',
       'pointerLock',
       'idle-detection',
     ]) {

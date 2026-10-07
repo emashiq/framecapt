@@ -40,7 +40,7 @@ export interface CaptureFlowDeps {
     width: number;
     height: number;
     png: Buffer;
-  }) => Promise<{ savedPath: string }>;
+  }) => Promise<{ savedPath: string; copied?: boolean }>;
   /** Tells the user the outcome of a direct save (the recording toolbar shows it). */
   toast?: (event: ToastEvent) => void;
   /** The "after a capture" setting: copy or save before the editor opens (a failure is ignored). */
@@ -505,9 +505,12 @@ export class CaptureFlow {
     shot: { kind: CaptureTarget; width: number; height: number; png: Buffer },
   ): Promise<void> {
     if (!this.deps.saveDirect) throw new FlowFailure('CAPTURE_FAILED', SCREEN_FAILED);
-    await this.deps.saveDirect(shot);
+    const { copied } = await this.deps.saveDirect(shot);
     log.info(`Screenshot saved during a recording: ${shot.kind} ${shot.width}x${shot.height}`);
-    this.deps.toast?.({ level: 'info', message: 'Screenshot saved' });
+    this.deps.toast?.({
+      level: 'info',
+      message: copied ? 'Screenshot saved and copied' : 'Screenshot saved',
+    });
     this.finish(flowId, { outcome: 'completed' });
   }
 

@@ -52,6 +52,7 @@ describe('ipc contract', () => {
       'history:remove',
       'history:rescan',
       'history:reveal',
+      'history:saveAs',
       'history:saveCopy',
       'history:startDrag',
       'history:undoRemove',

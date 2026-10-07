@@ -7,6 +7,7 @@ import {
 } from './camera';
 import type { FollowZoom } from './compositor-layout';
 import type { RecordOptions } from './recorder-ipc';
+import { COMPRESSION_LEVELS, SAVE_FORMATS } from './recording-format';
 import {
   DEFAULT_EDITOR_SHORTCUTS,
   DEFAULT_SHORTCUTS,
@@ -43,8 +44,14 @@ export const ScreenshotSettingsSchema = z.object({
   jpegQuality: z.number().min(0.5).max(1),
   /** Null = Pictures/FrameCapt. Set only through `settings:chooseOutputDir`. */
   outputDir: OutputDirSchema,
-  afterCapture: z.enum(['editor', 'copy-and-editor', 'save-and-editor']),
-  copyToClipboardOnSave: z.boolean(),
+  /** What happens to a capture before the editor opens. (Copying is `autoCopy`, a separate rule.) */
+  afterCapture: z.enum(['editor', 'save-and-editor']),
+  /**
+   * Every screenshot goes to the clipboard (as a PNG) when it is captured, and again, flattened with
+   * its redactions, when an edit is saved. Replaces `copyToClipboardOnSave` and the
+   * `copy-and-editor` after-capture choice (see `migrateLegacySettings`).
+   */
+  autoCopy: z.boolean(),
   /**
    * Keep the unredacted original and the annotations of an exported screenshot (in the app's data
    * folder, not next to the image) so it can be edited again from History. Added after version 1
@@ -66,8 +73,15 @@ export const RecordingSettingsSchema = z.object({
   autoExportMp4: z.boolean(),
   /** Follow-mouse recording of a screen: the zoom of the window that follows the mouse, or off. */
   followMouseZoom: z.enum(FOLLOW_MOUSE_VALUES),
-  /** "compressed": after saving, the WebM is re-encoded to a smaller MP4 (post-processing only). */
-  storage: z.enum(['original', 'compressed']),
+  /** What a saved recording becomes: WebM as recorded, or converted by a post-save job. */
+  saveFormat: z.enum(SAVE_FORMATS),
+  /** Re-encode strength of the post-save job (and the live recorder's bitrate). */
+  compression: z.enum(COMPRESSION_LEVELS),
+  /**
+   * Every saved recording goes to the clipboard as a file (paste it into a folder, chat or email).
+   * Also covers step guides (their folder) and exported videos.
+   */
+  autoCopy: z.boolean(),
   /** The webcam overlay. Added after version 1 shipped: a file without these keys loads with the defaults. */
   cameraEnabled: z.boolean(),
   /** Undefined = the default camera. */
@@ -130,7 +144,7 @@ export const DEFAULT_SETTINGS: Settings = {
     jpegQuality: 0.92,
     outputDir: null,
     afterCapture: 'editor',
-    copyToClipboardOnSave: false,
+    autoCopy: true,
     keepEditableOriginals: true,
   },
   recording: {
@@ -142,7 +156,9 @@ export const DEFAULT_SETTINGS: Settings = {
     outputDir: null,
     autoExportMp4: false,
     followMouseZoom: 'off',
-    storage: 'original',
+    saveFormat: 'webm',
+    compression: 'off',
+    autoCopy: true,
     cameraEnabled: false,
     cameraShape: DEFAULT_CAMERA_STYLE.shape,
     cameraSize: DEFAULT_CAMERA_STYLE.size,
@@ -238,6 +254,35 @@ function migrateV0ToV1(old: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
+/**
+ * Keys that were replaced after version 1 shipped (no version bump: `withDefaults` fills the new
+ * ones). `recording.storage` 'compressed' -> MP4 + balanced, 'original' -> WebM + off;
+ * `screenshots.afterCapture` 'copy-and-editor' -> 'editor' with autoCopy on (the same behaviour:
+ * the capture is copied and the editor opens); `copyToClipboardOnSave` is dropped (autoCopy covers it).
+ */
+export function migrateLegacySettings(raw: unknown): unknown {
+  if (!isRecord(raw)) return raw;
+  const next: Record<string, unknown> = { ...raw };
+  if (isRecord(raw.recording) && 'storage' in raw.recording) {
+    const { storage, ...recording } = raw.recording;
+    next.recording = {
+      ...(storage === 'compressed'
+        ? { saveFormat: 'mp4', compression: 'balanced' }
+        : { saveFormat: 'webm', compression: 'off' }),
+      ...recording,
+    };
+  }
+  if (isRecord(raw.screenshots)) {
+    const { copyToClipboardOnSave: _dropped, ...screenshots } = raw.screenshots;
+    void _dropped;
+    next.screenshots =
+      screenshots.afterCapture === 'copy-and-editor'
+        ? { autoCopy: true, ...screenshots, afterCapture: 'editor' }
+        : screenshots;
+  }
+  return next;
+}
+
 const SETTINGS_SECTIONS_WITH_DEFAULTS = [
   'general',
   'screenshots',
@@ -314,7 +359,7 @@ export type ParsedSettings = { ok: true; settings: Settings } | { ok: false; rea
  * validate (including "no two actions share a shortcut"). Anything wrong -> `ok: false`.
  */
 export function parseSettings(raw: unknown): ParsedSettings {
-  const migrated = migrateSettings(raw);
+  const migrated = migrateLegacySettings(migrateSettings(raw));
   if (!isRecord(migrated)) return { ok: false, reason: 'not an object' };
   const parsed = SettingsSchema.safeParse(withDefaults(migrated));
   if (!parsed.success) {
@@ -384,7 +429,7 @@ export function recordOptionsFromSettings(recording: Settings['recording']): Rec
     countdown: recording.countdown,
     ...followOption(recording.followMouseZoom),
     // Only the recorder's bitrate depends on it; the re-encode itself reads the setting at save time.
-    ...(recording.storage === 'compressed' && { compressed: true }),
+    ...(recording.compression !== 'off' && { compression: recording.compression }),
     ...(recording.cameraEnabled && {
       camera: {
         ...(recording.cameraDeviceId !== undefined && { deviceId: recording.cameraDeviceId }),

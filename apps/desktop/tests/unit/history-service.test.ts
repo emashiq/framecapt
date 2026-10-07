@@ -172,6 +172,7 @@ describe('recordings', () => {
     expect(
       await service.replaceVideoFile(id, {
         path: mp4,
+        format: 'mp4',
         sizeBytes: 3,
         durationMs: 4100,
         width: 1280,
@@ -193,6 +194,7 @@ describe('recordings', () => {
     expect(
       await service.replaceVideoFile('11111111-1111-4111-8111-111111111111', {
         path: mp4,
+        format: 'mp4',
         sizeBytes: 3,
         durationMs: 1,
         width: 1,
@@ -478,6 +480,51 @@ describe('relinking', () => {
       width: 640,
       path: path.join(files, 'good.webm'),
     });
+  });
+
+  it('an MKV recording is a history format: added, listed with its extension, relinked as Matroska, replaced in place', async () => {
+    const tools = fakeTools({
+      probe: (file) =>
+        file.endsWith('.mkv') ? { ...PLAYABLE, formatName: 'matroska,webm' } : PLAYABLE,
+    });
+    const { service } = makeService({ tools });
+    const mkv = writeFile('clip.mkv', 'mkv');
+    const { id } = await service.addVideo({
+      path: mkv,
+      format: 'mkv',
+      durationMs: 5000,
+      width: 640,
+      height: 360,
+      sizeBytes: 3,
+      hasAudio: true,
+      source: 'screen',
+    });
+    await service.idle();
+    expect((await service.list()).items[0]).toMatchObject({
+      id,
+      format: 'mkv',
+      fileName: 'clip.mkv',
+    });
+    // Relinking checks the container (Matroska) and the extension.
+    await expect(service.relink(id, writeFile('x.webm'))).rejects.toMatchObject({
+      code: 'INVALID_PAYLOAD',
+    });
+    await service.relink(id, writeFile('moved.mkv'));
+    expect((await service.list()).items[0]?.path).toBe(path.join(files, 'moved.mkv'));
+    // A conversion points the item at another format and keeps the id.
+    const mp4 = writeFile('clip.mp4', 'mp4');
+    expect(
+      await service.replaceVideoFile(id, {
+        path: mp4,
+        format: 'mp4',
+        sizeBytes: 3,
+        durationMs: 5000,
+        width: 640,
+        height: 360,
+        hasAudio: true,
+      }),
+    ).toBe(true);
+    expect((await service.list()).items[0]).toMatchObject({ id, format: 'mp4', path: mp4 });
   });
 
   it('a probe that throws is a rejection, not a crash', async () => {

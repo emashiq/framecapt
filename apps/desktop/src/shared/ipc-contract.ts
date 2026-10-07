@@ -66,6 +66,8 @@ import {
   ExportMp4ResponseSchema,
   ExtractFcapRequestSchema,
   ExtractFcapResponseSchema,
+  SaveAsRequestSchema,
+  SaveAsResponseSchema,
   ExportProgressEventSchema,
   HistoryCancelledSchema,
   HistoryIdRequestSchema,
@@ -484,6 +486,12 @@ export const ipcContract = {
   'history:extractFcap': {
     request: ExtractFcapRequestSchema,
     response: ExtractFcapResponseSchema,
+    roles: ['main'],
+  },
+  /** A recording saved as another format (WebM, MP4, MKV, GIF) with a compression level: a new item. */
+  'history:saveAs': {
+    request: SaveAsRequestSchema,
+    response: SaveAsResponseSchema,
     roles: ['main'],
   },
   'export:capabilities': {

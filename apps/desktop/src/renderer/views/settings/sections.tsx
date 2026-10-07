@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Copy, FolderOpen, Info, RotateCw, Search, X } from 'lucide-react';
 import type { AppInfo } from '../../../shared/ipc-contract';
 import {
+  COMPRESSION_LABEL,
+  COMPRESSION_LEVELS,
+  FCAP_FORMAT_HINT,
+  SAVE_FORMATS,
+  SAVE_FORMAT_LABEL,
+  formatHint,
+  type Compression,
+  type SaveFormat,
+} from '../../../shared/recording-format';
+import {
   recordOptionsFromSettings,
   type OutputTarget,
   type Settings,
@@ -140,7 +150,6 @@ const FORMATS = [
 
 const AFTER_CAPTURE = [
   { value: 'editor', label: 'Open in the editor' },
-  { value: 'copy-and-editor', label: 'Copy to the clipboard, then open the editor' },
   { value: 'save-and-editor', label: 'Save to the folder, then open the editor' },
 ] as const;
 
@@ -228,7 +237,7 @@ export function ScreenshotsSection({ onReset }: SectionProps) {
       </SettingRow>
       <SettingRow
         label="After a capture"
-        description="Every screenshot opens in the editor; this adds a copy or a save first."
+        description="Every screenshot opens in the editor; this adds a save first."
       >
         {({ labelledBy }) => (
           <Select
@@ -242,18 +251,16 @@ export function ScreenshotsSection({ onReset }: SectionProps) {
         )}
       </SettingRow>
       <SettingRow
-        label="Copy to the clipboard when saving"
-        description="Saving from the editor also puts the image on the clipboard."
+        label="Copy every screenshot to the clipboard"
+        description="Each capture is copied as soon as it is taken, and again after you save an edit (with the redactions applied)."
       >
         {({ labelledBy, describedBy }) => (
           <Switch
             aria-labelledby={labelledBy}
             aria-describedby={describedBy}
-            data-testid="setting-copy-on-save"
-            checked={screenshots.copyToClipboardOnSave}
-            onCheckedChange={(copyToClipboardOnSave) =>
-              void updateSettings({ screenshots: { copyToClipboardOnSave } })
-            }
+            data-testid="setting-auto-copy-screenshots"
+            checked={screenshots.autoCopy}
+            onCheckedChange={(autoCopy) => void updateSettings({ screenshots: { autoCopy } })}
           />
         )}
       </SettingRow>
@@ -290,10 +297,6 @@ const FOLLOW = [
   { value: '2', label: '2×' },
   { value: '3', label: '3×' },
 ] as const;
-const STORAGE = [
-  { value: 'original', label: 'Original (best quality, larger files)' },
-  { value: 'compressed', label: 'Compressed (smaller files)' },
-] as const;
 const FPS = [
   { value: 30, label: '30' },
   { value: 60, label: '60' },
@@ -304,7 +307,28 @@ export function RecordingSection({ onReset }: SectionProps) {
   const options = recordOptionsFromSettings(recording);
   const caps = useExportCapabilities();
   const mp4Unavailable = caps !== null && !caps.mp4Available;
+  const webmUnavailable = caps?.webmAvailable === false;
+  const gifUnavailable = caps?.gifAvailable === false;
   const platform = usePlatformCapabilities();
+  // What this FFmpeg build can produce: a choice it cannot make is shown, but not selectable.
+  const canMake = (format: SaveFormat, compression: Compression): boolean => {
+    if (format === 'gif') return !gifUnavailable;
+    if (format === 'webm') return compression === 'off' || !webmUnavailable;
+    if (format === 'mkv' && compression === 'off') return true;
+    return !mp4Unavailable;
+  };
+  const formatOptions = SAVE_FORMATS.map((value) => ({
+    value,
+    label: canMake(value, 'off')
+      ? SAVE_FORMAT_LABEL[value]
+      : `${SAVE_FORMAT_LABEL[value]} (unavailable)`,
+    disabled: !canMake(value, 'off'),
+  }));
+  const compressionOptions = COMPRESSION_LEVELS.map((value) => ({
+    value,
+    label: COMPRESSION_LABEL[value],
+    disabled: !canMake(recording.saveFormat, value),
+  }));
   return (
     <SectionCard
       id="recording"
@@ -480,7 +504,9 @@ export function RecordingSection({ onReset }: SectionProps) {
         description={
           mp4Unavailable
             ? (caps?.reason ?? 'MP4 export is not available in this build.')
-            : 'After each recording, convert it to MP4 next to the original. Takes a moment.'
+            : recording.saveFormat === 'mp4'
+              ? 'Not needed: recordings are already saved as MP4.'
+              : 'After each recording, also convert it to MP4 next to it. Takes a moment.'
         }
       >
         {({ labelledBy, describedBy }) => (
@@ -488,8 +514,8 @@ export function RecordingSection({ onReset }: SectionProps) {
             aria-labelledby={labelledBy}
             aria-describedby={describedBy}
             data-testid="setting-auto-mp4"
-            checked={recording.autoExportMp4 && !mp4Unavailable}
-            disabled={mp4Unavailable}
+            checked={recording.autoExportMp4 && !mp4Unavailable && recording.saveFormat !== 'mp4'}
+            disabled={mp4Unavailable || recording.saveFormat === 'mp4'}
             onCheckedChange={(autoExportMp4) =>
               void updateSettings({ recording: { autoExportMp4 } })
             }
@@ -497,24 +523,51 @@ export function RecordingSection({ onReset }: SectionProps) {
         )}
       </SettingRow>
       <SettingRow
-        label="Video storage"
+        label="Save recordings as"
+        description={`After you stop, the recording is converted if needed; the original WebM goes to the Recycle Bin once the new file is checked. ${FCAP_FORMAT_HINT}`}
+      >
+        {({ labelledBy }) => (
+          <Select
+            className="w-56 max-w-full"
+            value={recording.saveFormat}
+            options={formatOptions}
+            labelledBy={labelledBy}
+            data-testid="setting-save-format"
+            onChange={(saveFormat) => void updateSettings({ recording: { saveFormat } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Compression"
         description={
-          mp4Unavailable
-            ? (caps?.reason ?? 'MP4 is not available in this build.')
-            : recording.storage === 'compressed'
-              ? 'Recordings are re-encoded to a smaller MP4 after you stop. The original WebM is moved to the Recycle Bin once the compressed file is verified.'
-              : 'Original keeps the recording as saved (best quality, larger files).'
+          recording.saveFormat === 'gif'
+            ? 'Not used for GIF. ' + formatHint(recording.saveFormat, recording.compression)
+            : formatHint(recording.saveFormat, recording.compression)
         }
       >
         {({ labelledBy }) => (
           <Select
-            className="w-80 max-w-full"
-            value={recording.storage}
-            options={STORAGE}
+            className="w-56 max-w-full"
+            value={recording.compression}
+            options={compressionOptions}
             labelledBy={labelledBy}
-            disabled={mp4Unavailable}
-            data-testid="setting-storage"
-            onChange={(storage) => void updateSettings({ recording: { storage } })}
+            disabled={recording.saveFormat === 'gif'}
+            data-testid="setting-compression"
+            onChange={(compression) => void updateSettings({ recording: { compression } })}
+          />
+        )}
+      </SettingRow>
+      <SettingRow
+        label="Copy every recording to the clipboard (as a file you can paste into folders, chat and email)"
+        description="Also copies exported videos and step guides (as a folder). After a conversion, the new file replaces the old one on the clipboard."
+      >
+        {({ labelledBy, describedBy }) => (
+          <Switch
+            aria-labelledby={labelledBy}
+            aria-describedby={describedBy}
+            data-testid="setting-auto-copy-recordings"
+            checked={recording.autoCopy}
+            onCheckedChange={(autoCopy) => void updateSettings({ recording: { autoCopy } })}
           />
         )}
       </SettingRow>

@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, nativeImage, screen, session, shell } from 'electron';
+import { app, nativeImage, Notification, screen, session, shell } from 'electron';
 import { BulkExportService } from './history/bulk-export';
-import { CompressService, postSaveAction } from './history/compress-service';
+import { AutoCopy } from './clipboard/auto-copy';
+import { FinalizeService } from './history/finalize-service';
 import { ExportService } from './history/export-service';
 import { ExtractService } from './history/extract-service';
 import { registerHistoryHandlers, mp4SaveDialog, pickCopiesFolder } from './history/handlers';
@@ -13,6 +14,7 @@ import type { AppSettings } from './settings';
 import { probeWritable } from './settings/output-dirs';
 import type { TrayInfo } from './tray-info';
 import { HistoryService } from './history/service';
+import { detectEncoders, type EncoderCapability } from './media/convert';
 import { detectMp4Capability, MP4_UNAVAILABLE_MESSAGE, type Mp4Capability } from './media/export';
 import { JobRunner } from './media/job-runner';
 import { createMediaTools, FfmpegError, resolveFfmpeg, type MediaTools } from './media/ffmpeg';
@@ -48,6 +50,7 @@ import type { IpcEventPayload } from '../shared/ipc-contract';
 import { sendEvent } from './events';
 import type { UpdateService } from './updates';
 import {
+  getMainWindow,
   getOriginConfig,
   setMainCloseInterceptor,
   showMainWindow,
@@ -112,16 +115,20 @@ function emitToMain<
   for (const contents of webContentsWithRoles(['main'])) sendEvent(contents, event, payload);
 }
 
-/** A free `<name>.mp4` next to the recording (no dialog). */
-async function freeMp4Path(source: { path: string }): Promise<string> {
+/** A free `<name><suffix><extension>` next to the recording (no dialog). */
+async function freeVideoPath(
+  source: { path: string },
+  extension: string,
+  suffix = '',
+): Promise<string> {
   const dir = path.dirname(source.path);
-  const base = path.basename(source.path, path.extname(source.path));
+  const base = `${path.basename(source.path, path.extname(source.path))}${suffix}`;
   for (let attempt = 1; attempt < 1000; attempt += 1) {
-    const name = attempt === 1 ? `${base}.mp4` : `${base} (${attempt}).mp4`;
+    const name = attempt === 1 ? `${base}${extension}` : `${base} (${attempt})${extension}`;
     const candidate = path.join(dir, name);
     if (!fs.existsSync(candidate)) return candidate;
   }
-  throw new Error('No free MP4 name.');
+  throw new Error(`No free ${extension} name.`);
 }
 
 /** What the desktop layer (tray, shortcuts) drives: the same objects the IPC handlers use. */
@@ -219,14 +226,21 @@ export function registerHandlers(
     log.info(`MP4 export ${capability.available ? 'available (libx264 + aac)' : 'unavailable'}`);
     return capability;
   });
-  // One ffmpeg job at a time: the user's MP4 exports and the compressed-storage jobs share a queue.
+  // Which encoders the bundled build has (WebM, GIF, H.264): the save-format controls follow it.
+  // E2E builds only (FRAMECAPT_E2E_NO_H264=1): no H.264 here either.
+  const encoders: Promise<EncoderCapability> = detectEncoders(tools).then((found) =>
+    __FRAMECAPT_E2E__ && process.env.FRAMECAPT_E2E_NO_H264 === '1'
+      ? { ...found, h264: false }
+      : found,
+  );
+  // One ffmpeg job at a time: the user's MP4 exports and the save-format jobs share a queue.
   const runner = new JobRunner();
   const exports = new ExportService({
     history,
     tools,
     capability: () => mp4Capability,
     pickDestination: (source) => mp4SaveDialog(source, outputDir()),
-    autoDestination: freeMp4Path,
+    autoDestination: (source) => freeVideoPath(source, '.mp4'),
     runner,
     emit: {
       progress: (event) => emitToMain('export:progress', event),
@@ -245,14 +259,36 @@ export function registerHandlers(
       failed: (event) => emitToMain('export:failed', event),
     },
   });
-  const compress = new CompressService({
+  // The clipboard rule: a confirmation goes to the recording toolbar while recording, else to the
+  // main window, else (it is hidden in the tray) to the OS when notifications are on.
+  const autoCopy = new AutoCopy({
+    settings: () => settings.store.get(),
+    notify: (message) => {
+      if (recorder.isLive) {
+        recorder.toastToolbar({ level: 'info', message });
+      } else if (getMainWindow()?.isVisible()) {
+        for (const contents of webContentsWithRoles(['main']))
+          sendEvent(contents, 'app:toast', { level: 'info', message });
+      } else if (settings.store.get().general.showNotifications && Notification.isSupported()) {
+        new Notification({ title: 'FrameCapt', body: message, silent: true }).show();
+      }
+    },
+  });
+  const finalize = new FinalizeService({
     history,
     tools,
-    capability: () => mp4Capability,
-    storage: () => settings.store.get().recording.storage,
-    destination: freeMp4Path,
+    encoders: () => encoders,
+    settings: () => settings.store.get().recording,
+    destination: freeVideoPath,
     trashItem: (file) => shell.trashItem(file),
     runner,
+    toast: (event) => {
+      if (getMainWindow()?.isVisible()) {
+        for (const contents of webContentsWithRoles(['main']))
+          sendEvent(contents, 'app:toast', event);
+      }
+    },
+    onReplaced: (change) => void autoCopy.replaced(change),
     emit: {
       progress: (event) => emitToMain('export:progress', event),
       done: (event) => emitToMain('export:done', event),
@@ -269,7 +305,10 @@ export function registerHandlers(
       destination: (source, extension) => editedDestination(source, extension, freeFileName),
       emit: {
         progress: (event) => emitToMain('video:exportProgress', event),
-        done: (event) => emitToMain('video:exportDone', event),
+        done: (event) => {
+          emitToMain('video:exportDone', event);
+          void autoCopy.file(event.path);
+        },
         failed: (event) => emitToMain('video:exportFailed', event),
       },
     }),
@@ -289,7 +328,11 @@ export function registerHandlers(
     remember: rememberExported,
     emit: {
       progress: (event) => emitToMain('export:progress', event),
-      done: (event) => emitToMain('export:done', event),
+      done: (event) => {
+        emitToMain('export:done', event);
+        // A guide exported as a video or GIF (the only kind this service reports as done).
+        void autoCopy.file(event.path);
+      },
       failed: (event) => emitToMain('export:failed', event),
     },
   });
@@ -314,7 +357,22 @@ export function registerHandlers(
     settings: () => settings.store.get(),
     screenshotsDir: () => settings.dirs().screenshotsDir,
     history,
+    copyImage: (png: Uint8Array, options?: { quiet?: boolean }) =>
+      autoCopy.screenshot(png, options),
   };
+  /**
+   * A recording was saved: put the file on the clipboard (the settings), then queue the work on
+   * the file. "Also save an MP4" queues first, so it reads the recording as recorded (it is skipped
+   * when MP4 is already the save format); the save-format job follows and replaces the file.
+   */
+  async function afterRecordingSaved(historyId: string): Promise<void> {
+    const item = history.get(historyId);
+    if (item) await autoCopy.file(item.path);
+    const recording = settings.store.get().recording;
+    if (recording.autoExportMp4 && recording.saveFormat !== 'mp4')
+      await exports.startAuto(historyId);
+    await finalize.startAfterSave(historyId);
+  }
   const saveDirect = createSaveCaptureDirect(captureSaving);
   const recorder: RecorderController = new RecorderController({
     provider,
@@ -336,10 +394,9 @@ export function registerHandlers(
     },
     onSaved: (historyId) => {
       if (!historyId) return;
-      // One MP4, never two: compressed storage wins over "Export MP4 automatically".
-      const action = postSaveAction(settings.store.get().recording);
-      if (action === 'compress') void compress.startIfEnabled(historyId);
-      else if (action === 'export') void exports.startAuto(historyId);
+      void afterRecordingSaved(historyId).catch((error: unknown) =>
+        log.warn(`After saving a recording: ${String(error)}`),
+      );
     },
     persistCameraStyle: (patch) => void settings.store.update({ recording: patch }),
     // E2E builds only: a slow engine start, to test a stop that arrives while starting.
@@ -378,6 +435,9 @@ export function registerHandlers(
     sessions: new FlowSessions(flowsDir),
     save: async (input) => {
       const saved = await flows.saveSession(input);
+      // The guide is a folder of step images: that folder goes on the clipboard (the recording rule).
+      const guide = history.get(saved.historyId);
+      if (guide) void autoCopy.file(path.dirname(guide.path));
       // The guide opens in the main window (a window that was hidden in the tray comes back).
       showMainWindow();
       for (const contents of webContentsWithRoles(['main'])) {
@@ -408,6 +468,7 @@ export function registerHandlers(
     {
       get: () => settings.store.get(),
       screenshotsDir: () => settings.dirs().screenshotsDir,
+      copyImage: captureSaving.copyImage,
     },
     { store: projects, appVersion: app.getVersion() },
     flows,
@@ -430,7 +491,17 @@ export function registerHandlers(
         return image.isEmpty() ? undefined : image.resize({ width }).toPNG();
       },
     });
-  registerHistoryHandlers(history, exports, extracts, bulk, () => mp4Capability, outputDir, rescan);
+  registerHistoryHandlers(
+    history,
+    exports,
+    extracts,
+    bulk,
+    () => mp4Capability,
+    outputDir,
+    rescan,
+    finalize,
+    () => encoders,
+  );
   registerRecorderHandlers(recorder, sessions, media, (width) => pill.resize(width));
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.

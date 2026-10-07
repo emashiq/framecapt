@@ -16,7 +16,7 @@ export interface SeedFile {
   height: number;
   durationMs: number | null;
   sizeBytes: number;
-  format: 'png' | 'jpeg' | 'webm' | 'mp4' | 'gif';
+  format: 'png' | 'jpeg' | 'webm' | 'mp4' | 'mkv' | 'gif';
   fps?: number;
   hasAudio: boolean | null;
   source: 'screen' | 'window' | 'region' | 'unknown';

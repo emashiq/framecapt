@@ -153,7 +153,7 @@ export interface RecorderDeps {
     width: number;
     height: number;
     png: Buffer;
-  }) => Promise<unknown>;
+  }) => Promise<{ copied?: boolean } | void>;
   /** True while a screenshot flow runs (the two never overlap). */
   isScreenshotBusy: () => boolean;
   /** Folder of the finished recordings (the setting, else `Videos/FrameCapt`). */
@@ -937,9 +937,12 @@ export class RecorderController implements SelectionHost {
     this.snapping = true;
     try {
       const shot = await this.grabStill(ctx);
-      await this.deps.saveScreenshot(shot);
+      const saved = await this.deps.saveScreenshot(shot);
       log.info(`Screenshot saved during a recording: ${shot.kind} ${shot.width}x${shot.height}`);
-      this.toastToolbar({ level: 'info', message: 'Screenshot saved' });
+      this.toastToolbar({
+        level: 'info',
+        message: saved && saved.copied ? 'Screenshot saved and copied' : 'Screenshot saved',
+      });
     } catch (error) {
       log.warn(`Screenshot during a recording failed: ${String(error)}`);
       this.toastToolbar({ level: 'error', message: "Couldn't save the screenshot" });

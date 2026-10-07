@@ -85,7 +85,11 @@ async function setup() {
     store,
     { selecting: false } as never,
     history,
-    { get: () => settings, screenshotsDir: () => path.join(root, 'out') },
+    {
+      get: () => settings,
+      screenshotsDir: () => path.join(root, 'out'),
+      copyImage: async () => false,
+    },
     { store: projects, appVersion: '1.0.0' },
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

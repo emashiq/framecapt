@@ -1,16 +1,12 @@
 /**
- * Saving a capture with no editor (a screenshot taken during a recording): always a file in the
- * screenshots folder plus a history entry, in the configured format, copied too when asked.
+ * Capturing: the auto-copy rule (one rule for every path) and saving a capture with no editor (a
+ * screenshot taken during a recording): always a file in the screenshots folder plus a history
+ * entry, in the configured format, copied too when auto-copy is on.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const hoisted = vi.hoisted(() => ({ copied: [] as unknown[] }));
 vi.mock('electron', () => ({
-  clipboard: {
-    write: async (items: unknown[]) => {
-      hoisted.copied.push(...items);
-    },
-  },
+  clipboard: {},
   ClipboardItem: class {},
   nativeImage: {
     createFromBuffer: () => ({
@@ -27,15 +23,16 @@ vi.mock('../../src/main/logger', () => ({
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createSaveCaptureDirect } from '../../src/main/shots/after-capture';
+import { createAfterCapture, createSaveCaptureDirect } from '../../src/main/shots/after-capture';
 import { DEFAULT_SETTINGS, type Settings } from '../../src/shared/settings';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 const shot = { kind: 'region' as const, width: 800, height: 600, png: PNG };
 
 let folder: string;
+const copied: { png: Uint8Array; quiet: boolean | undefined }[] = [];
 beforeEach(() => {
-  hoisted.copied.length = 0;
+  copied.length = 0;
   folder = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'framecapt-direct-')), 'shots');
 });
 
@@ -43,12 +40,18 @@ function setup(change: (settings: Settings) => void = () => undefined) {
   const settings = structuredClone(DEFAULT_SETTINGS);
   change(settings);
   const addScreenshot = vi.fn(async () => ({ id: 'h1' }));
-  const save = createSaveCaptureDirect({
+  // The real rule lives in AutoCopy (clipboard.test.ts); here it is a spy that follows the setting.
+  const deps = {
     settings: () => settings,
     screenshotsDir: () => folder,
     history: { addScreenshot },
-  });
-  return { save, addScreenshot };
+    copyImage: async (png: Uint8Array, options?: { quiet?: boolean }) => {
+      if (!settings.screenshots.autoCopy) return false;
+      copied.push({ png, quiet: options?.quiet });
+      return true;
+    },
+  };
+  return { save: createSaveCaptureDirect(deps), after: createAfterCapture(deps), addScreenshot };
 }
 
 describe('saving a capture directly', () => {
@@ -69,7 +72,6 @@ describe('saving a capture directly', () => {
         thumbnail: expect.anything(),
       }),
     );
-    expect(hoisted.copied).toHaveLength(0);
   });
 
   it('follows the JPEG format setting', async () => {
@@ -82,12 +84,34 @@ describe('saving a capture directly', () => {
     expect(addScreenshot).toHaveBeenCalledWith(expect.objectContaining({ format: 'jpeg' }));
   });
 
-  it('also copies the image when the setting asks for a copy', async () => {
+  it('also copies the image when auto-copy is on, and says so for the toast', async () => {
+    const { save } = setup();
+    const result = await save(shot);
+    expect(result.copied).toBe(true);
+    expect(copied).toHaveLength(1);
+    expect(copied[0]?.png).toEqual(PNG);
+  });
+
+  it('does not copy when auto-copy is off', async () => {
     const { save } = setup((settings) => {
-      settings.screenshots.afterCapture = 'copy-and-editor';
+      settings.screenshots.autoCopy = false;
     });
-    await save(shot);
-    expect(hoisted.copied).toHaveLength(1);
+    const result = await save(shot);
+    expect(result.copied).toBe(false);
+    expect(copied).toHaveLength(0);
+  });
+
+  it('the capture is copied before the editor opens, whatever the after-capture mode (one rule)', async () => {
+    for (const mode of ['editor', 'save-and-editor'] as const) {
+      copied.length = 0;
+      const { after } = setup((settings) => {
+        settings.screenshots.afterCapture = mode;
+      });
+      const result = await after(shot);
+      expect(copied).toHaveLength(1);
+      expect(copied[0]?.quiet).toBe(true);
+      expect(result.savedPath !== undefined).toBe(mode === 'save-and-editor');
+    }
   });
 
   it('never overwrites an existing file', async () => {

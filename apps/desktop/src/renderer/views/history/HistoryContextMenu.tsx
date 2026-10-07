@@ -18,6 +18,7 @@ import type { HistoryItemView } from '../../../shared/history-ipc';
 import { cn } from '../../lib/cn';
 import { canEditItem, editLabel, type ItemActions } from './actions';
 import { menuItemClass } from './HistoryCard';
+import { canSaveAs } from './SaveAs';
 import { selectionLabel } from './selection';
 
 export interface ContextTarget {
@@ -206,6 +207,15 @@ export function HistoryContextMenu(props: HistoryContextMenuProps) {
                   label="Save a copy to a folder…"
                   reason={missing ? MISSING : null}
                   onSelect={() => props.onSaveCopies([item.id])}
+                />
+              ) : null}
+              {canSaveAs(item) ? (
+                <Entry
+                  testId="ctx-save-as"
+                  icon={<Save className={ICON} />}
+                  label="Save in another format…"
+                  reason={missing ? MISSING : null}
+                  onSelect={() => actions.saveAs(item)}
                 />
               ) : null}
               {item.type === 'recording' && item.format === 'webm' ? (

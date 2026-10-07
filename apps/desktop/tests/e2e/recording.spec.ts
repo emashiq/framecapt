@@ -371,7 +371,17 @@ test.describe('one display', () => {
     expect(await mainIsMinimized()).toBe(true);
 
     await toolbar.getByTestId('toolbar-screenshot').click();
-    await expect(toolbar.getByTestId('toolbar-toast')).toHaveText('Screenshot saved');
+    // Auto-copy is on by default: the one toast says so, and the picture is on the clipboard.
+    await expect(toolbar.getByTestId('toolbar-toast')).toHaveText('Screenshot saved and copied');
+    const copied = await app.evaluate(async ({ clipboard, nativeImage }) => {
+      const [item] = await clipboard.read();
+      if (!item?.types.includes('image/png')) return null;
+      return nativeImage
+        .createFromBuffer(Buffer.from(await (await item.getType('image/png')).arrayBuffer()))
+        .getSize();
+    });
+    // The mock display A is 2560 x 1440: the full-resolution still, not the 1080p video size.
+    expect(copied).toMatchObject({ width: 2560, height: 1440 });
     await expect
       .poll(async () => (await screenshots()).length, { timeout: 15_000 })
       .toBe(before + 1);
