@@ -402,6 +402,19 @@ export const ipcContract = {
   'recorder:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
   /** A screenshot of what is being recorded, saved straight to the screenshots folder. */
   'recorder:screenshot': { request: z.undefined(), response: z.void(), roles: ['toolbar'] },
+  /**
+   * The toolbar's chevrons: main pops a native menu under the button (x and y are the button's
+   * bottom-left in the toolbar window's own coordinates).
+   */
+  'recorder:toolbarMenu': {
+    request: z.strictObject({
+      menu: z.literal('screenshot'),
+      x: z.number().min(0).max(2000),
+      y: z.number().min(0).max(2000),
+    }),
+    response: z.void(),
+    roles: ['toolbar'],
+  },
   'recorder:toggleMute': {
     request: ToggleMuteRequestSchema,
     response: z.void(),

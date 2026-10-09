@@ -1,6 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, nativeImage, Notification, screen, session, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  nativeImage,
+  Notification,
+  screen,
+  session,
+  shell,
+  webContents,
+} from 'electron';
 import { BulkExportService } from './history/bulk-export';
 import { AutoCopy } from './clipboard/auto-copy';
 import { FinalizeService } from './history/finalize-service';
@@ -31,6 +41,7 @@ import { nodeSessionFs, type SessionFs } from './recording/session-fs';
 import { SessionService } from './recording/session-service';
 import { RecorderController } from './recorder/controller';
 import { registerRecorderHandlers } from './recorder/handlers';
+import { buildScreenshotMenuTemplate } from './recorder/toolbar-menus';
 import { CaptureFlow } from './capture-flow';
 import { StepsController } from './flows/controller';
 import { pickExportFolder, pickGuideSave } from './flows/dialogs';
@@ -54,12 +65,15 @@ import { installDisplayMediaGrants } from './capture/display-media';
 import { registerDiagnosticsHandlers } from './capture/diagnostics';
 import type { CaptureProvider } from './capture/types';
 import type { IpcEventPayload } from '../shared/ipc-contract';
+import { friendlyError } from '../shared/error-messages';
+import type { StartScreenshotRequest } from '../shared/shot-ipc';
 import { sendEvent } from './events';
 import type { UpdateService } from './updates';
 import {
   getMainWindow,
   getOriginConfig,
   setMainCloseInterceptor,
+  setMainProtected,
   showMainWindow,
   webContentsWithRoles,
 } from './windows';
@@ -465,6 +479,7 @@ export function registerHandlers(
     // Nor while a step guide is captured: the pointer and the screen belong to it.
     isBlocked: () => (recorder.busy && !recorder.isLive) || steps.active,
     isRecording: () => recorder.isLive,
+    onOverlaysShown: () => recorder.raiseToolbar(),
     saveDirect,
     toast: (event) => recorder.toastToolbar(event),
     afterCapture: createAfterCapture(captureSaving),
@@ -473,6 +488,8 @@ export function registerHandlers(
   // The recording ended (or was stopped) while a screenshot selection was open: drop the selection.
   recorder.onChange(() => {
     if (flow.duringRecording && !recorder.isLive) flow.cancel();
+    // The main window can be shown for the window picker during a recording: keep it out of the video.
+    setMainProtected(recorder.isLive);
   });
   const steps: StepsController = new StepsController({
     now: () => Date.now(),
@@ -565,7 +582,37 @@ export function registerHandlers(
       appVersion: app.getVersion(),
     }),
   );
-  registerRecorderHandlers(recorder, sessions, media, (width) => pill.resize(width));
+  registerRecorderHandlers(
+    recorder,
+    sessions,
+    media,
+    (width) => pill.resize(width),
+    async (request, webContentsId) => {
+      const contents = webContents.fromId(webContentsId);
+      const win = contents && BrowserWindow.fromWebContents(contents);
+      if (!win || win.isDestroyed() || !recorder.isLive) return;
+      const displays = provider.listDisplays();
+      const windows = await provider.listSources({ types: ['window'], thumbnailWidth: 0 });
+      const report = (error: unknown): void => {
+        const failure = error as { code?: string; message?: string };
+        recorder.toastToolbar({
+          level: 'error',
+          message: friendlyError(failure.code, failure.message),
+        });
+      };
+      const shot = (shotRequest: StartScreenshotRequest): void =>
+        void flow.start(shotRequest).catch(report);
+      const menu = Menu.buildFromTemplate(
+        buildScreenshotMenuTemplate(displays, windows, {
+          recordedArea: () => void recorder.screenshotNow().catch(() => undefined),
+          region: () => shot({ target: 'region' }),
+          screen: (displayId) => shot({ target: 'screen', displayId }),
+          window: (sourceId) => shot({ target: 'window', sourceId }),
+        }),
+      );
+      menu.popup({ window: win, x: Math.round(request.x), y: Math.round(request.y) });
+    },
+  );
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.
   setMainCloseInterceptor(() => (recorder.isRecording && !recorder.isQuitting) || steps.active);

@@ -16,6 +16,11 @@ export function registerRecorderHandlers(
   media: MediaRegistry,
   /** The Steps pill shares the toolbar window role: its width requests come here too. */
   onStepsToolbarResize?: (width: number) => void,
+  /** Pops the toolbar's menu (Electron-free here; the window and the menu belong to the caller). */
+  onToolbarMenu?: (
+    request: { menu: 'screenshot'; x: number; y: number },
+    webContentsId: number,
+  ) => Promise<void>,
 ): void {
   handle('recorder:start', { roles: ['main'] }, async (request) => {
     const { sessionId } = await controller.start(request);
@@ -28,6 +33,9 @@ export function registerRecorderHandlers(
     void controller.stop('user');
   });
   handle('recorder:screenshot', { roles: ['toolbar'] }, () => controller.screenshotNow());
+  handle('recorder:toolbarMenu', { roles: ['toolbar'] }, (request, ctx) =>
+    onToolbarMenu?.(request, ctx.webContentsId),
+  );
   handle('recorder:cancel', { roles: ['main', 'toolbar'] }, () => controller.cancel());
   handle('recorder:toggleMute', { roles: ['main', 'toolbar'] }, (request) =>
     controller.toggleMute(request.source),

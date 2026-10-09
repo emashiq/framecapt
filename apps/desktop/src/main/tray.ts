@@ -114,8 +114,7 @@ export function buildTrayTemplate(
     return {
       id: `screenshot-${target}`,
       label,
-      // The window picker needs the main window, which must stay out of a recording.
-      enabled: screenshotEnabled && !(live && target === 'window'),
+      enabled: screenshotEnabled,
       ...acceleratorOf(state.shortcuts, action),
       click: () => handlers.run(action),
     };

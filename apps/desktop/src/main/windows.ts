@@ -40,6 +40,13 @@ export function registerWebContents(contents: WebContents, role: Role): void {
   contents.once('destroyed', () => roles.delete(id));
 }
 
+/** The focused window is FrameCapt's recording toolbar or camera bubble. */
+export function isOwnUiFocused(): boolean {
+  const focused = BrowserWindow.getFocusedWindow();
+  const role = focused && !focused.isDestroyed() ? roles.get(focused.webContents.id) : undefined;
+  return role === 'toolbar' || role === 'camera';
+}
+
 export function getRole(webContentsId: number): Role | undefined {
   return roles.get(webContentsId);
 }
@@ -100,6 +107,14 @@ export function resolveClose(discard: boolean): boolean {
  */
 export function setMainCloseInterceptor(interceptor: () => boolean): void {
   closeInterceptor = interceptor;
+}
+
+let mainProtected = false;
+
+/** While a recording is live the main window is excluded from capture (it can be shown for a picker). */
+export function setMainProtected(on: boolean): void {
+  mainProtected = on;
+  getMainWindow()?.setContentProtection(on);
 }
 
 export function getMainWindow(): BrowserWindow | undefined {
@@ -172,6 +187,7 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
 
   registerWebContents(win.webContents, 'main');
   mainWindow = win;
+  if (mainProtected) win.setContentProtection(true);
   win.once('ready-to-show', () => {
     if (showOnReady) win.show();
   });

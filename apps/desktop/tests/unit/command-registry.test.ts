@@ -129,9 +129,14 @@ describe('disabled reasons (explanation only)', () => {
     expect(find(commands, 'rec.screen').disabledReason).toBeNull();
   });
 
-  it('disables captures while a recording runs, and offers stop and pause instead', () => {
+  it('allows screenshots but not new captures while a recording runs, and offers stop and pause', () => {
     const commands = buildCommands(env({ recorderStatus: 'recording' }), actions());
-    expect(find(commands, 'shot.region').disabledReason).toMatch(/recording is in progress/);
+    expect(find(commands, 'shot.region').disabledReason).toBeNull();
+    expect(find(commands, 'rec.screen').disabledReason).toMatch(/recording is in progress/);
+    const starting = buildCommands(env({ recorderStatus: 'starting' }), actions());
+    expect(find(starting, 'shot.region').disabledReason).toMatch(/starting/);
+    const saving = buildCommands(env({ recorderStatus: 'processing' }), actions());
+    expect(find(saving, 'shot.region').disabledReason).toMatch(/being saved/);
     expect(find(commands, 'rec.stop').disabledReason).toBeNull();
     expect(find(commands, 'rec.pause').title).toBe('Pause recording');
     const paused = buildCommands(env({ recorderStatus: 'paused' }), actions());

@@ -99,9 +99,21 @@ const SECTIONS: readonly { id: SettingsSectionId; label: string; keywords: strin
 const RECORDER_IDLE: readonly RecorderStatus[] = ['idle', 'completed', 'error'];
 export const isRecorderBusy = (status: RecorderStatus): boolean => !RECORDER_IDLE.includes(status);
 
-/** Why a screenshot or a recording cannot start right now, or null. Explanation only. */
-export function captureBlockedReason(env: Pick<CommandEnv, 'recorderStatus'>): string | null {
-  return isRecorderBusy(env.recorderStatus) ? 'A recording is in progress. Stop it first.' : null;
+/**
+ * Why a capture cannot start right now, or null. Explanation only. A screenshot is allowed while a
+ * recording is live (recording or paused); main refuses it only during start-up and finishing.
+ */
+export function captureBlockedReason(
+  env: Pick<CommandEnv, 'recorderStatus'>,
+  kind: 'screenshot' | 'other' = 'other',
+): string | null {
+  const { recorderStatus } = env;
+  if (!isRecorderBusy(recorderStatus)) return null;
+  if (kind === 'other') return 'A recording is in progress. Stop it first.';
+  if (recorderStatus === 'recording' || recorderStatus === 'paused') return null;
+  return recorderStatus === 'stopping' || recorderStatus === 'processing'
+    ? 'A recording is being saved. Try again in a moment.'
+    : 'A recording is starting. Try again in a moment.';
 }
 
 type NewCommand = Omit<Command, 'disabledReason' | 'inPalette' | 'keywords'> & Partial<Command>;
@@ -121,7 +133,7 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       group: 'Capture',
       keywords: ['capture', 'screen shot', 'snip', target],
       hint: { kind: 'global', action: shot },
-      disabledReason: captureBlockedReason(env),
+      disabledReason: captureBlockedReason(env, 'screenshot'),
       run: () => actions.startCapture('screenshot', target),
     });
   }
@@ -133,7 +145,7 @@ export function buildCommands(env: CommandEnv, actions: CommandActions): Command
       group: 'Capture',
       keywords: ['capture', 'screen shot', 'snip', 'every screen', 'monitors', 'displays'],
       hint: { kind: 'global', action: 'screenshotAllScreens' },
-      disabledReason: captureBlockedReason(env),
+      disabledReason: captureBlockedReason(env, 'screenshot'),
       run: () => actions.startCapture('screenshot', 'screen', true),
     });
   }

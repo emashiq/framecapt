@@ -512,18 +512,14 @@ test.describe('one display', () => {
       }),
     );
     expect(again).toMatchObject({ ok: false, error: { code: 'BUSY' } });
-    // Screen and region screenshots are allowed while recording; a window one is not (its picker
-    // needs the main window, which must stay out of the video).
+    // Every kind of screenshot is allowed while recording (the main window is kept out of the video).
     const shot = await page.evaluate(() =>
       window.framecapt.invoke('capture:startScreenshot', {
         target: 'window',
         sourceId: 'window:1:0',
       }),
     );
-    expect(shot).toMatchObject({
-      ok: false,
-      error: { code: 'INVALID_PAYLOAD', message: expect.stringContaining('while recording') },
-    });
+    expect(shot).toMatchObject({ ok: true });
     await toolbar.getByTestId('toolbar-resume').click();
     await toolbar.getByTestId('toolbar-stop').click();
     await finishAndWaitForResult();

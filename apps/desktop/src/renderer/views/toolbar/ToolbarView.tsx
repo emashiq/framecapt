@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Camera,
   Check,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   GripVertical,
@@ -337,6 +338,24 @@ export function ToolbarView() {
                 onClick={() => void window.framecapt.invoke('recorder:screenshot')}
               >
                 <Camera className="size-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="-ml-2 flex h-8 w-5 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors duration-150 hover:bg-surface-3 hover:text-fg disabled:opacity-40"
+                aria-label="More screenshot options"
+                title="More screenshot options"
+                data-testid="toolbar-screenshot-more"
+                disabled={!recording && !paused}
+                onClick={(event) => {
+                  const box = event.currentTarget.getBoundingClientRect();
+                  void window.framecapt.invoke('recorder:toolbarMenu', {
+                    menu: 'screenshot',
+                    x: Math.max(0, Math.round(box.left)),
+                    y: Math.max(0, Math.round(box.bottom)),
+                  });
+                }}
+              >
+                <ChevronDown className="size-3.5" aria-hidden="true" />
               </button>
 
               {snapshot.camera ? (

@@ -262,6 +262,9 @@ export function HomeView({
   const options = recordOptionsFromSettings(settings.recording);
   const recordingBusy = !['idle', 'completed', 'error'].includes(recorder.status);
   const anythingBusy = flow.running !== null || recordingBusy;
+  // A screenshot may start while a recording is live (recording or paused), not while one starts or finishes.
+  const recordingLive = recorder.status === 'recording' || recorder.status === 'paused';
+  const screenshotBusy = flow.running !== null || (recordingBusy && !recordingLive);
   const problems = problemCount(shortcutStates);
   const regionShortcut = settings.shortcuts.screenshotRegion;
   const openImageShortcut = settings.editorShortcuts.openImage;
@@ -478,7 +481,7 @@ export function HomeView({
             primary
             action="screenshotRegion"
             keyShortcuts={settings.shortcuts.screenshotRegion}
-            disabled={anythingBusy}
+            disabled={screenshotBusy}
             onClick={(trigger) => startScreenshot('region', trigger)}
           />
           <Tile
@@ -487,7 +490,7 @@ export function HomeView({
             testId="shot-screen"
             action="screenshotScreen"
             keyShortcuts={settings.shortcuts.screenshotScreen}
-            disabled={anythingBusy}
+            disabled={screenshotBusy}
             onClick={(trigger) => startScreenshot('screen', trigger)}
           />
           <Tile
@@ -496,7 +499,7 @@ export function HomeView({
             testId="shot-window"
             action="screenshotWindow"
             keyShortcuts={settings.shortcuts.screenshotWindow}
-            disabled={anythingBusy}
+            disabled={screenshotBusy}
             onClick={(trigger) => startScreenshot('window', trigger)}
           />
           {multiDisplay ? (
@@ -506,7 +509,7 @@ export function HomeView({
               testId="shot-all-screens"
               action="screenshotAllScreens"
               keyShortcuts={settings.shortcuts.screenshotAllScreens}
-              disabled={anythingBusy}
+              disabled={screenshotBusy}
               onClick={(trigger) => startScreenshot('screen', trigger, true)}
             />
           ) : null}

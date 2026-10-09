@@ -54,7 +54,13 @@ import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import { OverlaySet } from '../overlay';
 import type { SelectionHost } from '../selection-host';
-import { getMainWindow, getWorkerWindow, peekWorkerWindow, webContentsWithRoles } from '../windows';
+import {
+  getMainWindow,
+  getWorkerWindow,
+  isOwnUiFocused,
+  peekWorkerWindow,
+  webContentsWithRoles,
+} from '../windows';
 import { grabScreensExact } from '../capture/exact-capture';
 import { requestFrames, whenWorkerReady } from '../worker';
 import type { MediaTools } from '../media/ffmpeg';
@@ -707,6 +713,7 @@ export class RecorderController implements SelectionHost {
       throw new StartFailure('SOURCE_MISSING', 'No screen was found to record.');
     const mode = request.target === 'screen' ? 'pick-display' : 'record-region';
     const overlays = new OverlaySet(mode, {
+      isOwnUiFocused,
       onAllBlurred: () => {
         log.info('Overlays lost focus; cancelling the recording');
         this.cancel();
@@ -1068,6 +1075,12 @@ export class RecorderController implements SelectionHost {
   /** `camera:setStyle`: the bubble's own size, shape and hide buttons. */
   setCameraStyle(request: CameraSetStyleRequest): CameraStyleState {
     return this.requireCamera().setStyle(request);
+  }
+
+  /** Keeps the toolbar clickable above selection overlays opened during the recording. */
+  raiseToolbar(): void {
+    const win = this.toolbar?.win;
+    if (win && !win.isDestroyed()) win.moveTop();
   }
 
   /** The toolbar's camera button. */

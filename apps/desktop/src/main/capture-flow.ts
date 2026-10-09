@@ -15,15 +15,13 @@ import { log } from './logger';
 import { OverlaySet, type FrozenFrame } from './overlay';
 import { FlowState } from './shots/flow-state';
 import type { ShotSessionStore } from './shots/session-store';
-import { getMainWindow } from './windows';
+import { getMainWindow, isOwnUiFocused } from './windows';
 import { requestFrames, WorkerError, type WorkerFrame } from './worker';
 
 /** Time for the window manager to remove a hidden/closed window from the composed desktop. */
 const SETTLE_MS = 200;
 const WINDOW_UNAVAILABLE =
   "That window is minimized or can't be captured. Restore it and try again.";
-const WINDOW_WHILE_RECORDING =
-  "Window screenshots can't be taken while recording. Use the camera button on the recording toolbar, or take a screen or region screenshot.";
 const SCREEN_FAILED = 'Could not capture the screen. Please try again.';
 
 export interface CaptureFlowDeps {
@@ -35,6 +33,8 @@ export interface CaptureFlowDeps {
   isBlocked?: () => boolean;
   /** True while a recording runs: a flow started then saves directly and leaves the windows alone. */
   isRecording?: () => boolean;
+  /** All selection overlays are up during a recording: the toolbar is raised above them. */
+  onOverlaysShown?: () => void;
   /** Saves a capture with no editor (during a recording); throws when it could not be saved. */
   saveDirect?: (shot: {
     kind: CaptureTarget;
@@ -94,9 +94,6 @@ export class CaptureFlow {
     // call all land here.
     if (this.deps.isBlocked?.()) throw new IpcError('BUSY', 'A recording is in progress.');
     const recording = this.deps.isRecording?.() ?? false;
-    if (recording && request.target === 'window') {
-      throw new IpcError('INVALID_PAYLOAD', WINDOW_WHILE_RECORDING);
-    }
     const claim = this.state.tryStart();
     if (!claim.ok) throw new IpcError('BUSY', 'A capture is already in progress.');
     const flowId = claim.flowId;
@@ -134,8 +131,10 @@ export class CaptureFlow {
       await this.captureSingle(flowId, request.sourceId, 'window');
       return;
     }
-    if (request.target === 'screen' && this.displays.length === 1) {
-      const display = this.displays[0];
+    if (request.target === 'screen' && (request.displayId || this.displays.length === 1)) {
+      const display = request.displayId
+        ? this.displays.find((candidate) => candidate.id === request.displayId)
+        : this.displays[0];
       const sourceId = display && (await this.screenSourceFor(display.id));
       if (!sourceId) throw new FlowFailure('SOURCE_MISSING', 'No screen was found to capture.');
       await this.hideMainWindow();
@@ -168,6 +167,7 @@ export class CaptureFlow {
   private createOverlays(flowId: number, mode: OverlayMode): OverlaySet {
     const overlays = new OverlaySet(mode, {
       onShown: (shown, total) => {
+        if (shown === total && this.recordingFlow) this.deps.onOverlaysShown?.();
         if (shown === 1 || shown === total) {
           const ms = Math.round(performance.now() - this.requestedAt);
           log.info(
@@ -175,6 +175,7 @@ export class CaptureFlow {
           );
         }
       },
+      isOwnUiFocused,
       onAllBlurred: () => {
         log.info('Overlays lost focus; cancelling the capture');
         this.finish(flowId, { outcome: 'cancelled' });

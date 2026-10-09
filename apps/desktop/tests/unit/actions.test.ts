@@ -95,14 +95,11 @@ describe('screenshot actions', () => {
     }
   });
 
-  it('refuses a window screenshot while recording (its picker needs the main window)', () => {
+  it('a window screenshot while recording asks the main window picker', () => {
     const { run, deps } = setup('recording');
     run('screenshotWindow');
     expect(deps.startScreenshot).not.toHaveBeenCalled();
-    expect(deps.askMain).not.toHaveBeenCalled();
-    expect(deps.toast).toHaveBeenCalledWith(
-      expect.objectContaining({ level: 'error', message: expect.stringContaining('recording') }),
-    );
+    expect(deps.askMain).toHaveBeenCalledWith({ kind: 'screenshot', target: 'window' });
   });
 
   it('shows a friendly error when the flow refuses', async () => {

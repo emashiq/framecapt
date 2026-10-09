@@ -60,8 +60,8 @@ function errorToast(error: unknown): ToastEvent {
 /**
  * The one place global shortcuts, the tray menu and (through the same functions) the buttons start
  * things. Rules: a screenshot while anything runs is refused (BUSY, said in the UI), except while a
- * recording is live: then screen and region screenshots are saved directly and a window one is
- * refused (its picker needs the main window, which must stay out of the video); a record
+ * recording is live: then every kind is saved directly (a window one asks the main window's
+ * picker, which content protection keeps out of the video); a record
  * shortcut while recording stops it; pause toggles; window targets go through the main window,
  * which needs its picker (the editor is a window of its own and never stands in the way). While a step
  * guide is captured nothing else starts (the pointer and the screen belong to the guide); its own
@@ -76,15 +76,8 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
     const { status } = deps.recorder;
     const live = status === 'recording' || status === 'paused';
     if ((deps.recorder.busy && !live) || deps.screenshotBusy()) return busyToast();
-    if (live) {
-      if (request.target === 'window') {
-        return deps.toast({
-          level: 'error',
-          message:
-            "Window screenshots can't be taken while recording. Use the camera button on the recording toolbar instead.",
-        });
-      }
-    } else if (request.target === 'window') {
+    // A window one asks the main window's picker, also during a recording (that window is kept out of the video).
+    if (request.target === 'window' && !request.sourceId) {
       return deps.askMain({ kind: 'screenshot', ...request });
     }
     void deps.startScreenshot(request).catch((error: unknown) => deps.toast(errorToast(error)));

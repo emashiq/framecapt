@@ -24,6 +24,17 @@ export interface OverlayCallbacks {
   onShown?: (shown: number, total: number) => void;
   /** Every overlay lost keyboard focus (the user switched to another app). */
   onAllBlurred: () => void;
+  /** FrameCapt's own recording toolbar or camera bubble has focus (clicking it is not leaving). */
+  isOwnUiFocused?: () => boolean;
+}
+
+/** Whether losing focus ends the selection: only when it went to something that is not FrameCapt's own UI. */
+export function shouldCancelOnBlur(state: {
+  anyShown: boolean;
+  anyOverlayFocused: boolean;
+  ownUiFocused: boolean;
+}): boolean {
+  return state.anyShown && !state.anyOverlayFocused && !state.ownUiFocused;
 }
 
 /**
@@ -131,9 +142,11 @@ export class OverlaySet {
   private checkBlurred(): void {
     if (this.closed) return;
     const anyShown = [...this.entries.values()].some((entry) => entry.shown);
-    if (!anyShown) return;
-    const anyFocused = this.windows.some((win) => !win.isDestroyed() && win.isFocused());
-    if (!anyFocused) this.callbacks.onAllBlurred();
+    const anyOverlayFocused = this.windows.some((win) => !win.isDestroyed() && win.isFocused());
+    const ownUiFocused = this.callbacks.isOwnUiFocused?.() ?? false;
+    if (shouldCancelOnBlur({ anyShown, anyOverlayFocused, ownUiFocused })) {
+      this.callbacks.onAllBlurred();
+    }
   }
 
   has(webContentsId: number): boolean {

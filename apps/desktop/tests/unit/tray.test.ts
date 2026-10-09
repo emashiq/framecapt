@@ -157,14 +157,14 @@ describe('buildTrayTemplate', () => {
     expect(h.run).toHaveBeenCalledWith('screenshotAllScreens');
   });
 
-  it('screenshots stay available while a recording runs, except the window picker', () => {
+  it('screenshots stay available while a recording runs, including the window picker', () => {
     for (const status of ['recording', 'paused'] as const) {
       const template = buildTrayTemplate({ ...idle, status, multiDisplay: true }, handlers());
       const shot = find(template, 'screenshot')?.submenu as MenuItemConstructorOptions[];
       const enabled = Object.fromEntries(shot.map((item) => [item.id, item.enabled]));
       expect(enabled).toEqual({
         'screenshot-screen': true,
-        'screenshot-window': false,
+        'screenshot-window': true,
         'screenshot-region': true,
         'screenshot-all-screens': true,
       });
