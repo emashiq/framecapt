@@ -16,11 +16,11 @@ export function registerRecoveryHandlers(
   media: MediaRegistry,
 ): void {
   const guard = (): void => {
-    if (controller.busy) throw new IpcError('BUSY', 'Finish the current capture first.');
+    if (controller.anyBusy) throw new IpcError('BUSY', 'Finish the current capture first.');
   };
 
   handle('recovery:list', { roles: ['main'] }, async () => ({
-    candidates: controller.busy ? [] : await recovery.list(),
+    candidates: controller.anyBusy ? [] : await recovery.list(),
   }));
 
   handle('recovery:recover', { roles: ['main'] }, async (request) => {

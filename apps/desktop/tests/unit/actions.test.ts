@@ -4,10 +4,15 @@ import { DEFAULT_SETTINGS } from '../../src/shared/settings';
 import type { RecorderStatus } from '../../src/shared/recorder-machine';
 import { IpcError } from '../../src/main/ipc-core';
 
-function setup(status: RecorderStatus = 'idle', extra: Partial<ActionDeps> = {}) {
+function setup(
+  status: RecorderStatus = 'idle',
+  extra: Partial<ActionDeps> = {},
+  canStartAnother = !['selecting', 'preflight', 'countdown', 'starting'].includes(status),
+) {
   const recorder = {
     status,
     busy: !['idle', 'completed', 'error'].includes(status),
+    canStartAnother,
     start: vi.fn(() => Promise.resolve({})),
     stop: vi.fn(() => Promise.resolve()),
     pause: vi.fn(),
@@ -148,6 +153,26 @@ describe('record actions', () => {
       expect(recorder.stop).toHaveBeenCalledTimes(1);
       expect(recorder.start).not.toHaveBeenCalled();
     }
+  });
+
+  it('from the tray, a record item beside a running recording starts another one', () => {
+    for (const status of ['recording', 'paused', 'processing'] as const) {
+      const { run, recorder } = setup(status);
+      run('recordRegion', { another: true });
+      expect(recorder.stop).not.toHaveBeenCalled();
+      expect(recorder.cancel).not.toHaveBeenCalled();
+      expect(recorder.start).toHaveBeenCalledTimes(1);
+    }
+    const window = setup('recording');
+    window.run('recordWindow', { another: true });
+    expect(window.deps.askMain).toHaveBeenCalledWith({ kind: 'record', target: 'window' });
+  });
+
+  it('another recording is refused at the cap or while one is starting', () => {
+    const { run, recorder, deps } = setup('recording', {}, false);
+    run('recordScreen', { another: true });
+    expect(recorder.start).not.toHaveBeenCalled();
+    expect(deps.toast).toHaveBeenCalled();
   });
 
   it('during the start-up it cancels', () => {

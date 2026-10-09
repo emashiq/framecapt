@@ -58,6 +58,7 @@ import {
   RecorderStartRequestSchema,
   RecordingIdRequestSchema,
   ResolveChoiceRequestSchema,
+  SessionCommandRequestSchema,
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
 import {
@@ -396,12 +397,36 @@ export const ipcContract = {
     response: z.object({ started: z.literal(true), sessionId: z.string() }),
     roles: ['main'],
   },
-  'recorder:pause': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
-  'recorder:resume': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
-  'recorder:stop': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
-  'recorder:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  // Up to three recordings run at once: the main window may name one (`sessionId`, default the
+  // primary one); a toolbar's command always acts on the recording that toolbar belongs to.
+  'recorder:pause': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:resume': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:stop': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  /** Stops every running recording (the tray's "Stop all recordings"). */
+  'recorder:stopAll': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  'recorder:cancel': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
   /** A screenshot of what is being recorded, saved straight to the screenshots folder. */
-  'recorder:screenshot': { request: z.undefined(), response: z.void(), roles: ['toolbar'] },
+  'recorder:screenshot': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['toolbar'],
+  },
   /**
    * The toolbar's chevrons: main pops a native menu under the button (x and y are the button's
    * bottom-left in the toolbar window's own coordinates).
@@ -450,7 +475,7 @@ export const ipcContract = {
     response: z.void(),
     roles: ['main'],
   },
-  'recorder:reset': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  'recorder:reset': { request: SessionCommandRequestSchema, response: z.void(), roles: ['main'] },
   'recorder:showInFolder': {
     request: RecordingIdRequestSchema,
     response: z.void(),

@@ -82,6 +82,35 @@ describe('recorder:start', () => {
   });
 });
 
+describe('commands on one of several recordings', () => {
+  it('accept an optional session id (and nothing else); a toolbar names none', () => {
+    for (const channel of [
+      'recorder:pause',
+      'recorder:resume',
+      'recorder:stop',
+      'recorder:cancel',
+      'recorder:reset',
+      'recorder:screenshot',
+    ] as const) {
+      const schema = ipcContract[channel].request;
+      expect(schema.safeParse(undefined).success).toBe(true);
+      expect(schema.safeParse({ sessionId: 'abc' }).success).toBe(true);
+      expect(schema.safeParse({ sessionId: '' }).success).toBe(false);
+      expect(schema.safeParse({ sessionId: 'abc', extra: 1 }).success).toBe(false);
+    }
+    const mute = ipcContract['recorder:toggleMute'].request;
+    expect(mute.safeParse({ source: 'mic' }).success).toBe(true);
+    expect(mute.safeParse({ source: 'mic', sessionId: 'abc' }).success).toBe(true);
+    expect(mute.safeParse({ source: 'mic', sessionId: 5 }).success).toBe(false);
+    const choice = ipcContract['recorder:resolveChoice'].request;
+    expect(choice.safeParse({ answer: 'cancel', sessionId: 'abc' }).success).toBe(true);
+  });
+
+  it('stopAll is the main window only', () => {
+    expect([...ipcContract['recorder:stopAll'].roles]).toEqual(['main']);
+  });
+});
+
 describe('session channels', () => {
   it('append: validates session id, seq and the chunk size', () => {
     const bytes = new ArrayBuffer(10);

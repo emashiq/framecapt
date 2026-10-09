@@ -555,6 +555,14 @@ describe('SessionService: disk pressure', () => {
     expect(fs.existsSync(path.join(root, ID))).toBe(false);
   });
 
+  it('with recordings already running the headroom grows with each of them', async () => {
+    const service = new TrackedService(root, { fs: free(2 * GB) });
+    await service.ensureSpaceToStart(0);
+    await service.ensureSpaceToStart(1); // 2 GB for the second recording
+    await expectCode(service.ensureSpaceToStart(2), 'LOW_DISK'); // the third needs 3 GB
+    await new TrackedService(root, { fs: free(3 * GB) }).ensureSpaceToStart(2);
+  });
+
   it('starts with exactly 1 GB free, and when free space cannot be determined', async () => {
     await new TrackedService(root, { fs: free(GB) }).create(CONFIG, ID, 1);
     const unknown = realFs({ statfs: () => Promise.reject(new Error('unsupported')) });

@@ -259,6 +259,24 @@ let workerWindow: BrowserWindow | undefined;
  */
 export function getWorkerWindow(): BrowserWindow {
   if (workerWindow && !workerWindow.isDestroyed()) return workerWindow;
+  const win = createHiddenRecorderWindow('');
+  workerWindow = win;
+  win.on('closed', () => {
+    if (workerWindow === win) workerWindow = undefined;
+  });
+  return win;
+}
+
+/**
+ * An extra hidden engine window, for a recording that runs beside the one in the worker window
+ * (each recording has its own engine, so each has its own capture grant and streams). It only
+ * records: it never serves screenshot frame grabs (`?engine=1`). The caller destroys it.
+ */
+export function createEngineWindow(): BrowserWindow {
+  return createHiddenRecorderWindow('?engine=1');
+}
+
+function createHiddenRecorderWindow(search: string): BrowserWindow {
   const win = new BrowserWindow({
     title: 'FrameCapt capture worker',
     show: false,
@@ -268,17 +286,8 @@ export function getWorkerWindow(): BrowserWindow {
     webPreferences: { ...securePreferences(), backgroundThrottling: false },
   });
   registerWebContents(win.webContents, 'recorder');
-  workerWindow = win;
-  win.on('closed', () => {
-    if (workerWindow === win) workerWindow = undefined;
-  });
-  void loadRenderer(win, 'recorder');
+  void loadRenderer(win, 'recorder', search);
   return win;
-}
-
-/** The recorder window if it exists; never creates it. */
-export function peekWorkerWindow(): BrowserWindow | undefined {
-  return workerWindow && !workerWindow.isDestroyed() ? workerWindow : undefined;
 }
 
 export function closeWorkerWindow(): void {

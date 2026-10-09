@@ -224,6 +224,11 @@ export class CaptureFlow {
     return this.state.active && this.recordingFlow;
   }
 
+  /** A recording's toolbar lost focus: the open selection checks whether the user left FrameCapt. */
+  recheckBlur(): void {
+    this.overlays?.recheckBlur();
+  }
+
   cancel(): void {
     if (this.state.active) log.info('Capture cancelled by the user');
     this.finish(this.flowId, { outcome: 'cancelled' });

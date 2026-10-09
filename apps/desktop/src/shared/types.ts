@@ -46,10 +46,12 @@ export interface IpcSuccess<T> {
 /** Every IPC call resolves to this shape; raw errors never cross the bridge. */
 export type IpcResult<T> = IpcSuccess<T> | IpcFailure;
 
-/** Arguments for `invoke`: channels whose request is `undefined` take no payload. */
+/** Arguments for `invoke`: channels whose request is `undefined` take no payload, optional ones may omit it. */
 export type InvokeArgs<C extends IpcChannel> = [IpcRequest<C>] extends [undefined]
   ? [payload?: undefined]
-  : [payload: IpcRequest<C>];
+  : undefined extends IpcRequest<C>
+    ? [payload?: IpcRequest<C>]
+    : [payload: IpcRequest<C>];
 
 /** The only surface exposed to the renderer as `window.framecapt`. */
 export interface FrameCaptApi {

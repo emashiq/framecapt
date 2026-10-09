@@ -54,15 +54,8 @@ vi.mock('electron', () => ({
   protocol: { handle: () => undefined, registerSchemesAsPrivileged: () => undefined },
 }));
 vi.mock('../../src/main/windows', () => {
-  const worker = {
-    webContents: hoisted.worker,
-    once: () => undefined,
-    isDestroyed: () => false,
-  };
   return {
     getMainWindow: () => undefined,
-    getWorkerWindow: () => worker,
-    peekWorkerWindow: () => worker,
     webContentsWithRoles: (roles: readonly string[]) =>
       [hoisted.main, hoisted.toolbar].filter((contents) =>
         roles.includes(contents === hoisted.main ? 'main' : 'toolbar'),
@@ -72,15 +65,17 @@ vi.mock('../../src/main/windows', () => {
 vi.mock('../../src/main/logger', () => ({
   log: { info: () => undefined, warn: () => undefined, error: () => undefined },
 }));
-vi.mock('../../src/main/worker', () => ({
-  whenWorkerReady: () => Promise.resolve(),
-  requestFrames: async () => [],
-}));
+vi.mock('../../src/main/worker', () => ({ requestFrames: async () => [] }));
 vi.mock('../../src/main/capture/exact-capture', () => ({ grabScreensExact: vi.fn() }));
 vi.mock('../../src/main/overlay', () => ({ OverlaySet: class {} }));
 vi.mock('../../src/main/recorder/windows', () => ({
   createToolbarWindow: () => ({
-    win: { isDestroyed: () => false, showInactive: () => undefined },
+    win: {
+      webContents: hoisted.toolbar,
+      isDestroyed: () => false,
+      showInactive: () => undefined,
+      on: () => undefined,
+    },
     setWidth: () => undefined,
     closeQuietly: () => undefined,
   }),
@@ -93,6 +88,7 @@ import { SessionService, type SessionFileHandle } from '../../src/main/recording
 import { RecorderController } from '../../src/main/recorder/controller';
 import type { EngineEvent } from '../../src/shared/recorder-ipc';
 import { grabScreensExact } from '../../src/main/capture/exact-capture';
+import { fakeEnginePool } from './fake-engines';
 import { fakeTools } from './fake-tools';
 
 const { state } = hoisted;
@@ -231,6 +227,7 @@ function build(
     },
     sessions,
     media: new MediaRegistry(),
+    engines: fakeEnginePool(() => hoisted.worker),
     synthetic: false,
     isScreenshotBusy: () => false,
     saveScreenshot: async (shot) => void savedShots.push(shot),
@@ -331,8 +328,8 @@ describe('stop from several places at once', () => {
     for (const entry of states.filter((candidate) => candidate.role !== 'main')) {
       expect(entry.payload.result, 'toolbar-side state carries no result').toBeNull();
     }
-    expect(controller.snapshotFor('toolbar').result).toBeNull();
-    expect(controller.snapshotFor('recorder').result).toBeNull();
+    expect(controller.snapshotFor('toolbar', hoisted.toolbar.id).result).toBeNull();
+    expect(controller.snapshotFor('recorder', hoisted.worker.id).result).toBeNull();
     expect(controller.snapshotFor('countdown').result).toBeNull();
     expect(controller.snapshotFor('main').result?.path).toContain(out);
   });
@@ -355,7 +352,7 @@ describe('a screenshot of the running recording (the toolbar button)', () => {
       ms: 1,
     });
     await startRecording();
-    expect(controller.isLive).toBe(true);
+    expect(controller.anyLive).toBe(true);
     await controller.screenshotNow();
     expect(savedShots).toEqual([
       { kind: 'screen', width: 1920, height: 1080, png: expect.anything() },
@@ -369,7 +366,7 @@ describe('a screenshot of the running recording (the toolbar button)', () => {
 
   it('refuses when nothing is recording', async () => {
     build();
-    expect(controller.isLive).toBe(false);
+    expect(controller.anyLive).toBe(false);
     await expect(controller.screenshotNow()).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(savedShots).toHaveLength(0);
   });

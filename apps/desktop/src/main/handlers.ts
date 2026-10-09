@@ -40,6 +40,7 @@ import { registerRecoveryHandlers } from './recording/recovery-handlers';
 import { nodeSessionFs, type SessionFs } from './recording/session-fs';
 import { SessionService } from './recording/session-service';
 import { RecorderController } from './recorder/controller';
+import { HiddenWindowPool } from './recorder/engine-pool';
 import { registerRecorderHandlers } from './recorder/handlers';
 import { buildScreenshotMenuTemplate } from './recorder/toolbar-menus';
 import { CaptureFlow } from './capture-flow';
@@ -323,7 +324,7 @@ export function registerHandlers(
   const autoCopy = new AutoCopy({
     settings: () => settings.store.get(),
     notify: (message) => {
-      if (recorder.isLive) {
+      if (recorder.anyLive) {
         recorder.toastToolbar({ level: 'info', message });
       } else if (getMainWindow()?.isVisible()) {
         for (const contents of webContentsWithRoles(['main']))
@@ -440,7 +441,10 @@ export function registerHandlers(
     saveScreenshot: saveDirect,
     sessions,
     media,
+    engines: new HiddenWindowPool(),
     synthetic,
+    // A recording's toolbar lost focus: an open screenshot selection checks whether the user left FrameCapt.
+    onToolbarBlur: () => flow.recheckBlur(),
     isScreenshotBusy: () => flow.state.active || steps.active,
     outputDir,
     tools,
@@ -477,8 +481,9 @@ export function registerHandlers(
     synthetic,
     // A screenshot may start while a recording runs (saved directly), not while one is set up or saved.
     // Nor while a step guide is captured: the pointer and the screen belong to it.
-    isBlocked: () => (recorder.busy && !recorder.isLive) || steps.active,
-    isRecording: () => recorder.isLive,
+    isBlocked: () =>
+      (recorder.anyBusy && !recorder.anyLive) || recorder.startupInProgress || steps.active,
+    isRecording: () => recorder.anyLive,
     onOverlaysShown: () => recorder.raiseToolbar(),
     saveDirect,
     toast: (event) => recorder.toastToolbar(event),
@@ -487,9 +492,9 @@ export function registerHandlers(
   });
   // The recording ended (or was stopped) while a screenshot selection was open: drop the selection.
   recorder.onChange(() => {
-    if (flow.duringRecording && !recorder.isLive) flow.cancel();
+    if (flow.duringRecording && !recorder.anyLive) flow.cancel();
     // The main window can be shown for the window picker during a recording: keep it out of the video.
-    setMainProtected(recorder.isLive);
+    setMainProtected(recorder.anyLive);
   });
   const steps: StepsController = new StepsController({
     now: () => Date.now(),
@@ -510,7 +515,7 @@ export function registerHandlers(
       }
       return saved;
     },
-    isBlocked: () => recorder.busy || flow.state.active,
+    isBlocked: () => recorder.anyBusy || flow.state.active,
     isOverPill: (point) => pill.isOver(point),
     ui: {
       open: () => pill.open(),
@@ -590,7 +595,7 @@ export function registerHandlers(
     async (request, webContentsId) => {
       const contents = webContents.fromId(webContentsId);
       const win = contents && BrowserWindow.fromWebContents(contents);
-      if (!win || win.isDestroyed() || !recorder.isLive) return;
+      if (!win || win.isDestroyed() || !recorder.anyLive) return;
       const displays = provider.listDisplays();
       const windows = await provider.listSources({ types: ['window'], thumbnailWidth: 0 });
       const report = (error: unknown): void => {
@@ -604,7 +609,8 @@ export function registerHandlers(
         void flow.start(shotRequest).catch(report);
       const menu = Menu.buildFromTemplate(
         buildScreenshotMenuTemplate(displays, windows, {
-          recordedArea: () => void recorder.screenshotNow().catch(() => undefined),
+          recordedArea: () =>
+            void recorder.screenshotNow(recorder.sessionIdOf(webContentsId)).catch(() => undefined),
           region: () => shot({ target: 'region' }),
           screen: (displayId) => shot({ target: 'screen', displayId }),
           window: (sourceId) => shot({ target: 'window', sourceId }),
@@ -682,6 +688,6 @@ export function registerHandlers(
     history,
     sessions,
     store,
-    isBusy: () => recorder.busy || flow.state.active || exports.active || steps.active,
+    isBusy: () => recorder.anyBusy || flow.state.active || exports.active || steps.active,
   };
 }

@@ -15,13 +15,23 @@ export interface AcquireDisplayOptions {
   maxSize?: { width: number; height: number } | undefined;
 }
 
+/** Acquisitions of this window run one after the other: a grant is one-shot per window. */
+let acquiring: Promise<unknown> = Promise.resolve();
+
 /**
  * Asks main for a one-shot grant, then calls getDisplayMedia: main's display-media handler hands
  * out exactly the granted source. There is no picker, so "cancelled" can only come from an
  * aborted request. Must be called from a user gesture (Chromium requires transient activation).
- * On any failure nothing stays open.
+ * On any failure nothing stays open. Two acquisitions in one window never overlap (a screenshot
+ * frame grab beside the recording of that window would otherwise race for the one grant).
  */
-export async function acquireDisplayStream(options: AcquireDisplayOptions): Promise<MediaStream> {
+export function acquireDisplayStream(options: AcquireDisplayOptions): Promise<MediaStream> {
+  const turn = acquiring.then(() => acquireDisplayStreamNow(options));
+  acquiring = turn.catch(() => undefined);
+  return turn;
+}
+
+async function acquireDisplayStreamNow(options: AcquireDisplayOptions): Promise<MediaStream> {
   const grant = await window.framecapt.invoke('capture:grant', {
     sourceId: options.sourceId,
     systemAudio: options.systemAudio,

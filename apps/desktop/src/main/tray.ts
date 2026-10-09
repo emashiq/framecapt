@@ -14,10 +14,25 @@ export interface TrayLike {
   isDestroyed(): boolean;
 }
 
+/** One running recording (recording, paused or being saved) as the menu lists it. */
+export interface TraySession {
+  sessionId: string;
+  /** "Recording 2". */
+  label: string;
+  status: RecorderStatus;
+  /** Active recording time in ms, up to now. */
+  activeMs: number;
+}
+
 export interface TrayState {
+  /** The primary recording's status (see primaryOf); idle without any. */
   status: RecorderStatus;
   /** Active recording time in ms (shown in the tooltip while recording or paused). */
   activeMs: number;
+  /** Every running recording, oldest first (up to three). Absent: only the primary one counts. */
+  sessions?: TraySession[];
+  /** Another recording may start (under the cap, none starting). Absent: only while none runs. */
+  canStartAnother?: boolean;
   shortcuts: ShortcutStates | null;
   /** A screenshot flow is running (the screenshot items wait). */
   screenshotBusy: boolean;
@@ -30,9 +45,12 @@ export interface TrayState {
 export interface TrayHandlers {
   open: () => void;
   openView: (view: 'history' | 'settings') => void;
-  run: (action: ShortcutAction) => void;
-  togglePause: () => void;
-  stop: () => void;
+  /** `another`: a record item while a recording runs starts one more instead of stopping it. */
+  run: (action: ShortcutAction, options?: { another: true }) => void;
+  /** Without an id: the primary recording. */
+  togglePause: (sessionId?: string) => void;
+  stop: (sessionId?: string) => void;
+  stopAll: () => void;
   quit: () => void;
 }
 
@@ -47,7 +65,24 @@ export function isRecordingState(status: RecorderStatus): boolean {
   return RECORDING_STATUSES.includes(status);
 }
 
-export function trayTooltip(state: Pick<TrayState, 'status' | 'activeMs'>): string {
+/** At least one recording is running or being saved (the primary one may be starting another). */
+function anyRecording(state: Pick<TrayState, 'status' | 'sessions'>): boolean {
+  return isRecordingState(state.status) || (state.sessions?.length ?? 0) > 0;
+}
+
+function liveSessions(state: Pick<TrayState, 'sessions'>): TraySession[] {
+  return (state.sessions ?? []).filter(
+    (session) => session.status === 'recording' || session.status === 'paused',
+  );
+}
+
+export function trayTooltip(state: Pick<TrayState, 'status' | 'activeMs' | 'sessions'>): string {
+  const live = liveSessions(state);
+  if (live.length >= 2) {
+    const longest = Math.max(...live.map((session) => session.activeMs));
+    const verb = live.some((session) => session.status === 'recording') ? 'Recording' : 'Paused';
+    return `FrameCapt — ${verb} ${live.length} videos – ${formatDuration(longest)}`;
+  }
   const time = formatDuration(state.activeMs);
   switch (state.status) {
     case 'recording':
@@ -76,26 +111,63 @@ export function buildTrayTemplate(
   state: TrayState,
   handlers: TrayHandlers,
 ): MenuItemConstructorOptions[] {
-  const recording = isRecordingState(state.status);
+  const recording = anyRecording(state);
   const live = state.status === 'recording' || state.status === 'paused';
   const preRecording = ['selecting', 'preflight', 'countdown', 'starting'].includes(state.status);
+  const running = state.sessions ?? [];
   const items: MenuItemConstructorOptions[] = [];
 
-  if (recording) {
+  if (running.length >= 2) {
+    // Several recordings: one submenu each (Pause/Resume, Stop), and a way to end them all.
+    for (const session of running) {
+      const ongoing = session.status === 'recording' || session.status === 'paused';
+      items.push({
+        id: `session-${session.sessionId}`,
+        label: `${session.label} – ${formatDuration(session.activeMs)}`,
+        submenu: [
+          {
+            id: `pause-${session.sessionId}`,
+            label: session.status === 'paused' ? 'Resume recording' : 'Pause recording',
+            enabled: ongoing,
+            click: () => handlers.togglePause(session.sessionId),
+          },
+          {
+            id: `stop-${session.sessionId}`,
+            label: 'Stop recording',
+            enabled: ongoing,
+            click: () => handlers.stop(session.sessionId),
+          },
+        ],
+      });
+    }
+    items.push(
+      {
+        id: 'stop-all',
+        label: 'Stop all recordings',
+        enabled: liveSessions(state).length > 0,
+        click: () => handlers.stopAll(),
+      },
+      { type: 'separator' },
+    );
+  } else if (recording) {
+    // One recording: flat items (it may not be the primary one while another is starting).
+    const one = running[0];
+    const oneStatus = one?.status ?? state.status;
+    const oneLive = oneStatus === 'recording' || oneStatus === 'paused';
     items.push(
       {
         id: 'pause',
-        label: state.status === 'paused' ? 'Resume recording' : 'Pause recording',
-        enabled: live,
+        label: oneStatus === 'paused' ? 'Resume recording' : 'Pause recording',
+        enabled: oneLive,
         ...acceleratorOf(state.shortcuts, 'pauseRecording'),
-        click: handlers.togglePause,
+        click: () => handlers.togglePause(one?.sessionId),
       },
       {
         id: 'stop',
         label: 'Stop recording',
-        enabled: live,
+        enabled: oneLive,
         ...acceleratorOf(state.shortcuts, 'stopRecording'),
-        click: handlers.stop,
+        click: () => handlers.stop(one?.sessionId),
       },
       { type: 'separator' },
     );
@@ -103,7 +175,7 @@ export function buildTrayTemplate(
 
   // A live recording still allows a screenshot (saved directly); saving it or setting it up does not.
   const screenshotEnabled = (live || (!recording && !preRecording)) && !state.screenshotBusy;
-  const recordEnabled = !recording && !state.screenshotBusy;
+  const recordEnabled = (state.canStartAnother ?? !recording) && !state.screenshotBusy;
   const targets = [
     ['Screen', 'screen'],
     ['Window', 'window'],
@@ -140,7 +212,8 @@ export function buildTrayTemplate(
           label,
           enabled: recordEnabled,
           ...acceleratorOf(state.shortcuts, action),
-          click: () => handlers.run(action),
+          // A recording is running: this one starts another (the shortcut itself would stop it).
+          click: () => (recording ? handlers.run(action, { another: true }) : handlers.run(action)),
         };
       }),
     },
@@ -240,7 +313,7 @@ export class TrayController {
   private render(state: TrayState): void {
     const tray = this.tray;
     if (!tray || tray.isDestroyed()) return;
-    const recording = isRecordingState(state.status);
+    const recording = anyRecording(state);
     if (recording !== this.lastRecording) {
       tray.setImage(recording ? this.deps.icons.recording : this.deps.icons.normal);
       this.lastRecording = recording;
@@ -250,7 +323,7 @@ export class TrayController {
   }
 
   /** Only the tooltip (the recording clock ticks once a second). */
-  updateTooltip(state: Pick<TrayState, 'status' | 'activeMs'>): void {
+  updateTooltip(state: Pick<TrayState, 'status' | 'activeMs' | 'sessions'>): void {
     if (this.tray && !this.tray.isDestroyed()) this.tray.setToolTip(trayTooltip(state));
   }
 

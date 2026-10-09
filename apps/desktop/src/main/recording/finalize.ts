@@ -66,6 +66,25 @@ export async function freeTarget(api: SessionFs, dir: string, fileName: string):
   throw new Error('No free output name.');
 }
 
+/** Recordings can finish at the same time: choosing a name and taking it happen one recording at a time. */
+let naming: Promise<unknown> = Promise.resolve();
+
+/** Renames `from` to the first free name of `dir` (see freeTarget) without another recording taking the same name. */
+async function renameToFreeTarget(
+  api: SessionFs,
+  from: string,
+  dir: string,
+  fileName: string,
+): Promise<string> {
+  const turn = naming.then(async () => {
+    const target = await freeTarget(api, dir, fileName);
+    await api.rename(from, target);
+    return target;
+  });
+  naming = turn.catch(() => undefined);
+  return turn;
+}
+
 function failure(code: RemuxFailureCode, message: string, stderrTail = ''): RemuxOutcome {
   return { ok: false, code, message, stderrTail };
 }
@@ -134,8 +153,7 @@ export async function remuxToOutput(request: RemuxRequest): Promise<RemuxOutcome
     }
 
     const partialSize = (await api.stat(partialPath)).size;
-    const target = await freeTarget(api, request.outputDir, request.fileName);
-    await api.rename(partialPath, target);
+    const target = await renameToFreeTarget(api, partialPath, request.outputDir, request.fileName);
     const finalSize = (await api.stat(target)).size;
     if (finalSize !== partialSize) {
       return failure('REMUX_FAILED', 'The finished file does not have the expected size.');
@@ -203,8 +221,12 @@ export async function remuxToFcap(
       );
     }
     const partialSize = (await api.stat(request.partialPath)).size;
-    const target = await freeTarget(api, request.outputDir, request.fileName);
-    await api.rename(request.partialPath, target);
+    const target = await renameToFreeTarget(
+      api,
+      request.partialPath,
+      request.outputDir,
+      request.fileName,
+    );
     const finalSize = (await api.stat(target)).size;
     if (finalSize !== partialSize) {
       return failure('REMUX_FAILED', 'The finished file does not have the expected size.');
@@ -235,8 +257,12 @@ export async function copyRawAsOutput(request: RemuxRequest): Promise<RawCopyOut
     await api.rm(request.partialPath, { force: true });
     try {
       await api.copyFile(request.streamPath, request.partialPath, fs.constants.COPYFILE_EXCL);
-      const target = await freeTarget(api, request.outputDir, request.fileName);
-      await api.rename(request.partialPath, target);
+      const target = await renameToFreeTarget(
+        api,
+        request.partialPath,
+        request.outputDir,
+        request.fileName,
+      );
       return { ok: true, outputPath: target, bytes: (await api.stat(target)).size };
     } finally {
       await api.rm(request.partialPath, { force: true }).catch(() => undefined);

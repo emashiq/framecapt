@@ -27,6 +27,7 @@ import { Loader } from '../components/Loader';
 import { OnboardingCard } from '../components/OnboardingCard';
 import { RecentCaptures } from '../components/RecentCaptures';
 import { RecordOptions } from '../components/RecordOptions';
+import { RecordingsStrip } from '../components/RecordingsStrip';
 import { RecoveryBanner } from '../components/RecoveryBanner';
 import { SourcePicker } from '../components/SourcePicker';
 import { Button } from '../components/ui/Button';
@@ -263,8 +264,15 @@ export function HomeView({
   const recordingBusy = !['idle', 'completed', 'error'].includes(recorder.status);
   const anythingBusy = flow.running !== null || recordingBusy;
   // A screenshot may start while a recording is live (recording or paused), not while one starts or finishes.
-  const recordingLive = recorder.status === 'recording' || recorder.status === 'paused';
-  const screenshotBusy = flow.running !== null || (recordingBusy && !recordingLive);
+  const recordingLive = recorder.sessions.some(
+    (session) => session.status === 'recording' || session.status === 'paused',
+  );
+  const startingUp = recorder.sessions.some((session) =>
+    ['selecting', 'preflight', 'countdown', 'starting'].includes(session.status),
+  );
+  const screenshotBusy = flow.running !== null || startingUp || (recordingBusy && !recordingLive);
+  // Up to three recordings run at once: the record tiles wait only for the cap, a start-up or a screenshot.
+  const recordBusy = flow.running !== null || !recorder.canStartAnother;
   const problems = problemCount(shortcutStates);
   const regionShortcut = settings.shortcuts.screenshotRegion;
   const openImageShortcut = settings.editorShortcuts.openImage;
@@ -396,6 +404,8 @@ export function HomeView({
 
       <RecoveryBanner busy={anythingBusy} />
 
+      <RecordingsStrip sessions={recorder.sessions} />
+
       {recorder.status === 'error' && recorder.error ? (
         <div
           role="alert"
@@ -522,7 +532,7 @@ export function HomeView({
             testId="record-screen"
             action="recordScreen"
             keyShortcuts={settings.shortcuts.recordScreen}
-            disabled={anythingBusy}
+            disabled={recordBusy}
             onClick={(trigger) => onRecordClick('screen', trigger)}
           />
           <Tile
@@ -531,7 +541,7 @@ export function HomeView({
             testId="record-region"
             action="recordRegion"
             keyShortcuts={settings.shortcuts.recordRegion}
-            disabled={anythingBusy}
+            disabled={recordBusy}
             onClick={(trigger) => onRecordClick('region', trigger)}
           />
           <Tile
@@ -540,7 +550,7 @@ export function HomeView({
             testId="record-window"
             action="recordWindow"
             keyShortcuts={settings.shortcuts.recordWindow}
-            disabled={anythingBusy}
+            disabled={recordBusy}
             onClick={(trigger) => onRecordClick('window', trigger)}
           />
           {multiDisplay ? (
@@ -549,7 +559,7 @@ export function HomeView({
               icon={Fullscreen}
               testId="record-all-screens"
               note="One video"
-              disabled={anythingBusy}
+              disabled={recordBusy}
               onClick={(trigger) => void recordAllScreens(trigger)}
             />
           ) : null}
@@ -558,7 +568,7 @@ export function HomeView({
             icon={Layers}
             testId="record-multi"
             note="Screens and windows"
-            disabled={anythingBusy}
+            disabled={recordBusy}
             onClick={(trigger) => onRecordClick('multi', trigger)}
           />
         </Group>
@@ -620,7 +630,7 @@ export function HomeView({
           compact
           options={options}
           onChange={(next) => void updateSettings(patchFromRecordOptions(next))}
-          disabled={anythingBusy}
+          disabled={recordBusy}
           outputDir={dirs.recordingsDir}
           onOpenSettings={() => onOpenSettings('recording')}
           cameraStyle={{

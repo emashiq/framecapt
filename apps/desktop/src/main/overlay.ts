@@ -134,9 +134,17 @@ export class OverlaySet {
     win.setContentProtection(true);
 
     registerWebContents(win.webContents, 'overlay');
-    win.on('blur', () => setTimeout(() => this.checkBlurred(), 150));
+    win.on('blur', () => this.recheckBlur());
     void loadRenderer(win, 'overlay');
     return { win, display, frame: undefined, shown: false };
+  }
+
+  /**
+   * Looks again (after a moment) whether the user left FrameCapt. A toolbar that lost focus calls
+   * it: while the toolbar had focus the overlays' own blur was not a reason to cancel.
+   */
+  recheckBlur(): void {
+    setTimeout(() => this.checkBlurred(), 150);
   }
 
   private checkBlurred(): void {

@@ -180,13 +180,18 @@ export class SessionService {
     return freeBytes(this.fsApi, this.rootDir);
   }
 
-  /** A recording must not start with less than 1 GB free. */
-  async ensureSpaceToStart(): Promise<void> {
+  /**
+   * A recording must not start with less than 1 GB free; with other recordings running (they keep
+   * writing) the headroom grows with each: `running` is how many there are.
+   */
+  async ensureSpaceToStart(running = 0): Promise<void> {
     const free = await this.freeBytes();
-    if (free !== null && free < MIN_FREE_TO_START) {
+    if (free !== null && free < MIN_FREE_TO_START * (running + 1)) {
       throw new IpcError(
         'LOW_DISK',
-        'There is not enough free disk space to record (FrameCapt needs at least 1 GB).',
+        running === 0
+          ? 'There is not enough free disk space to record (FrameCapt needs at least 1 GB).'
+          : `There is not enough free disk space to record another video (FrameCapt needs at least ${running + 1} GB with ${running} already recording).`,
       );
     }
   }

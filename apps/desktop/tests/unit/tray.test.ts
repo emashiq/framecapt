@@ -28,6 +28,7 @@ function handlers(): TrayHandlers {
     run: vi.fn(),
     togglePause: vi.fn(),
     stop: vi.fn(),
+    stopAll: vi.fn(),
     quit: vi.fn(),
   };
 }
@@ -54,6 +55,101 @@ describe('trayTooltip', () => {
     );
     expect(trayTooltip({ status: 'paused', activeMs: 83_999 })).toBe('FrameCapt — Paused 01:23');
     expect(trayTooltip({ status: 'stopping', activeMs: 1 })).toContain('Saving');
+  });
+});
+
+describe('several recordings', () => {
+  const running = (
+    ...entries: [string, TrayState['status'], number][]
+  ): NonNullable<TrayState['sessions']> =>
+    entries.map(([sessionId, status, activeMs], index) => ({
+      sessionId,
+      label: `Recording ${index + 1}`,
+      status,
+      activeMs,
+    }));
+
+  it('tooltip: the count and the longest time when two or more are live', () => {
+    const sessions = running(['a', 'recording', 83_000], ['b', 'paused', 72_000]);
+    expect(trayTooltip({ status: 'recording', activeMs: 72_000, sessions })).toBe(
+      'FrameCapt — Recording 2 videos – 01:23',
+    );
+    const paused = running(['a', 'paused', 5000], ['b', 'paused', 9000]);
+    expect(trayTooltip({ status: 'paused', activeMs: 0, sessions: paused })).toBe(
+      'FrameCapt — Paused 2 videos – 00:09',
+    );
+    // one live recording keeps the single wording (and a saving one does not count)
+    const one = running(['a', 'recording', 83_000], ['b', 'processing', 1000]);
+    expect(trayTooltip({ status: 'recording', activeMs: 83_000, sessions: one })).toBe(
+      'FrameCapt — Recording 01:23',
+    );
+  });
+
+  it('the menu has one submenu per recording and Stop all recordings', () => {
+    const h = handlers();
+    const sessions = running(['a', 'recording', 83_000], ['b', 'paused', 72_000]);
+    const template = buildTrayTemplate(
+      { ...idle, status: 'recording', sessions, canStartAnother: true },
+      h,
+    );
+    expect(labels(template).slice(0, 4)).toEqual([
+      'Recording 1 – 01:23',
+      'Recording 2 – 01:12',
+      'Stop all recordings',
+      '-',
+    ]);
+    const second = find(template, 'session-b')?.submenu as MenuItemConstructorOptions[];
+    expect(labels(second)).toEqual(['Resume recording', 'Stop recording']);
+    (second[0]?.click as () => void)();
+    (second[1]?.click as () => void)();
+    expect(h.togglePause).toHaveBeenCalledWith('b');
+    expect(h.stop).toHaveBeenCalledWith('b');
+    (find(template, 'stop-all')?.click as () => void)();
+    expect(h.stopAll).toHaveBeenCalled();
+  });
+
+  it('Record stays enabled under the cap and starts another instead of stopping', () => {
+    const h = handlers();
+    const sessions = running(['a', 'recording', 1000]);
+    const template = buildTrayTemplate(
+      { ...idle, status: 'recording', sessions, canStartAnother: true },
+      h,
+    );
+    // One recording: the flat Pause/Stop items act on that recording.
+    expect(labels(template).slice(0, 3)).toEqual(['Pause recording', 'Stop recording', '-']);
+    (find(template, 'stop')?.click as () => void)();
+    expect(h.stop).toHaveBeenCalledWith('a');
+    const record = find(template, 'record')?.submenu as MenuItemConstructorOptions[];
+    expect(record.every((item) => item.enabled === true)).toBe(true);
+    (record[0]?.click as () => void)();
+    expect(h.run).toHaveBeenCalledWith('recordScreen', { another: true });
+
+    const full = buildTrayTemplate(
+      { ...idle, status: 'recording', sessions, canStartAnother: false },
+      h,
+    );
+    const disabled = find(full, 'record')?.submenu as MenuItemConstructorOptions[];
+    expect(disabled.every((item) => item.enabled === false)).toBe(true);
+  });
+
+  it('the icon is red while any recording runs, even if the primary one is starting', () => {
+    const { tray, controller } = (() => {
+      const created = fakeTray();
+      const c = new TrayController({
+        createTray: () => created.tray,
+        buildMenu: (template) => template,
+        icons: { normal, recording },
+        handlers: handlers(),
+      });
+      c.ensure();
+      return { tray: created.tray, controller: c };
+    })();
+    controller.update({
+      ...idle,
+      status: 'selecting',
+      sessions: running(['a', 'recording', 1000]),
+    });
+    expect(tray.image).toBe(recording);
   });
 });
 

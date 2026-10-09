@@ -94,8 +94,21 @@ export const RecorderStartRequestSchema = z
   );
 export type RecorderStartRequest = z.infer<typeof RecorderStartRequestSchema>;
 
+const SessionIdSchema = z.string().min(1).max(64);
+
+/**
+ * Commands that act on one recording. The main window may name it (default: the primary one); the
+ * toolbar and countdown windows never do: main routes their commands to their own recording.
+ */
+export const SessionCommandRequestSchema = z
+  .strictObject({ sessionId: SessionIdSchema })
+  .optional();
+
 export const AudioSourceSchema = z.enum(['mic', 'system']);
-export const ToggleMuteRequestSchema = z.strictObject({ source: AudioSourceSchema });
+export const ToggleMuteRequestSchema = z.strictObject({
+  source: AudioSourceSchema,
+  sessionId: SessionIdSchema.optional(),
+});
 
 export const PreflightChoiceKindSchema = z.enum([
   'system-audio-unavailable',
@@ -105,7 +118,10 @@ export const PreflightChoiceKindSchema = z.enum([
   'camera-missing',
 ]);
 export const ChoiceAnswerSchema = z.enum(['continue-without', 'use-default', 'cancel']);
-export const ResolveChoiceRequestSchema = z.strictObject({ answer: ChoiceAnswerSchema });
+export const ResolveChoiceRequestSchema = z.strictObject({
+  answer: ChoiceAnswerSchema,
+  sessionId: SessionIdSchema.optional(),
+});
 
 export const RecordingIdRequestSchema = z.strictObject({ resultId: z.string().min(1).max(64) });
 
@@ -131,6 +147,22 @@ export const RecordingResultSchema = z.object({
   unindexed: z.boolean(),
 });
 export type RecordingResult = z.infer<typeof RecordingResultSchema>;
+
+/** One of the (up to three) recordings running at once, as every window may list it. */
+export const RecorderSessionSummarySchema = z.strictObject({
+  sessionId: z.string(),
+  /** "Recording 1", "Recording 2": stable while the recording lives. */
+  label: z.string().max(40),
+  status: z.enum(RECORDER_STATUSES),
+  target: RecordTargetSchema.nullable(),
+  activeMs: z.number(),
+  runningSince: z.number().nullable(),
+  progress: z.number().min(0).max(1).nullable(),
+  quitting: z.boolean(),
+  /** Reserved for panel recordings (a later phase); always 0 for now. */
+  panels: z.number().int().min(0).max(4),
+});
+export type RecorderSessionSummary = z.infer<typeof RecorderSessionSummarySchema>;
 
 export const RecorderSnapshotSchema = z.object({
   status: z.enum(RECORDER_STATUSES),
@@ -171,6 +203,10 @@ export const RecorderSnapshotSchema = z.object({
   width: z.number().nullable(),
   height: z.number().nullable(),
   result: RecordingResultSchema.nullable(),
+  /** Every recording (at most three); the fields above describe one of them (see snapshotFor). */
+  sessions: z.array(RecorderSessionSummarySchema).max(3),
+  /** Another recording may start now (under the cap, and none is starting). */
+  canStartAnother: z.boolean(),
 });
 export type RecorderSnapshot = z.infer<typeof RecorderSnapshotSchema>;
 
@@ -298,8 +334,6 @@ export const MAX_CHUNK_BYTES = 16 * 1024 * 1024;
 export const MAX_PENDING_CHUNKS = 16;
 export const MAX_PENDING_BYTES = 64 * 1024 * 1024;
 export const CHUNK_TIMESLICE_MS = 1000;
-
-const SessionIdSchema = z.string().min(1).max(64);
 
 export const AppendChunkRequestSchema = z.strictObject({
   sessionId: SessionIdSchema,
