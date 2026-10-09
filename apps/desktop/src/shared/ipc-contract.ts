@@ -47,6 +47,8 @@ import {
   ShotSaveOverResponseSchema,
 } from './project-ipc';
 import {
+  AddPanelRequestSchema,
+  AddPanelResponseSchema,
   AppendChunkRequestSchema,
   AppendChunkResponseSchema,
   EngineCommandSchema,
@@ -54,11 +56,14 @@ import {
   FinishSessionRequestSchema,
   FinishSessionResponseSchema,
   LevelsEventSchema,
+  PanelMenuRequestSchema,
   RecorderSnapshotSchema,
   RecorderStartRequestSchema,
   RecordingIdRequestSchema,
+  RemovePanelRequestSchema,
   ResolveChoiceRequestSchema,
   SessionCommandRequestSchema,
+  SetPanelHiddenRequestSchema,
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
 import {
@@ -438,13 +443,31 @@ export const ipcContract = {
    */
   'recorder:toolbarMenu': {
     request: z.strictObject({
-      menu: z.literal('screenshot'),
+      menu: z.enum(['screenshot', 'panel']),
       x: z.number().min(0).max(2000),
       y: z.number().min(0).max(2000),
     }),
     response: z.void(),
     roles: ['toolbar'],
   },
+  // --- live panels: another region, window or screen in the picture of a running recording ---
+  'recorder:addPanel': {
+    request: AddPanelRequestSchema,
+    response: AddPanelResponseSchema,
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:removePanel': {
+    request: RemovePanelRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:setPanelHidden': {
+    request: SetPanelHiddenRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** The main window's "Add panel" button: main pops the panel menu under it. */
+  'recorder:panelMenu': { request: PanelMenuRequestSchema, response: z.void(), roles: ['main'] },
   'recorder:toggleMute': {
     request: ToggleMuteRequestSchema,
     response: z.void(),

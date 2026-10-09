@@ -15,7 +15,15 @@ import type {
   CameraSize,
   CameraStyleState,
 } from '../../shared/camera';
-import { globalDipToDisplayLocal, type DisplayGeom } from '../../shared/geometry';
+import { globalDipToDisplayLocal, type DisplayGeom, type Size } from '../../shared/geometry';
+import {
+  freePanelSlot,
+  MAX_PANELS,
+  panelLabel,
+  type PanelKind,
+  type PanelPlaceholder,
+  type PanelSlot,
+} from '../../shared/panels';
 import { platformCapabilities } from '../../shared/platform';
 import type {
   EngineCommand,
@@ -57,6 +65,7 @@ import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import type { MediaTools } from '../media/ffmpeg';
 import type { MediaRegistry } from '../recording/media-protocol';
+import type { ManifestPanel } from '../recording/session-service';
 import type { SessionService } from '../recording/session-service';
 import { requestFrames } from '../worker';
 import { CameraBubble } from './camera';
@@ -72,6 +81,8 @@ const COUNTDOWN_FROM = 3;
 const PREPARE_TIMEOUT_MS = 20_000;
 const START_TIMEOUT_MS = 10_000;
 const STOP_TIMEOUT_MS = 20_000;
+/** Adding a panel acquires a capture stream and waits for its first frame. */
+const PANEL_TIMEOUT_MS = 15_000;
 /** How often the mouse is sampled for a follow-mouse recording. */
 const CURSOR_INTERVAL_MS = 1000 / 30;
 
@@ -127,6 +138,22 @@ interface SessionContext {
   progress: number | null;
   result: RecordingResult | null;
   sessionCreated: boolean;
+}
+
+/** A source to add to the picture of a running recording, already resolved by main. */
+export interface PanelSpec {
+  kind: PanelKind;
+  sourceId: string;
+  /** Region in pixels of the display (even aligned), for a region panel. */
+  region: Rect | null;
+  /** Physical size of the display (screen and region panels). */
+  displaySize: Size | null;
+}
+
+/** One panel of the recording; `removedAtMs` is null while it is in the picture. */
+interface PanelState extends ManifestPanel {
+  hidden: boolean;
+  placeholder: PanelPlaceholder | null;
 }
 
 /** What the selection step chose. */
@@ -262,6 +289,10 @@ export class RecordingSession {
   /** Follow-mouse recordings: samples the mouse for the engine. */
   private cursorTimer: ReturnType<typeof setInterval> | undefined;
   private lastCursor: { nx: number; ny: number } | undefined;
+  /** Every panel this recording had, in the order they were added (removed ones keep their times). */
+  private panelLog: PanelState[] = [];
+  /** Slots whose panel is being added (the engine is still acquiring the source). */
+  private readonly pendingSlots = new Set<number>();
   private readonly waiters = new Map<
     string,
     { types: ReadonlySet<string>; resolve: (event: EngineEvent) => void }
@@ -394,7 +425,7 @@ export class RecordingSession {
       runningSince: snapshot.runningSince,
       progress: snapshot.progress,
       quitting: snapshot.quitting,
-      panels: 0,
+      panels: this.livePanels().length,
     };
   }
 
@@ -425,6 +456,13 @@ export class RecordingSession {
       width: ctx.width,
       height: ctx.height,
       result: state.status === 'completed' ? ctx.result : null,
+      panelSlots: this.livePanels().map((panel): PanelSlot => ({
+        slot: panel.slot,
+        kind: panel.kind,
+        label: panel.name,
+        hidden: panel.hidden,
+        placeholder: panel.placeholder,
+      })),
     };
   }
 
@@ -509,6 +547,130 @@ export class RecordingSession {
     }
     this.choiceWaiter = undefined;
     waiter(answer);
+  }
+
+  // --- live panels -------------------------------------------------------------------------
+
+  private livePanels(): PanelState[] {
+    return this.panelLog.filter((panel) => panel.removedAtMs === null);
+  }
+
+  /** Why a panel cannot be added right now (null: it can). */
+  panelRefusal(): IpcError | null {
+    if (!this.isLive) {
+      return new IpcError('NOT_FOUND', 'Panels can only be added while a recording is running.');
+    }
+    if (this.ctx.target === 'multi') {
+      return new IpcError(
+        'INVALID_PAYLOAD',
+        'Panels are not available for a recording of several sources.',
+      );
+    }
+    if (this.livePanels().length + this.pendingSlots.size >= MAX_PANELS) {
+      return new IpcError('PANEL_LIMIT', `A recording can have at most ${MAX_PANELS} panels.`);
+    }
+    return null;
+  }
+
+  /** Time in the recording (paused time excluded) for the manifest. */
+  private recordingMs(): number {
+    return Math.round(activeDurationAt(this.machine, performance.now()));
+  }
+
+  private saveSlots(): void {
+    const panels: ManifestPanel[] = this.panelLog.map(
+      ({ slot, kind, name, addedAtMs, removedAtMs }) => ({
+        slot,
+        kind,
+        name,
+        addedAtMs,
+        removedAtMs,
+      }),
+    );
+    void this.deps.sessions.recordPanels(this.ctx.sessionId, panels).catch(() => undefined);
+  }
+
+  /** Adds a source to the picture; returns its slot (1..3). The engine draws it from the next frame. */
+  async addPanel(spec: PanelSpec): Promise<number> {
+    const refusal = this.panelRefusal();
+    if (refusal) throw refusal;
+    const used = [...this.livePanels().map((panel) => panel.slot), ...this.pendingSlots];
+    const slot = freePanelSlot(used);
+    if (slot === undefined)
+      throw new IpcError('PANEL_LIMIT', 'A recording can have at most 3 panels.');
+    this.pendingSlots.add(slot);
+    let reply: EngineEvent;
+    try {
+      reply = await this.engineRequest(
+        {
+          cmd: 'addPanel',
+          requestId: randomUUID(),
+          slot,
+          sourceId: spec.sourceId,
+          kind: spec.kind === 'window' ? 'window' : 'screen',
+          region: spec.region,
+          displaySize: spec.displaySize,
+          ...(this.deps.synthetic && {
+            synthetic: spec.displaySize ? { ...spec.displaySize } : { width: 1280, height: 720 },
+          }),
+        },
+        ['panelAdded', 'panelFailed'],
+        PANEL_TIMEOUT_MS,
+      );
+    } catch (error) {
+      log.warn(`Adding a panel failed: ${error instanceof StartFailure ? error.code : 'error'}`);
+      throw new IpcError('NOT_FOUND', "That source couldn't be added to the recording.");
+    } finally {
+      this.pendingSlots.delete(slot);
+    }
+    if (reply.type !== 'panelAdded') {
+      log.warn(`The engine could not add a panel: ${'code' in reply ? reply.code : reply.type}`);
+      throw new IpcError('NOT_FOUND', "That source couldn't be added to the recording.");
+    }
+    if (!this.isLive) {
+      // The recording ended while the source was being added: the engine is released with it.
+      throw new IpcError('NOT_FOUND', 'The recording has ended.');
+    }
+    this.panelLog.push({
+      slot,
+      kind: spec.kind,
+      name: panelLabel(slot),
+      addedAtMs: this.recordingMs(),
+      removedAtMs: null,
+      hidden: false,
+      placeholder: null,
+    });
+    this.saveSlots();
+    this.host.changed(this);
+    log.info(`Panel added (${this.label}): ${spec.kind} in slot ${slot}`);
+    return slot;
+  }
+
+  private livePanel(slot: number): PanelState {
+    const panel = this.livePanels().find((candidate) => candidate.slot === slot);
+    if (!panel) throw new IpcError('NOT_FOUND', 'That panel is no longer in the recording.');
+    return panel;
+  }
+
+  removePanel(slot: number): void {
+    if (!this.isLive) throw new IpcError('NOT_FOUND', 'There is no recording to change.');
+    const panel = this.livePanel(slot);
+    panel.removedAtMs = this.recordingMs();
+    this.send({ cmd: 'removePanel', slot });
+    this.saveSlots();
+    this.host.changed(this);
+  }
+
+  /** Hides a picture behind a neutral card (audio goes on) or shows it again. Slot 0 is the recording itself. */
+  setPanelHidden(slot: number, hidden: boolean, placeholder: PanelPlaceholder): void {
+    if (!this.isLive) throw new IpcError('NOT_FOUND', 'There is no recording to change.');
+    if (slot > 0) {
+      const panel = this.livePanel(slot);
+      panel.hidden = hidden;
+      panel.placeholder = hidden ? placeholder : null;
+    }
+    this.send({ cmd: 'setPanelHidden', slot, hidden, placeholder });
+    this.host.changed(this);
   }
 
   /** Aborts the remux that is running (quit past the cap); the session stays for recovery. */
@@ -1292,6 +1454,16 @@ export class RecordingSession {
           this.host.changed(this);
         }
         return;
+      case 'panelLost': {
+        const panel = this.livePanels().find((candidate) => candidate.slot === event.slot);
+        if (!panel) return;
+        log.warn(`A panel's source ended (${panel.name}); recording continues`);
+        panel.removedAtMs = this.recordingMs();
+        this.saveSlots();
+        this.toastToolbar({ level: 'info', message: `${panel.name} ended` });
+        this.host.changed(this);
+        return;
+      }
       case 'trackEnded':
         log.warn(`Audio source ended: ${event.source}`);
         this.dispatch({ type: 'AUDIO_LOST', source: event.source });

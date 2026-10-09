@@ -1,4 +1,5 @@
 import type {
+  EngineAddPanelCommand,
   EngineCommand,
   EngineEvent,
   EngineMultiSource,
@@ -11,19 +12,27 @@ import {
   followCrop,
   followCropSize,
   multiSourceLayout,
+  scaleRegion,
   type FollowZoom,
   type MosaicLayout,
 } from '../../shared/compositor-layout';
 import type { Size } from '../../shared/geometry';
+import type { PanelPlaceholder } from '../../shared/panels';
 import type { Rect } from '../../shared/rect';
 import { AUDIO_BITRATE, fitWithin, qualityLimit, videoBitrate } from '../../shared/recording';
 import { bitrateFactorOf } from '../../shared/recording-format';
 import { createAudioMix, type AudioMix } from '../capture/audio-graph';
 import type { CameraLayerState } from '../capture/camera-layer';
-import { createCompositor, type CompositorCamera } from '../capture/compositor';
+import {
+  createCompositor,
+  createDynamicCompositor,
+  type CompositorCamera,
+  type DynamicCompositor,
+  type DynamicTileOptions,
+} from '../capture/compositor';
 import { CaptureError, mapMediaError } from '../capture/errors';
 import { detectRecorderFormats } from '../capture/recorder-probe';
-import { createCanvasTransform, type CroppedStream } from '../capture/region-crop';
+import type { CroppedStream } from '../capture/region-crop';
 import {
   activeRecorderCount,
   registerLoop,
@@ -53,6 +62,8 @@ interface Prepared {
   micStream: MediaStream | undefined;
   cameraStream: MediaStream | undefined;
   crop: CroppedStream;
+  /** The compositor when the recording can take panels (every recording except a multi-source one). */
+  dynamic: DynamicCompositor | undefined;
   mix: AudioMix | undefined;
   mime: string;
   width: number;
@@ -72,6 +83,19 @@ interface Active {
   unregister: () => void;
   ending: boolean;
 }
+
+/** A picture in a slot of the compositor, and how to get a fresh stream of its source. */
+interface SlotSource {
+  kind: 'screen' | 'window';
+  stream: MediaStream;
+  tile: DynamicTileOptions;
+  acquireFresh: () => Promise<MediaStream>;
+}
+
+/** A frozen window capture (after a minimize and restore) shows no new frame within this time. */
+const FRAME_WAIT_MS = 1500;
+/** Panels of a whole screen or window are captured no larger than this: they fill a third of the picture. */
+const PANEL_MAX_SIZE = { width: 1920, height: 1080 };
 
 /** The zoom of a follow-mouse recording; only a whole-screen recording follows. */
 function followZoom(command: EnginePrepareCommand): FollowZoom | undefined {
@@ -119,6 +143,15 @@ export class RecorderEngine {
   private camera: CameraLayerState = { nx: 1, ny: 1, size: 'm', shape: 'circle', visible: true };
   /** The camera's track ended mid-recording: the overlay stays hidden. */
   private cameraLost = false;
+  private fps = 30;
+  /** The source of every slot of the compositor (0 = the recording itself, 1..3 = panels). */
+  private slotSources = new Map<number, SlotSource>();
+  /** Streams with more than one user (a panel of the recorded display shares the recording's stream). */
+  private streamRefs = new Map<MediaStream, number>();
+  private sourceStreams = new Map<string, MediaStream>();
+  /** Whether a slot should be hidden once its window picture is verified (a hide beats a pending show). */
+  private hiddenWanted = new Map<number, boolean>();
+  private reviving = new Set<number>();
 
   constructor(private readonly deps: EngineDeps) {}
 
@@ -157,6 +190,12 @@ export class RecorderEngine {
       case 'cursor':
         this.cursor = { nx: command.nx, ny: command.ny };
         return;
+      case 'addPanel':
+        return this.addPanel(command);
+      case 'removePanel':
+        return this.removePanel(command.slot);
+      case 'setPanelHidden':
+        return this.setPanelHidden(command.slot, command.hidden, command.placeholder);
       case 'camera':
         this.camera = {
           nx: command.nx,
@@ -264,26 +303,41 @@ export class RecorderEngine {
       };
       this.lostTiles = new Set();
       this.tileCount = command.multi?.length ?? 0;
+      this.fps = options.fps;
       let tiles: Rect[] | undefined;
-      const crop = command.multi
-        ? await this.createMultiCompositor(displayStreams, command.multi, command, camera).then(
-            (made) => {
-              tiles = made.tiles;
-              return made.crop;
-            },
-          )
-        : follow
-          ? await this.createFollowCompositor(displayStream, follow, command, camera)
-          : await createCanvasTransform(
-              displayStream,
-              {
-                rect: command.region ?? undefined,
-                limit: qualityLimit(options.quality),
-                camera,
-              },
-              options.fps,
-              'timer',
-            );
+      let dynamic: DynamicCompositor | undefined;
+      let crop: CroppedStream;
+      if (command.multi) {
+        const made = await this.createMultiCompositor(
+          displayStreams,
+          command.multi,
+          command,
+          camera,
+        );
+        tiles = made.tiles;
+        crop = made.crop;
+      } else {
+        const tile = this.primaryTile(command, follow);
+        dynamic = await createDynamicCompositor({
+          primary: { stream: displayStream, ...tile.options },
+          outSize: (frame) => fitWithin(tile.sourceSize(frame), qualityLimit(options.quality)),
+          fps: options.fps,
+          onTileLost: (slot) => this.onPanelTileLost(slot),
+          camera,
+        });
+        crop = dynamic;
+        const synthetic = __FRAMECAPT_E2E__ && command.synthetic !== undefined;
+        this.slotSources.set(0, {
+          kind: command.kind,
+          stream: this.holdStream(synthetic ? undefined : command.sourceId, displayStream),
+          tile: tile.options,
+          acquireFresh: async () =>
+            this.holdStream(
+              synthetic ? undefined : command.sourceId,
+              await this.acquireDisplay(command),
+            ),
+        });
+      }
       const { outWidth: width, outHeight: height } = crop.stats();
 
       const mic = micStream !== undefined;
@@ -298,6 +352,7 @@ export class RecorderEngine {
         micStream,
         cameraStream,
         crop,
+        dynamic,
         mix,
         mime: formats.defaultMime,
         width,
@@ -376,42 +431,38 @@ export class RecorderEngine {
   }
 
   /**
-   * Follow-mouse picture: a window of frame/zoom pixels that eases toward the mouse, fitted to the
-   * quality preset (so 3440x1440 at 2x is 1720x720 and fits 1080p unchanged).
+   * The picture of the recording itself (slot 0): the whole frame, a region of it, or (follow
+   * mouse) a window of frame/zoom pixels that eases toward the mouse, fitted to the quality preset
+   * (so 3440x1440 at 2x is 1720x720 and fits 1080p unchanged).
    */
-  private createFollowCompositor(
-    displayStream: MediaStream,
-    zoom: FollowZoom,
+  private primaryTile(
     command: EnginePrepareCommand,
-    camera: CompositorCamera | undefined,
-  ): Promise<CroppedStream> {
-    const limit = qualityLimit(command.options.quality);
-    let crop: Rect | null = null;
-    let last = performance.now();
-    return createCompositor({
-      tiles: [
-        {
-          stream: displayStream,
+    follow: FollowZoom | undefined,
+  ): { options: DynamicTileOptions; sourceSize: (frame: Size) => Size } {
+    const { region } = command;
+    if (follow) {
+      let crop: Rect | null = null;
+      let last = performance.now();
+      return {
+        options: {
           src: (frame) => {
             const now = performance.now();
             crop = followCrop({
               target: { x: this.cursor.nx * frame.width, y: this.cursor.ny * frame.height },
               prev: crop,
               dtMs: now - last,
-              zoom,
+              zoom: follow,
               frame,
             });
             last = now;
             return crop;
           },
-          dst: (out) => ({ x: 0, y: 0, width: out.width, height: out.height }),
         },
-      ],
-      outSize: ([frame]) => fitWithin(followCropSize(frame as Size, zoom), limit),
-      fps: command.options.fps,
-      driver: 'timer',
-      camera,
-    });
+        sourceSize: (frame) => followCropSize(frame, follow),
+      };
+    }
+    if (region) return { options: { src: () => region }, sourceSize: () => region };
+    return { options: {}, sourceSize: (frame) => frame };
   }
 
   /**
@@ -504,6 +555,176 @@ export class RecorderEngine {
       offEnded?.();
       navigator.mediaDevices.removeEventListener('devicechange', onDeviceChange);
     };
+  }
+
+  // --- live panels -------------------------------------------------------------------------
+
+  /** Counts a stream's users; `key` (a source id) lets a later panel of the same source share it. */
+  private holdStream(key: string | undefined, stream: MediaStream): MediaStream {
+    this.streamRefs.set(stream, (this.streamRefs.get(stream) ?? 0) + 1);
+    if (key !== undefined) this.sourceStreams.set(key, stream);
+    return stream;
+  }
+
+  /** A stream of the source that is already captured here and still live, counted as one more user. */
+  private shareStream(key: string): MediaStream | undefined {
+    const stream = this.sourceStreams.get(key);
+    if (!stream || stream.getVideoTracks()[0]?.readyState !== 'live') return undefined;
+    return this.holdStream(key, stream);
+  }
+
+  /** One user less; the last one stops the stream. */
+  private releaseStreamRef(stream: MediaStream): void {
+    const left = (this.streamRefs.get(stream) ?? 1) - 1;
+    if (left > 0) {
+      this.streamRefs.set(stream, left);
+      return;
+    }
+    this.streamRefs.delete(stream);
+    for (const [key, held] of this.sourceStreams) {
+      if (held === stream) this.sourceStreams.delete(key);
+    }
+    stopStream(stream);
+  }
+
+  /** The stream of a panel's source: shared with a user of the same source, or acquired (no audio). */
+  private async panelStream(command: EngineAddPanelCommand, fresh = false): Promise<MediaStream> {
+    const { synthetic } = command;
+    if (__FRAMECAPT_E2E__ && synthetic) {
+      const { createSyntheticDisplayStream, PANEL_PALETTE } =
+        await import('../capture/synthetic-stream');
+      return this.holdStream(
+        undefined,
+        createSyntheticDisplayStream(synthetic.width, synthetic.height, PANEL_PALETTE),
+      );
+    }
+    if (!fresh) {
+      const shared = this.shareStream(command.sourceId);
+      if (shared) return shared;
+    }
+    const stream = await acquireDisplayStream({
+      sourceId: command.sourceId,
+      systemAudio: false,
+      maxFrameRate: this.fps,
+      // A region is cut from the unscaled frame; a whole screen or window fills a third at most.
+      maxSize: command.region ? undefined : PANEL_MAX_SIZE,
+    });
+    return this.holdStream(command.sourceId, stream);
+  }
+
+  private async addPanel(command: EngineAddPanelCommand): Promise<void> {
+    const { requestId, slot } = command;
+    const dynamic = this.prepared?.dynamic;
+    const fail = (code: string, message: string): void =>
+      this.deps.send({ type: 'panelFailed', requestId, code, message: message.slice(0, 400) });
+    if (!dynamic || !this.active) return fail('NOT_RECORDING', 'There is no recording to add to.');
+    if (this.slotSources.has(slot)) return fail('BUSY', 'That panel is already in use.');
+    const { region, displaySize } = command;
+    const tile: DynamicTileOptions = {
+      fit: true,
+      ...(region &&
+        displaySize && { src: (frame: Size) => scaleRegion(region, displaySize, frame) }),
+    };
+    let stream: MediaStream | undefined;
+    try {
+      stream = await this.panelStream(command);
+      await dynamic.attachTile(slot, stream, tile);
+    } catch (error) {
+      if (stream) this.releaseStreamRef(stream);
+      const { code, message } = failure(error);
+      return fail(code, message);
+    }
+    const info = dynamic.slots().find((candidate) => candidate.slot === slot);
+    if (this.prepared?.dynamic !== dynamic || !info || info.lost) {
+      // The recording ended meanwhile, or the source ended while it was being added.
+      dynamic.detachTile(slot);
+      this.releaseStreamRef(stream);
+      return fail('source-gone', 'That source is no longer available.');
+    }
+    this.slotSources.set(slot, {
+      kind: command.kind,
+      stream,
+      tile,
+      acquireFresh: () => this.panelStream(command, true),
+    });
+    this.deps.send({ type: 'panelAdded', requestId, slot });
+  }
+
+  private removePanel(slot: number): void {
+    const source = this.slotSources.get(slot);
+    this.prepared?.dynamic?.detachTile(slot);
+    this.slotSources.delete(slot);
+    this.hiddenWanted.delete(slot);
+    if (source) this.releaseStreamRef(source.stream);
+  }
+
+  /** A panel's source ended: it leaves the picture and main is told; the recording goes on. */
+  private onPanelTileLost(slot: number): void {
+    // The recording itself ending is reported by watchSources.
+    if (slot === 0 || !this.slotSources.has(slot)) return;
+    this.removePanel(slot);
+    this.deps.send({ type: 'panelLost', slot });
+  }
+
+  private setPanelHidden(slot: number, hidden: boolean, placeholder: PanelPlaceholder): void {
+    const dynamic = this.prepared?.dynamic;
+    if (!dynamic) return;
+    this.hiddenWanted.set(slot, hidden);
+    if (hidden) return dynamic.setTileHidden(slot, true, placeholder);
+    // A window that was minimized can stay frozen when it comes back: the card stays until the
+    // picture is known to move (or was re-acquired).
+    if (this.slotSources.get(slot)?.kind === 'window') {
+      if (!this.reviving.has(slot)) void this.showWindowTile(slot, placeholder);
+      return;
+    }
+    dynamic.setTileHidden(slot, false, placeholder);
+  }
+
+  private async showWindowTile(slot: number, placeholder: PanelPlaceholder): Promise<void> {
+    const prepared = this.prepared;
+    const dynamic = prepared?.dynamic;
+    if (!prepared || !dynamic) return;
+    this.reviving.add(slot);
+    try {
+      if (!(await dynamic.waitForFrame(slot, FRAME_WAIT_MS))) await this.reacquire(slot);
+    } catch {
+      // A failed re-acquire leaves the old picture in place: it is shown as it is.
+    } finally {
+      this.reviving.delete(slot);
+      if (this.prepared === prepared && this.hiddenWanted.get(slot) === false) {
+        dynamic.setTileHidden(slot, false, placeholder);
+      }
+    }
+  }
+
+  /** Swaps a slot's frozen stream for a fresh one of the same source. False when it could not (or must not). */
+  private async reacquire(slot: number): Promise<boolean> {
+    const prepared = this.prepared;
+    const dynamic = prepared?.dynamic;
+    const source = this.slotSources.get(slot);
+    if (!prepared || !dynamic || !source) return false;
+    // The recording's own system audio rides on its stream: it cannot be swapped.
+    if (slot === 0 && prepared.audio.system) return false;
+    const fresh = await source.acquireFresh();
+    try {
+      await dynamic.attachTile(slot, fresh, source.tile);
+    } catch (error) {
+      this.releaseStreamRef(fresh);
+      throw error;
+    }
+    if (this.prepared !== prepared || this.slotSources.get(slot) !== source) {
+      this.releaseStreamRef(fresh);
+      return false;
+    }
+    const old = source.stream;
+    source.stream = fresh;
+    if (slot === 0) {
+      prepared.displayStreams[0] = fresh;
+      prepared.unwatch();
+      prepared.unwatch = this.watchSources(prepared);
+    }
+    this.releaseStreamRef(old);
+    return true;
   }
 
   // --- start, pause, resume ----------------------------------------------------------------
@@ -708,5 +929,12 @@ export class RecorderEngine {
       stopStream(prepared.cameraStream);
       prepared.displayStreams.forEach((stream) => stopStream(stream));
     }
+    // Every stream a slot or a share holds (panels included).
+    this.streamRefs.forEach((_refs, stream) => stopStream(stream));
+    this.streamRefs.clear();
+    this.sourceStreams.clear();
+    this.slotSources.clear();
+    this.hiddenWanted.clear();
+    this.reviving.clear();
   }
 }

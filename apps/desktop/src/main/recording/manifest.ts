@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_PANELS, PanelKindSchema } from '../../shared/panels';
 import { RecordOptionsSchema } from '../../shared/recorder-ipc';
 import { RecordingLayoutSchema } from '../../shared/recording-layout';
 
@@ -28,6 +29,20 @@ export const PausedIntervalSchema = z.object({
   to: z.number().nullable(),
 });
 export type PausedInterval = z.infer<typeof PausedIntervalSchema>;
+
+/**
+ * A live panel of the recording (a region, window or screen added while it ran). Times are
+ * milliseconds of recording time (paused time excluded); `removedAtMs` is null while the panel was
+ * in the picture until the end. Names are generic ("Panel 2"): window titles never reach disk.
+ */
+export const ManifestPanelSchema = z.object({
+  slot: z.number().int().min(1).max(MAX_PANELS),
+  kind: PanelKindSchema,
+  name: z.string().max(40),
+  addedAtMs: z.number(),
+  removedAtMs: z.number().nullable(),
+});
+export type ManifestPanel = z.infer<typeof ManifestPanelSchema>;
 
 /** Backpressure numbers for the phase 09 benchmarks (see docs/recording-persistence.md). */
 export const SessionStatsSchema = z.object({
@@ -65,6 +80,8 @@ export const SessionManifestSchema = z.object({
   /** Multi-source recordings: where each source sits in the picture. Optional, so older manifests parse. */
   layout: RecordingLayoutSchema.optional(),
   options: RecordOptionsSchema,
+  /** Live panels added during the recording. Optional, so older manifests parse. */
+  panels: z.array(ManifestPanelSchema).max(32).optional(),
   width: z.number(),
   height: z.number(),
   chunksWritten: z.number(),

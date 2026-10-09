@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { screen } from 'electron';
 import type { CameraSetStyleRequest, CameraStyleState } from '../../shared/camera';
-import { framePixelsToDip, overlayRectToFramePixels } from '../../shared/geometry';
+import { framePixelsToDip, overlayRectToFramePixels, type Size } from '../../shared/geometry';
+import type { PanelKind, PanelPlaceholder, PanelSlot } from '../../shared/panels';
 import type {
   EngineEvent,
   RecorderSessionSummary,
@@ -32,9 +33,11 @@ import type { SelectionHost } from '../selection-host';
 import { getMainWindow, isOwnUiFocused, webContentsWithRoles } from '../windows';
 import { settleWithin } from './quit-cap';
 import {
+  Cancelled,
   RecordingSession,
   StartFailure,
   toGeom,
+  type PanelSpec,
   type RecorderDeps,
   type Selection,
   type SessionHost,
@@ -54,6 +57,16 @@ interface SelectionSlot {
   overlays: OverlaySet;
   waiter: { resolve: (value: Selection) => void; reject: (e: Error) => void } | undefined;
   removeDisplayListeners: () => void;
+  /** The selection picks a live panel's region (the recording is running), not a recording's start. */
+  panel: boolean;
+}
+
+/** What the panel menu and the IPC channel ask for; main resolves it to a source. */
+export interface AddPanelRequest {
+  sessionId?: string | undefined;
+  kind: PanelKind;
+  sourceId?: string | undefined;
+  displayId?: string | undefined;
 }
 
 /** What every window sees while nothing is recording. */
@@ -79,6 +92,7 @@ const IDLE_SNAPSHOT: SessionSnapshot = {
   width: null,
   height: null,
   result: null,
+  panelSlots: [],
 };
 
 /**
@@ -373,6 +387,11 @@ export class RecorderController implements SelectionHost, SessionHost {
    * too). A recording itself is ended with stop.
    */
   cancel(sessionId?: string): void {
+    // The overlay's Esc during a panel's region selection.
+    if (sessionId === undefined && this.selection?.panel) {
+      this.closeSelection(this.selection.session, new Cancelled());
+      return;
+    }
     const session =
       sessionId === undefined
         ? this.all().find((candidate) => candidate.isPreRecording)
@@ -414,6 +433,129 @@ export class RecorderController implements SelectionHost, SessionHost {
   /** Free space fell below the minimum while recording: that recording stops and keeps what was written. */
   onDiskLow(sessionId: string): void {
     this.find(sessionId)?.onDiskLow();
+  }
+
+  // --- live panels --------------------------------------------------------------------------
+
+  /** The recording a panel command is for: the named one, else the primary one if live, else the newest live one. */
+  private panelSession(sessionId: string | undefined): RecordingSession {
+    const session = this.liveSession(sessionId);
+    if (!session) throw new IpcError('NOT_FOUND', 'There is no recording to change.');
+    return session;
+  }
+
+  /**
+   * Adds a region, window or screen to a running recording (the toolbar's "Add panel", the main
+   * window's). A region opens the selection overlays and resolves when the user has chosen it;
+   * it rejects with Cancelled when the user backs out. Returns the panel's slot (1..3).
+   */
+  async addPanel(request: AddPanelRequest): Promise<{ slot: number }> {
+    const session = this.panelSession(request.sessionId);
+    const refusal = session.panelRefusal();
+    if (refusal) throw refusal;
+    const spec = await this.resolvePanel(session, request);
+    return { slot: await session.addPanel(spec) };
+  }
+
+  /** Adds a source main already knows (a meeting window, a shared screen) to a recording. */
+  async addPanelSource(
+    sessionId: string,
+    source: { kind: PanelKind; sourceId: string; region?: Rect; displaySize?: Size },
+  ): Promise<number> {
+    return this.panelSession(sessionId).addPanel({
+      kind: source.kind,
+      sourceId: source.sourceId,
+      region: source.region ?? null,
+      displaySize: source.displaySize ?? null,
+    });
+  }
+
+  /** What the panel menu shows for a recording (the named one, else the live one the UI follows). */
+  panelState(
+    sessionId: string | undefined,
+  ): { sessionId: string; panels: PanelSlot[]; addDisabled: boolean } | undefined {
+    const session = this.liveSession(sessionId);
+    if (!session?.isLive) return undefined;
+    return {
+      sessionId: session.id,
+      panels: session.snapshot().panelSlots,
+      addDisabled: session.panelRefusal() !== null,
+    };
+  }
+
+  removePanel(sessionId: string | undefined, slot: number): void {
+    this.panelSession(sessionId).removePanel(slot);
+  }
+
+  setPanelHidden(
+    sessionId: string | undefined,
+    slot: number,
+    hidden: boolean,
+    placeholder: PanelPlaceholder,
+  ): void {
+    this.panelSession(sessionId).setPanelHidden(slot, hidden, placeholder);
+  }
+
+  /** Checks the request against a fresh listing (like a recording's start does) and picks the region. */
+  private async resolvePanel(
+    session: RecordingSession,
+    request: AddPanelRequest,
+  ): Promise<PanelSpec> {
+    const { provider } = this.deps;
+    if (request.kind === 'window') {
+      const windows = await provider.listSources({ types: ['window'], thumbnailWidth: 0 });
+      if (!windows.some((source) => source.id === request.sourceId)) {
+        throw new IpcError('NOT_FOUND', 'That window is no longer available.');
+      }
+      return { kind: 'window', sourceId: request.sourceId ?? '', region: null, displaySize: null };
+    }
+    const screens = await provider.listSources({ types: ['screen'], thumbnailWidth: 0 });
+    const displays = provider.listDisplays();
+    const gone = new IpcError('NOT_FOUND', 'That screen is no longer available.');
+    if (request.kind === 'screen') {
+      const source = request.sourceId
+        ? screens.find((candidate) => candidate.id === request.sourceId)
+        : screens.find((candidate) => candidate.displayId === request.displayId);
+      const display = displays.find((candidate) => candidate.id === source?.displayId);
+      if (!source || !display) throw gone;
+      return {
+        kind: 'screen',
+        sourceId: source.id,
+        region: null,
+        displaySize: display.physicalSize,
+      };
+    }
+    const chosen = await this.selectPanelRegion(session, displays);
+    const source = screens.find((candidate) => candidate.displayId === chosen.display?.id);
+    if (!chosen.display || !chosen.regionPx || !source) throw gone;
+    return {
+      kind: 'region',
+      sourceId: source.id,
+      region: chosen.regionPx,
+      displaySize: chosen.display.physicalSize,
+    };
+  }
+
+  /** The region overlay of a running recording: the one selection slot, like a recording's start. */
+  private async selectPanelRegion(
+    session: RecordingSession,
+    displays: readonly DisplayInfo[],
+  ): Promise<Selection> {
+    if (this.selection || this.startupInProgress || this.deps.isScreenshotBusy()) {
+      throw new IpcError('BUSY', 'Another selection is already open.');
+    }
+    if (displays.length === 0) throw new IpcError('NOT_FOUND', 'No screen was found.');
+    const cancel = (): void => this.closeSelection(session, new Cancelled());
+    const picked = this.beginSelection(session, 'record-region', displays, true, {
+      onBlur: cancel,
+      onDisplaysChanged: cancel,
+    });
+    this.raiseToolbar();
+    try {
+      return await picked;
+    } finally {
+      this.closeSelection(session, new Cancelled());
+    }
   }
 
   // --- screenshots, toolbars and the camera -------------------------------------------------
@@ -507,36 +649,49 @@ export class RecorderController implements SelectionHost, SessionHost {
     mode: OverlayMode,
     displays: readonly DisplayInfo[],
   ): Promise<Selection> {
-    const overlays = new OverlaySet(mode, {
-      isOwnUiFocused,
-      onAllBlurred: () => {
+    return this.beginSelection(session, mode, displays, false, {
+      onBlur: () => {
         log.info('Overlays lost focus; cancelling the recording');
         session.cancel();
       },
+      onDisplaysChanged: () => {
+        log.warn('Displays changed while selecting; cancelling the recording');
+        session.failStart(
+          token,
+          new StartFailure('DISPLAYS_CHANGED', 'Your screens changed. Please try again.'),
+        );
+      },
+    });
+  }
+
+  private beginSelection(
+    session: RecordingSession,
+    mode: OverlayMode,
+    displays: readonly DisplayInfo[],
+    panel: boolean,
+    handlers: { onBlur: () => void; onDisplaysChanged: () => void },
+  ): Promise<Selection> {
+    const overlays = new OverlaySet(mode, {
+      isOwnUiFocused,
+      onAllBlurred: handlers.onBlur,
     });
     const slot: SelectionSlot = {
       session,
       overlays,
       waiter: undefined,
       removeDisplayListeners: () => undefined,
+      panel,
     };
     this.selection = slot;
     overlays.open(displays);
     overlays.setFrames(new Map());
-    slot.removeDisplayListeners = this.watchDisplays(session, token);
+    slot.removeDisplayListeners = this.watchDisplays(handlers.onDisplaysChanged);
     return new Promise<Selection>((resolve, reject) => {
       slot.waiter = { resolve, reject };
     });
   }
 
-  private watchDisplays(session: RecordingSession, token: number): () => void {
-    const onChange = (): void => {
-      log.warn('Displays changed while selecting; cancelling the recording');
-      session.failStart(
-        token,
-        new StartFailure('DISPLAYS_CHANGED', 'Your screens changed. Please try again.'),
-      );
-    };
+  private watchDisplays(onChange: () => void): () => void {
     screen.on('display-added', onChange);
     screen.on('display-removed', onChange);
     screen.on('display-metrics-changed', onChange);
@@ -577,7 +732,7 @@ export class RecorderController implements SelectionHost, SessionHost {
       !slot ||
       !waiter ||
       slot.overlays.mode !== 'record-region' ||
-      slot.session.status !== 'selecting'
+      (slot.panel ? !slot.session.isLive : slot.session.status !== 'selecting')
     ) {
       throw new IpcError('NOT_FOUND', 'There is no selection in progress.');
     }

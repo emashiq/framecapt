@@ -1,7 +1,7 @@
-import { fitInside } from '../../shared/compositor-layout';
+import { cameraRect, fitInside, fitSnap, slotRects } from '../../shared/compositor-layout';
 import type { Size } from '../../shared/geometry';
+import { SOURCE_ENDED_TEXT, tileCardText, type PanelPlaceholder } from '../../shared/panels';
 import { checkPixelRect, type Rect } from '../../shared/rect';
-import { cameraRect } from '../../shared/compositor-layout';
 import { CaptureError } from './errors';
 import { drawCameraLayer, type CameraLayerState } from './camera-layer';
 import type { CanvasDriver, CroppedStream } from './region-crop';
@@ -65,15 +65,29 @@ interface DrawTile {
   lost: boolean;
 }
 
-/** The neutral tile that stands in for a source that ended. */
-function drawEnded(context: CanvasRenderingContext2D, box: Rect): void {
+/** A neutral card with one line of text: stands in for a source that ended or is hidden. */
+function drawCard(context: CanvasRenderingContext2D, box: Rect, text: string): void {
   context.fillStyle = '#20242c';
   context.fillRect(box.x, box.y, box.width, box.height);
   context.fillStyle = '#9aa3b2';
   context.font = `${Math.max(12, Math.round(box.height / 16))}px sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillText('Source ended', box.x + box.width / 2, box.y + box.height / 2, box.width - 8);
+  context.fillText(text, box.x + box.width / 2, box.y + box.height / 2, box.width - 8);
+}
+
+/** A hidden <video> that shows the track (a separate MediaStream sharing it: removing it never stops the track). */
+function makeVideo(track: MediaStreamTrack): HTMLVideoElement {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = new MediaStream([track]);
+  return video;
+}
+
+function closeVideo(video: HTMLVideoElement): void {
+  video.pause();
+  video.srcObject = null;
 }
 
 function waitForFrame(video: HTMLVideoElement): Promise<void> {
@@ -87,6 +101,57 @@ function waitForFrame(video: HTMLVideoElement): Promise<void> {
       resolve();
     });
   });
+}
+
+/** Plays a video and waits for its first frame. */
+async function startVideo(video: HTMLVideoElement): Promise<void> {
+  await video.play();
+  await waitForFrame(video);
+}
+
+/** Throws when a tile's crop does not lie inside its source frame. */
+function checkCrop(crop: Rect | undefined, source: Size): void {
+  if (!crop) return;
+  const check = checkPixelRect(crop, source);
+  if (!check.ok) throw new CaptureError('unknown', `Invalid region: ${check.reason}`);
+}
+
+/**
+ * Draws the source frame (or its `src` part) into `dst`; `fit` letterboxes it inside `dst`.
+ * No object is made per frame when there is no crop.
+ */
+function drawVideoTile(
+  context: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  src: ((source: Size) => Rect | undefined) | undefined,
+  dst: Rect,
+  fit: 'none' | 'fit' | 'snap',
+): void {
+  const crop = src?.({ width: video.videoWidth, height: video.videoHeight });
+  const frame = crop ?? { width: video.videoWidth, height: video.videoHeight };
+  const box = fit === 'none' ? dst : fit === 'snap' ? fitSnap(frame, dst) : fitInside(frame, dst);
+  context.drawImage(
+    video,
+    crop ? crop.x : 0,
+    crop ? crop.y : 0,
+    frame.width,
+    frame.height,
+    box.x,
+    box.y,
+    box.width,
+    box.height,
+  );
+}
+
+function drawCamera(
+  context: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  state: CameraLayerState,
+  out: Size,
+): void {
+  if (state.visible) {
+    drawCameraLayer(context, video, cameraRect(state, out, state.size), state.shape);
+  }
 }
 
 /**
@@ -103,14 +168,6 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
   const { tiles, fps, driver } = options;
   const first = tiles[0];
   if (!first) throw new CaptureError('unknown', 'A compositor needs at least one tile.');
-  const makeVideo = (track: MediaStreamTrack): HTMLVideoElement => {
-    const video = document.createElement('video');
-    video.muted = true;
-    video.playsInline = true;
-    // A separate MediaStream object sharing the same track: removing it never stops the track.
-    video.srcObject = new MediaStream([track]);
-    return video;
-  };
   const tracks = tiles.map((tile) => sourceTrack(tile.stream));
   const videos = tracks.map(makeVideo);
   const primary = videos[0] as HTMLVideoElement;
@@ -132,10 +189,7 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
     if (keepAlive !== undefined) clearTimeout(keepAlive);
     if (frameCallback !== undefined) primary.cancelVideoFrameCallback(frameCallback);
     endedListeners.forEach((remove) => remove());
-    for (const video of cameraVideo ? [...videos, cameraVideo] : videos) {
-      video.pause();
-      video.srcObject = null;
-    }
+    for (const video of cameraVideo ? [...videos, cameraVideo] : videos) closeVideo(video);
     output?.getTracks().forEach((outTrack) => outTrack.stop());
     unregisterLoops.forEach((unregister) => unregister());
     unregisterLoops.length = 0;
@@ -150,11 +204,7 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
       typeof options.outSize === 'function' ? options.outSize(sources) : options.outSize;
     const drawTiles: DrawTile[] = tiles.map((tile, index) => {
       const source = sources[index] as Size;
-      const crop = tile.src?.(source);
-      if (crop) {
-        const check = checkPixelRect(crop, source);
-        if (!check.ok) throw new CaptureError('unknown', `Invalid region: ${check.reason}`);
-      }
+      checkCrop(tile.src?.(source), source);
       return {
         video: videos[index] as HTMLVideoElement,
         src: tile.src,
@@ -192,39 +242,13 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
         context.fillRect(0, 0, outSize.width, outSize.height);
       }
       for (const tile of drawTiles) {
-        const { video } = tile;
         if (tile.lost) {
-          drawEnded(context, tile.dst);
+          drawCard(context, tile.dst, SOURCE_ENDED_TEXT);
           continue;
         }
-        // No object is made per frame: the whole frame is read from the element when there is no crop.
-        const crop = tile.src?.({ width: video.videoWidth, height: video.videoHeight });
-        const dst = tile.fit
-          ? fitInside({ width: video.videoWidth, height: video.videoHeight }, tile.dst)
-          : tile.dst;
-        context.drawImage(
-          video,
-          crop ? crop.x : 0,
-          crop ? crop.y : 0,
-          crop ? crop.width : video.videoWidth,
-          crop ? crop.height : video.videoHeight,
-          dst.x,
-          dst.y,
-          dst.width,
-          dst.height,
-        );
+        drawVideoTile(context, tile.video, tile.src, tile.dst, tile.fit ? 'fit' : 'none');
       }
-      if (cameraVideo && cameraState) {
-        const state = cameraState();
-        if (state.visible) {
-          drawCameraLayer(
-            context,
-            cameraVideo,
-            cameraRect(state, outSize, state.size),
-            state.shape,
-          );
-        }
-      }
+      if (cameraVideo && cameraState) drawCamera(context, cameraVideo, cameraState(), outSize);
       framesOut += 1;
       lastDraw = performance.now();
       if (driver === 'rvfc') scheduleKeepAlive();
@@ -271,6 +295,245 @@ export async function createCompositor(options: CompositorOptions): Promise<Crop
       method: 'canvas',
       stats: () => ({ framesOut, outWidth: outSize.width, outHeight: outSize.height }),
       dispose,
+    };
+  } catch (error) {
+    dispose();
+    throw error;
+  }
+}
+
+// --- live panels ----------------------------------------------------------------------------
+
+export interface DynamicTileOptions {
+  /** The part of the source frame to draw (see CompositorTile.src); validated when the first frame arrives. */
+  src?: ((source: Size) => Rect | undefined) | undefined;
+  /** Letterbox the picture inside its rectangle. Default true. */
+  fit?: boolean | undefined;
+}
+
+export interface DynamicCompositorOptions {
+  /** Slot 0: the recording itself. Its first frame fixes the output size. */
+  primary: DynamicTileOptions & { stream: MediaStream };
+  outSize: (primary: Size) => Size;
+  fps: number;
+  /** A tile's video track ended. The tile shows "Source ended" until the caller detaches it. */
+  onTileLost?: ((slot: number) => void) | undefined;
+  /** The webcam overlay: drawn last, on top of every tile. */
+  camera?: CompositorCamera | undefined;
+}
+
+export interface TileInfo {
+  slot: number;
+  lost: boolean;
+  hidden: boolean;
+  /** Where the tile sits on the output right now. */
+  dst: Rect;
+}
+
+export interface DynamicCompositor extends CroppedStream {
+  /**
+   * Puts a stream into a slot (replacing what was there) once its first frame arrived (5 s, else
+   * rejects), then lays the output out again. Never leaves a gap: the old tile is drawn until
+   * the swap.
+   */
+  attachTile(slot: number, stream: MediaStream, options?: DynamicTileOptions): Promise<void>;
+  /** Removes a tile and lays out again. Never stops the stream's tracks: the caller owns the stream. */
+  detachTile(slot: number): void;
+  /** While hidden the tile's rectangle shows a neutral card; its (stale) video frame is never drawn. */
+  setTileHidden(slot: number, hidden: boolean, placeholder: PanelPlaceholder): void;
+  slots(): TileInfo[];
+  /** True when a new frame of the slot's source arrives within `timeoutMs`. */
+  waitForFrame(slot: number, timeoutMs: number): Promise<boolean>;
+}
+
+interface DynamicTile {
+  video: HTMLVideoElement;
+  src: DynamicTileOptions['src'];
+  fit: boolean;
+  dst: Rect;
+  lost: boolean;
+  hidden: boolean;
+  placeholder: PanelPlaceholder | null;
+  removeEnded: () => void;
+}
+
+/**
+ * The compositor of a recording that can gain and lose pictures while it runs: slot 0 is the
+ * recording, slots 1..3 are panels (see `panelLayout`). The output size is fixed by the first frame
+ * of slot 0. It always draws on a self-correcting timer (never on the frame callback of one video:
+ * that video may be swapped), at a constant `fps`; the canvas stream is the result.
+ */
+export async function createDynamicCompositor(
+  options: DynamicCompositorOptions,
+): Promise<DynamicCompositor> {
+  const cameraVideo = options.camera ? makeVideo(sourceTrack(options.camera.stream)) : undefined;
+  const cameraState = options.camera?.state;
+  const tiles = new Map<number, DynamicTile>();
+  const unregisterLoops: (() => void)[] = [];
+  let disposed = false;
+  let output: MediaStream | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let outSize: Size | undefined;
+
+  const closeTile = (tile: DynamicTile): void => {
+    tile.removeEnded();
+    closeVideo(tile.video);
+  };
+
+  const layout = (): void => {
+    if (!outSize) return;
+    const rects = slotRects(outSize, [...tiles.keys()]);
+    for (const [slot, tile] of tiles) tile.dst = rects.get(slot) as Rect;
+  };
+
+  /** A tile with a playing video and a first frame; not yet part of the picture. */
+  const openTile = async (
+    stream: MediaStream,
+    tileOptions: DynamicTileOptions,
+  ): Promise<DynamicTile> => {
+    const video = makeVideo(sourceTrack(stream));
+    try {
+      await startVideo(video);
+      const frame = { width: video.videoWidth, height: video.videoHeight };
+      checkCrop(tileOptions.src?.(frame), frame);
+    } catch (error) {
+      closeVideo(video);
+      throw error;
+    }
+    return {
+      video,
+      src: tileOptions.src,
+      fit: tileOptions.fit !== false,
+      dst: { x: 0, y: 0, width: 0, height: 0 },
+      lost: false,
+      hidden: false,
+      placeholder: null,
+      removeEnded: () => undefined,
+    };
+  };
+
+  const insert = (slot: number, tile: DynamicTile, stream: MediaStream): void => {
+    const track = sourceTrack(stream);
+    const onEnded = (): void => {
+      if (tile.lost || tiles.get(slot) !== tile) return;
+      tile.lost = true;
+      options.onTileLost?.(slot);
+    };
+    track.addEventListener('ended', onEnded);
+    tile.removeEnded = () => track.removeEventListener('ended', onEnded);
+    const previous = tiles.get(slot);
+    tiles.set(slot, tile);
+    if (previous) closeTile(previous);
+    layout();
+  };
+
+  const dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
+    if (timer !== undefined) clearTimeout(timer);
+    for (const tile of tiles.values()) closeTile(tile);
+    tiles.clear();
+    if (cameraVideo) closeVideo(cameraVideo);
+    output?.getTracks().forEach((outTrack) => outTrack.stop());
+    unregisterLoops.forEach((unregister) => unregister());
+    unregisterLoops.length = 0;
+  };
+
+  try {
+    const [primary] = await Promise.all([
+      openTile(options.primary.stream, options.primary),
+      cameraVideo ? startVideo(cameraVideo) : undefined,
+    ]);
+    const out = options.outSize({
+      width: primary.video.videoWidth,
+      height: primary.video.videoHeight,
+    });
+    outSize = out;
+    insert(0, primary, options.primary.stream);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = out.width;
+    canvas.height = out.height;
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) throw new CaptureError('unknown', 'Could not create a 2D canvas context.');
+    context.imageSmoothingQuality = 'medium';
+
+    let framesOut = 0;
+    const draw = (): void => {
+      // Gaps and letterbox bars are black.
+      context.fillStyle = '#000';
+      context.fillRect(0, 0, out.width, out.height);
+      for (const tile of tiles.values()) {
+        const card = tileCardText(tile);
+        if (card !== null) drawCard(context, tile.dst, card);
+        else drawVideoTile(context, tile.video, tile.src, tile.dst, tile.fit ? 'snap' : 'none');
+      }
+      if (cameraVideo && cameraState) drawCamera(context, cameraVideo, cameraState(), out);
+      framesOut += 1;
+    };
+
+    output = canvas.captureStream(options.fps);
+    output.getTracks().forEach(registerTrack);
+    unregisterLoops.push(registerLoop('crop-timer'));
+    const interval = 1000 / options.fps;
+    const start = performance.now();
+    let tick = 0;
+    const step = (): void => {
+      if (disposed) return;
+      draw();
+      tick += 1;
+      timer = setTimeout(step, Math.max(0, start + tick * interval - performance.now()));
+    };
+    step();
+
+    return {
+      stream: output,
+      method: 'canvas',
+      stats: () => ({ framesOut, outWidth: out.width, outHeight: out.height }),
+      dispose,
+      async attachTile(slot, stream, tileOptions = {}) {
+        const tile = await openTile(stream, tileOptions);
+        if (disposed) {
+          closeVideo(tile.video);
+          throw new CaptureError('unknown', 'The recording has ended.');
+        }
+        insert(slot, tile, stream);
+        if (stream.getVideoTracks()[0]?.readyState === 'ended') {
+          tile.lost = true;
+          options.onTileLost?.(slot);
+        }
+      },
+      detachTile(slot) {
+        const tile = tiles.get(slot);
+        if (!tile) return;
+        tiles.delete(slot);
+        closeTile(tile);
+        layout();
+      },
+      setTileHidden(slot, hidden, placeholder) {
+        const tile = tiles.get(slot);
+        if (!tile) return;
+        tile.hidden = hidden;
+        tile.placeholder = hidden ? placeholder : null;
+      },
+      slots: () =>
+        [...tiles.entries()].map(([slot, tile]) => ({
+          slot,
+          lost: tile.lost,
+          hidden: tile.hidden,
+          dst: tile.dst,
+        })),
+      waitForFrame(slot, timeoutMs) {
+        const tile = tiles.get(slot);
+        if (!tile) return Promise.resolve(false);
+        return new Promise<boolean>((resolve) => {
+          const timeout = setTimeout(() => resolve(false), timeoutMs);
+          tile.video.requestVideoFrameCallback(() => {
+            clearTimeout(timeout);
+            resolve(true);
+          });
+        });
+      },
     };
   } catch (error) {
     dispose();

@@ -21,6 +21,7 @@ import {
   MANIFEST_FILE,
   partialNameFor,
   STREAM_FILE,
+  type ManifestPanel,
   type PausedInterval,
   type SessionManifest,
   type SessionState,
@@ -34,7 +35,14 @@ import {
   type SessionFs,
 } from './session-fs';
 
-export type { PausedInterval, SessionFileHandle, SessionFs, SessionManifest, SessionState };
+export type {
+  ManifestPanel,
+  PausedInterval,
+  SessionFileHandle,
+  SessionFs,
+  SessionManifest,
+  SessionState,
+};
 export { isSessionId, MANIFEST_FILE, STREAM_FILE };
 
 export const MANIFEST_EVERY_MS = 5000;
@@ -481,6 +489,16 @@ export class SessionService {
       const open = intervals[intervals.length - 1];
       if (paused && (!open || open.to !== null)) intervals.push({ from: this.now(), to: null });
       else if (!paused && open && open.to === null) open.to = this.now();
+      await this.writeManifest(session).catch(() => undefined);
+    });
+  }
+
+  /** Records the live panels of a recording (every panel it had, with its times) in the manifest. Best effort. */
+  async recordPanels(sessionId: string, panels: readonly ManifestPanel[]): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    await this.serial(session, async () => {
+      session.manifest.panels = panels.map((panel) => ({ ...panel }));
       await this.writeManifest(session).catch(() => undefined);
     });
   }

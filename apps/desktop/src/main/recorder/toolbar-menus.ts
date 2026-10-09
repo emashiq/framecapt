@@ -44,3 +44,61 @@ export function buildScreenshotMenuTemplate(
     { id: 'window', label: 'Window', submenu: windowItems },
   ];
 }
+
+export interface PanelMenuHandlers {
+  region: () => void;
+  screen: (displayId: string) => void;
+  window: (sourceId: string) => void;
+  remove: (slot: number) => void;
+}
+
+export interface PanelMenuState {
+  /** The panels the recording has now. */
+  panels: readonly { slot: number; label: string }[];
+  /** No more can be added (the cap) or the recording takes none (several sources). */
+  addDisabled: boolean;
+}
+
+/**
+ * The "Add panel" menu as plain data: a region, a screen or a window to add to the picture, and the
+ * panels to take out again. Adding is disabled at the cap and for multi-source recordings.
+ */
+export function buildPanelMenuTemplate(
+  displays: readonly DisplayInfo[],
+  windows: readonly SourceInfo[],
+  state: PanelMenuState,
+  handlers: PanelMenuHandlers,
+): MenuItemConstructorOptions[] {
+  const enabled = !state.addDisabled;
+  const screens: MenuItemConstructorOptions[] = displays.map((display, index) => ({
+    id: `panel-screen-${display.id}`,
+    label: `Screen ${index + 1} (${display.physicalSize.width}×${display.physicalSize.height})`,
+    click: () => handlers.screen(display.id),
+  }));
+  const windowItems: MenuItemConstructorOptions[] = windows.length
+    ? windows.map((source) => ({
+        id: `panel-window-${source.id}`,
+        label: truncate(source.name) || 'Untitled window',
+        click: () => handlers.window(source.id),
+      }))
+    : [{ id: 'panel-window-none', label: 'No windows found', enabled: false }];
+  const removals: MenuItemConstructorOptions[] = state.panels.length
+    ? state.panels.map((panel) => ({
+        id: `panel-remove-${panel.slot}`,
+        label: panel.label,
+        click: () => handlers.remove(panel.slot),
+      }))
+    : [{ id: 'panel-remove-none', label: 'No panels', enabled: false }];
+  return [
+    { id: 'panel-region', label: 'Region…', enabled, click: handlers.region },
+    { id: 'panel-screen', label: 'Screen', enabled, submenu: screens },
+    { id: 'panel-window', label: 'Window', enabled, submenu: windowItems },
+    { type: 'separator' },
+    {
+      id: 'panel-remove',
+      label: 'Remove panel',
+      enabled: state.panels.length > 0,
+      submenu: removals,
+    },
+  ];
+}

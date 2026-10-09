@@ -9,6 +9,7 @@ import {
   Loader2,
   Mic,
   MicOff,
+  PanelRightOpen,
   Pause,
   Play,
   Square,
@@ -357,6 +358,39 @@ export function ToolbarView() {
               >
                 <ChevronDown className="size-3.5" aria-hidden="true" />
               </button>
+
+              {snapshot.target !== 'multi' ? (
+                <button
+                  type="button"
+                  className={cn(iconButton, 'relative')}
+                  aria-label="Add panel"
+                  title={
+                    snapshot.panelSlots.length > 0
+                      ? `Add panel (${snapshot.panelSlots.map((panel) => panel.label).join(', ')})`
+                      : 'Add panel'
+                  }
+                  data-testid="toolbar-add-panel"
+                  disabled={!recording && !paused}
+                  onClick={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect();
+                    void window.framecapt.invoke('recorder:toolbarMenu', {
+                      menu: 'panel',
+                      x: Math.max(0, Math.round(box.left)),
+                      y: Math.max(0, Math.round(box.bottom)),
+                    });
+                  }}
+                >
+                  <PanelRightOpen className="size-4" aria-hidden="true" />
+                  {snapshot.panelSlots.length > 0 ? (
+                    <span
+                      data-testid="toolbar-panel-count"
+                      className="absolute -top-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-accent-solid text-[9px] font-semibold text-white"
+                    >
+                      {snapshot.panelSlots.length}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
 
               {snapshot.camera ? (
                 <button

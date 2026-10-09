@@ -887,3 +887,34 @@ describe('SessionService: abort', () => {
     expect(fs.existsSync(root)).toBe(true);
   });
 });
+
+describe('SessionService: live panels', () => {
+  const PANELS = [
+    { slot: 1, kind: 'region' as const, name: 'Panel 2', addedAtMs: 4000, removedAtMs: 9000 },
+    { slot: 2, kind: 'window' as const, name: 'Panel 3', addedAtMs: 6000, removedAtMs: null },
+  ];
+
+  it('records every panel with its times in the manifest', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID);
+    expect(readManifest().panels).toBeUndefined();
+    await service.recordPanels(ID, PANELS);
+    expect(readManifest().panels).toEqual(PANELS);
+    await service.recordPanels('not-a-session', PANELS); // ignored
+  });
+
+  it('a recording with panels is still a single video: it is published as a normal webm', async () => {
+    const service = new TrackedService(root);
+    await service.create(CONFIG, ID, 1);
+    await service.recordPanels(ID, PANELS);
+    await service.append(ID, 0, chunk(300, 1), 1);
+    await service.finish(ID, 0, 1);
+    const done = await service.finalize(ID, {
+      outputDir: out,
+      tools: fakeTools(),
+      date: new Date(2026, 9, 2, 14, 5, 9),
+    });
+    expect(path.extname(done.outputPath)).toBe('.webm');
+    expect(fs.readdirSync(out)).toEqual(['FrameCapt 2026-10-02 at 14.05.09.webm']);
+  });
+});

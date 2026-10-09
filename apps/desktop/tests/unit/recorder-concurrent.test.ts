@@ -72,7 +72,18 @@ vi.mock('../../src/main/logger', () => ({
 }));
 vi.mock('../../src/main/worker', () => ({ requestFrames: async () => [] }));
 vi.mock('../../src/main/capture/exact-capture', () => ({ grabScreensExact: vi.fn() }));
-vi.mock('../../src/main/overlay', () => ({ OverlaySet: class {} }));
+vi.mock('../../src/main/overlay', () => ({
+  OverlaySet: class {
+    constructor(readonly mode: string) {}
+    open(): void {}
+    setFrames(): void {}
+    close(): void {}
+    displayIdOf(): string {
+      return '1';
+    }
+    recheckBlur(): void {}
+  },
+}));
 vi.mock('../../src/main/recorder/windows', () => ({
   createToolbarWindow: (_position: unknown, _width: number, onUserClosed: () => void) => {
     const contents = hoisted.contents(30 + hoisted.state.toolbars.length);
@@ -134,6 +145,8 @@ let controller: RecorderController;
 let pool: ReturnType<typeof fakeEnginePool>;
 /** `prepare` requests of these engine windows are not answered. */
 const held = new Set<number>();
+/** `addPanel` requests of these engine windows fail. */
+const panelFails = new Set<number>();
 let onSaved: ReturnType<typeof vi.fn<(historyId: string | null) => void>>;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -142,13 +155,17 @@ function build(extra: Partial<RecorderDeps> = {}): void {
   controller = new RecorderController({
     provider: {
       listDisplays: () => [DISPLAY],
-      listSources: async ({ types }) =>
-        types.includes('window')
+      listSources: async ({ types }) => [
+        ...(types.includes('window')
           ? [
               { id: 'window:123:0', name: 'Word', kind: 'window' as const },
               { id: 'window:456:0', name: 'Notes', kind: 'window' as const },
             ]
-          : [{ id: 'screen:1:0', name: 'Screen 1', kind: 'screen' as const, displayId: '1' }],
+          : []),
+        ...(types.includes('screen')
+          ? [{ id: 'screen:1:0', name: 'Screen 1', kind: 'screen' as const, displayId: '1' }]
+          : []),
+      ],
     },
     sessions,
     media: new MediaRegistry(),
@@ -171,6 +188,7 @@ beforeEach(() => {
   state.sent.length = 0;
   state.toolbars.length = 0;
   held.clear();
+  panelFails.clear();
   onSaved = vi.fn<(historyId: string | null) => void>();
   sessions = new SessionService(root, { diskCheckEveryMs: 0 });
   pool = fakeEnginePool((index) => hoisted.contents(ENGINE_BASE + index));
@@ -189,7 +207,16 @@ beforeEach(() => {
         width: 1920,
         height: 1080,
         audio: { mic: false, system: false },
+        ...(Array.isArray(command.multi) && {
+          tiles: command.multi.map((_, index) => ({ x: index * 10, y: 0, width: 10, height: 10 })),
+        }),
       });
+    } else if (command.cmd === 'addPanel') {
+      reply(
+        panelFails.has(id)
+          ? { type: 'panelFailed', requestId, code: 'unknown', message: 'nope' }
+          : { type: 'panelAdded', requestId, slot: command.slot as number },
+      );
     } else if (command.cmd === 'start') {
       recording.set(id, command.sessionId ?? '');
       reply({ type: 'started', requestId });
@@ -471,5 +498,243 @@ describe('the toolbar of a recording', () => {
     await startScreen();
     state.toolbars[0]?.blur();
     expect(onToolbarBlur).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('live panels', () => {
+  const engineOf = (index: number) => ENGINE_BASE + index;
+  const panelCommands = (cmd: string, id?: number) =>
+    state.commands.filter(
+      (entry) => entry.payload.cmd === cmd && (id === undefined || entry.id === id),
+    );
+  const panelsOf = (sessionId: string) =>
+    controller.sessions().find((session) => session.sessionId === sessionId)?.panels;
+
+  it('adds a window to the recording it is for, and only that one shows it', async () => {
+    const a = await startScreen();
+    const b = await startWindow();
+    const [toolbarA, toolbarB] = state.toolbars;
+
+    await expect(
+      controller.addPanel({ sessionId: a, kind: 'window', sourceId: 'window:456:0' }),
+    ).resolves.toEqual({ slot: 1 });
+    const [command] = panelCommands('addPanel');
+    expect(command?.id).toBe(engineOf(0));
+    expect(command?.payload).toMatchObject({
+      slot: 1,
+      sourceId: 'window:456:0',
+      kind: 'window',
+      region: null,
+      displaySize: null,
+    });
+    expect(panelsOf(a)).toBe(1);
+    expect(panelsOf(b)).toBe(0);
+    expect(controller.snapshotFor('toolbar', toolbarA?.id).panelSlots).toEqual([
+      { slot: 1, kind: 'window', label: 'Panel 2', hidden: false, placeholder: null },
+    ]);
+    expect(controller.snapshotFor('toolbar', toolbarB?.id).panelSlots).toEqual([]);
+  });
+
+  it('a screen is mapped to its source and display size', async () => {
+    const a = await startWindow();
+    await controller.addPanel({ sessionId: a, kind: 'screen', displayId: '1' });
+    expect(panelCommands('addPanel')[0]?.payload).toMatchObject({
+      sourceId: 'screen:1:0',
+      kind: 'screen',
+      region: null,
+      displaySize: { width: 1920, height: 1080 },
+    });
+    await expect(
+      controller.addPanel({ sessionId: a, kind: 'screen', displayId: '99' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('a region is chosen on the selection overlay and mapped to even display pixels', async () => {
+    const a = await startScreen();
+    const pending = controller.addPanel({ sessionId: a, kind: 'region' });
+    await waitFor(() => controller.selecting, 'the selection');
+    await controller.confirmRegion(1, '1', { x: 101, y: 51, width: 400, height: 301 });
+    await expect(pending).resolves.toEqual({ slot: 1 });
+    expect(controller.selecting).toBe(false);
+    expect(panelCommands('addPanel')[0]?.payload).toMatchObject({
+      sourceId: 'screen:1:0',
+      kind: 'screen',
+      region: { x: 100, y: 50, width: 400, height: 300 },
+      displaySize: { width: 1920, height: 1080 },
+    });
+    expect(controller.snapshot().sessions[0]?.panels).toBe(1);
+    expect(controller.snapshotFor('toolbar', state.toolbars[0]?.id).panelSlots[0]?.kind).toBe(
+      'region',
+    );
+  });
+
+  it('backing out of the region selection adds nothing and frees the selection', async () => {
+    const a = await startScreen();
+    const pending = controller.addPanel({ sessionId: a, kind: 'region' });
+    await waitFor(() => controller.selecting, 'the selection');
+    // A second selection (a recording starting, another panel) is refused while this one is open.
+    await expect(controller.addPanel({ sessionId: a, kind: 'region' })).rejects.toMatchObject({
+      code: 'BUSY',
+    });
+    controller.cancel();
+    await expect(pending).rejects.toThrow();
+    expect(controller.selecting).toBe(false);
+    expect(panelCommands('addPanel')).toHaveLength(0);
+    expect(panelsOf(a)).toBe(0);
+  });
+
+  it('is refused for a window that is gone, at the cap and when not live', async () => {
+    const a = await startScreen();
+    await expect(
+      controller.addPanel({ sessionId: a, kind: 'window', sourceId: 'window:999:0' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    // At the cap (three panels): the fourth is refused, a removed slot is reused.
+    for (const expected of [1, 2, 3]) {
+      await expect(
+        controller.addPanel({ sessionId: a, kind: 'screen', displayId: '1' }),
+      ).resolves.toEqual({ slot: expected });
+    }
+    await expect(
+      controller.addPanel({ sessionId: a, kind: 'screen', displayId: '1' }),
+    ).rejects.toMatchObject({ code: 'PANEL_LIMIT' });
+    expect(panelCommands('addPanel')).toHaveLength(3);
+    controller.removePanel(a, 2);
+    await expect(
+      controller.addPanel({ sessionId: a, kind: 'screen', displayId: '1' }),
+    ).resolves.toEqual({ slot: 2 });
+    await controller.stop('user', a);
+
+    // Not live any more: a completed recording takes no panel.
+    await expect(
+      controller.addPanel({ sessionId: a, kind: 'screen', displayId: '1' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('is refused while the recording is still starting', async () => {
+    held.add(engineOf(0));
+    const { sessionId } = await controller.start({
+      target: 'window',
+      sourceId: 'window:123:0',
+      options: OPTIONS,
+    });
+    await waitFor(() => statusOf(sessionId) === 'preflight', 'preflight');
+    await expect(
+      controller.addPanel({ sessionId, kind: 'screen', displayId: '1' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(panelCommands('addPanel')).toHaveLength(0);
+    held.clear();
+    controller.cancel();
+  });
+
+  it('is refused for a multi-source recording', async () => {
+    const { sessionId } = await controller.start({
+      target: 'multi',
+      sources: [{ sourceId: 'screen:1:0' }, { sourceId: 'window:123:0' }],
+      options: OPTIONS,
+    });
+    await waitFor(() => statusOf(sessionId) === 'recording', 'recording');
+    await expect(
+      controller.addPanel({ sessionId, kind: 'window', sourceId: 'window:456:0' }),
+    ).rejects.toMatchObject({ code: 'INVALID_PAYLOAD' });
+    expect(controller.panelState(sessionId)?.addDisabled).toBe(true);
+    expect(panelCommands('addPanel')).toHaveLength(0);
+  });
+
+  it('a source the engine cannot capture is reported and leaves no panel behind', async () => {
+    const a = await startScreen();
+    panelFails.add(engineOf(0));
+    await expect(
+      controller.addPanel({ sessionId: a, kind: 'window', sourceId: 'window:456:0' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(panelsOf(a)).toBe(0);
+    panelFails.clear();
+    await expect(
+      controller.addPanel({ sessionId: a, kind: 'window', sourceId: 'window:456:0' }),
+    ).resolves.toEqual({ slot: 1 }); // the slot was freed
+  });
+
+  it('removePanel tells the engine and drops the panel; hiding is forwarded and shown', async () => {
+    const a = await startScreen();
+    const toolbar = state.toolbars[0]?.id;
+    await controller.addPanel({ sessionId: a, kind: 'window', sourceId: 'window:456:0' });
+
+    controller.setPanelHidden(a, 1, true, 'meeting-hidden');
+    expect(panelCommands('setPanelHidden')[0]?.payload).toMatchObject({
+      slot: 1,
+      hidden: true,
+      placeholder: 'meeting-hidden',
+    });
+    expect(controller.snapshotFor('toolbar', toolbar).panelSlots[0]).toMatchObject({
+      hidden: true,
+      placeholder: 'meeting-hidden',
+    });
+    controller.setPanelHidden(a, 1, false, 'meeting-hidden');
+    expect(controller.snapshotFor('toolbar', toolbar).panelSlots[0]).toMatchObject({
+      hidden: false,
+      placeholder: null,
+    });
+    // Slot 0 is the recording itself: forwarded, not listed.
+    controller.setPanelHidden(a, 0, true, 'share-paused');
+    expect(panelCommands('setPanelHidden')).toHaveLength(3);
+    expect(controller.snapshotFor('toolbar', toolbar).panelSlots).toHaveLength(1);
+
+    controller.removePanel(a, 1);
+    expect(panelCommands('removePanel')[0]?.payload).toMatchObject({ slot: 1 });
+    expect(controller.snapshotFor('toolbar', toolbar).panelSlots).toEqual([]);
+    expect(panelsOf(a)).toBe(0);
+    expect(() => controller.removePanel(a, 1)).toThrow(/no longer/);
+    expect(() => controller.setPanelHidden(a, 1, true, 'meeting-hidden')).toThrow(/no longer/);
+  });
+
+  it('a panel whose source ended leaves the picture while the recording goes on', async () => {
+    const a = await startScreen();
+    await controller.addPanel({ sessionId: a, kind: 'window', sourceId: 'window:456:0' });
+    controller.onEngineEvent({ type: 'panelLost', slot: 1 }, engineOf(0));
+    expect(panelsOf(a)).toBe(0);
+    expect(statusOf(a)).toBe('recording');
+    expect(toasts(state.toolbars[0]?.id).map((entry) => entry.payload.message)).toEqual([
+      'Panel 2 ended',
+    ]);
+    controller.onEngineEvent({ type: 'panelLost', slot: 1 }, engineOf(0)); // twice: ignored
+    expect(toasts(state.toolbars[0]?.id)).toHaveLength(1);
+  });
+
+  it('the manifest keeps every panel with its times, and the recording is saved as a normal video', async () => {
+    const a = await startScreen();
+    await controller.addPanel({ sessionId: a, kind: 'window', sourceId: 'window:456:0' });
+    await controller.addPanel({ sessionId: a, kind: 'screen', displayId: '1' });
+    controller.removePanel(a, 1);
+    await waitFor(
+      () => sessions.manifestOf(a)?.panels?.some((panel) => panel.removedAtMs !== null) === true,
+      'the manifest',
+    );
+    const panels = sessions.manifestOf(a)?.panels ?? [];
+    expect(panels.map(({ slot, kind, name }) => ({ slot, kind, name }))).toEqual([
+      { slot: 1, kind: 'window', name: 'Panel 2' },
+      { slot: 2, kind: 'screen', name: 'Panel 3' },
+    ]);
+    expect(panels[0]?.removedAtMs).toEqual(expect.any(Number));
+    expect(panels[1]?.removedAtMs).toBeNull();
+
+    await controller.stop('user', a);
+    expect(statusOf(a)).toBe('completed');
+    expect(fs.readdirSync(out).map((name) => path.extname(name))).toEqual(['.webm']);
+  });
+
+  it('addPanelSource takes a source main already knows, and panelState lists the panels', async () => {
+    const a = await startScreen();
+    const b = await startWindow();
+    expect(controller.panelState(b)?.panels).toEqual([]);
+    await expect(
+      controller.addPanelSource(a, { kind: 'window', sourceId: 'window:123:0' }),
+    ).resolves.toBe(1);
+    expect(panelCommands('addPanel', engineOf(0))).toHaveLength(1);
+    expect(panelCommands('addPanel', engineOf(1))).toHaveLength(0);
+    expect(controller.panelState(a)).toMatchObject({
+      sessionId: a,
+      addDisabled: false,
+      panels: [{ slot: 1, label: 'Panel 2' }],
+    });
   });
 });

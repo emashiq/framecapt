@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ipcContract } from '../../src/shared/ipc-contract';
 import {
+  AddPanelRequestSchema,
   AppendChunkRequestSchema,
   DEFAULT_RECORD_OPTIONS,
   EngineCommandSchema,
@@ -8,6 +9,8 @@ import {
   FinishSessionRequestSchema,
   MAX_CHUNK_BYTES,
   RecorderStartRequestSchema,
+  RemovePanelRequestSchema,
+  SetPanelHiddenRequestSchema,
 } from '../../src/shared/recorder-ipc';
 
 describe('recorder:start', () => {
@@ -190,10 +193,32 @@ describe('engine messages', () => {
       { cmd: 'levels', enabled: false },
       { cmd: 'start', requestId: 'r', sessionId: 's' },
       { cmd: 'stop', requestId: 'r' },
+      {
+        cmd: 'addPanel',
+        requestId: 'r',
+        slot: 1,
+        sourceId: 'screen:2:0',
+        kind: 'screen',
+        region: { x: 0, y: 0, width: 640, height: 360 },
+        displaySize: { width: 1920, height: 1080 },
+      },
+      { cmd: 'removePanel', slot: 3 },
+      { cmd: 'setPanelHidden', slot: 0, hidden: true, placeholder: 'meeting-hidden' },
     ]) {
       expect(EngineCommandSchema.safeParse(command).success, JSON.stringify(command)).toBe(true);
     }
     expect(EngineCommandSchema.safeParse({ cmd: 'eval', code: 'x' }).success).toBe(false);
+    // Slot 0 is the recording itself: a panel is 1..3, only hiding may name slot 0.
+    expect(EngineCommandSchema.safeParse({ cmd: 'removePanel', slot: 0 }).success).toBe(false);
+    expect(EngineCommandSchema.safeParse({ cmd: 'removePanel', slot: 4 }).success).toBe(false);
+    expect(
+      EngineCommandSchema.safeParse({
+        cmd: 'setPanelHidden',
+        slot: 1,
+        hidden: true,
+        placeholder: 'free text',
+      }).success,
+    ).toBe(false);
     expect(
       EngineCommandSchema.safeParse({ cmd: 'mute', source: 'camera', muted: true }).success,
     ).toBe(false);
@@ -213,9 +238,47 @@ describe('engine messages', () => {
     expect(EngineEventSchema.safeParse({ type: 'trackEnded', source: 'mic' }).success).toBe(true);
     expect(EngineEventSchema.safeParse({ type: 'levels', mic: 0.1, system: 0 }).success).toBe(true);
     expect(EngineEventSchema.safeParse({ type: 'sourceLost' }).success).toBe(true);
+    expect(
+      EngineEventSchema.safeParse({ type: 'panelAdded', requestId: 'r', slot: 2 }).success,
+    ).toBe(true);
+    expect(
+      EngineEventSchema.safeParse({ type: 'panelFailed', requestId: 'r', code: 'x', message: 'y' })
+        .success,
+    ).toBe(true);
+    expect(EngineEventSchema.safeParse({ type: 'panelLost', slot: 1 }).success).toBe(true);
+    expect(EngineEventSchema.safeParse({ type: 'panelLost', slot: 0 }).success).toBe(false);
     expect(EngineEventSchema.safeParse({ type: 'nope' }).success).toBe(false);
     expect(EngineEventSchema.safeParse({ type: 'trackEnded', source: 'camera' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('panel requests', () => {
+  it('a window panel needs its source, a screen panel a display or a source', () => {
+    expect(AddPanelRequestSchema.safeParse({ kind: 'region' }).success).toBe(true);
+    expect(AddPanelRequestSchema.safeParse({ kind: 'window' }).success).toBe(false);
+    expect(
+      AddPanelRequestSchema.safeParse({ kind: 'window', sourceId: 'window:5:0' }).success,
+    ).toBe(true);
+    expect(AddPanelRequestSchema.safeParse({ kind: 'screen' }).success).toBe(false);
+    expect(AddPanelRequestSchema.safeParse({ kind: 'screen', displayId: '2' }).success).toBe(true);
+    expect(
+      AddPanelRequestSchema.safeParse({ kind: 'screen', sourceId: 'screen:2:0' }).success,
+    ).toBe(true);
+    expect(
+      AddPanelRequestSchema.safeParse({ kind: 'window', sourceId: 'not a source' }).success,
+    ).toBe(false);
+    expect(AddPanelRequestSchema.safeParse({ kind: 'region', extra: 1 }).success).toBe(false);
+  });
+
+  it('remove and hide name a slot', () => {
+    expect(RemovePanelRequestSchema.safeParse({ slot: 2 }).success).toBe(true);
+    expect(RemovePanelRequestSchema.safeParse({ slot: 0 }).success).toBe(false);
+    expect(
+      SetPanelHiddenRequestSchema.safeParse({ slot: 0, hidden: true, placeholder: 'share-paused' })
+        .success,
+    ).toBe(true);
+    expect(SetPanelHiddenRequestSchema.safeParse({ slot: 2, hidden: true }).success).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import { IpcError } from '../ipc-core';
 import type { MediaRegistry } from '../recording/media-protocol';
 import type { SessionService } from '../recording/session-service';
 import type { RecorderController } from './controller';
+import { Cancelled } from './recording-session';
 
 /**
  * Recording channels. Commands from every UI (main window, toolbar; later the tray and global
@@ -18,7 +19,12 @@ export function registerRecorderHandlers(
   onStepsToolbarResize?: (width: number) => void,
   /** Pops the toolbar's menu (Electron-free here; the window and the menu belong to the caller). */
   onToolbarMenu?: (
-    request: { menu: 'screenshot'; x: number; y: number },
+    request: { menu: 'screenshot' | 'panel'; x: number; y: number },
+    webContentsId: number,
+  ) => Promise<void>,
+  /** Pops the "Add panel" menu under the main window's button. */
+  onPanelMenu?: (
+    request: { sessionId?: string | undefined; x: number; y: number },
     webContentsId: number,
   ) => Promise<void>,
 ): void {
@@ -59,6 +65,25 @@ export function registerRecorderHandlers(
   );
   handle('recorder:toolbarMenu', { roles: ['toolbar'] }, (request, ctx) =>
     onToolbarMenu?.(request, ctx.webContentsId),
+  );
+  handle('recorder:addPanel', { roles: ['main', 'toolbar'] }, async (request, ctx) => {
+    try {
+      return await controller.addPanel({ ...request, sessionId: sessionOf(request, ctx) });
+    } catch (error) {
+      // The user backed out of the region selection.
+      if (error instanceof Cancelled)
+        throw new IpcError('NOT_FOUND', 'The selection was cancelled.');
+      throw error;
+    }
+  });
+  handle('recorder:removePanel', { roles: ['main', 'toolbar'] }, (request, ctx) =>
+    controller.removePanel(sessionOf(request, ctx), request.slot),
+  );
+  handle('recorder:setPanelHidden', { roles: ['main'] }, (request) =>
+    controller.setPanelHidden(request.sessionId, request.slot, request.hidden, request.placeholder),
+  );
+  handle('recorder:panelMenu', { roles: ['main'] }, (request, ctx) =>
+    onPanelMenu?.(request, ctx.webContentsId),
   );
   handle('recorder:cancel', { roles: ['main', 'toolbar'] }, (request, ctx) =>
     controller.cancel(sessionOf(request, ctx)),

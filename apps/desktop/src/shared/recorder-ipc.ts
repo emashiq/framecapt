@@ -5,6 +5,7 @@ import { FOLLOW_ZOOMS } from './compositor-layout';
 import { HistoryIdSchema } from './history-ipc';
 import { FPS_VALUES, QUALITY_VALUES } from './recording';
 import { RECORDER_STATUSES } from './recorder-machine';
+import { MAX_PANELS, PanelKindSchema, PanelPlaceholderSchema, PanelSlotSchema } from './panels';
 import { MAX_MULTI_SOURCES } from './recording-layout';
 import { SourceIdSchema } from './shot-ipc';
 
@@ -123,6 +124,48 @@ export const ResolveChoiceRequestSchema = z.strictObject({
   sessionId: SessionIdSchema.optional(),
 });
 
+/** Live panels: add a region, window or screen to a recording that is running. */
+export const AddPanelRequestSchema = z
+  .strictObject({
+    /** The main window may name the recording (default: the one it follows); a toolbar's own is used. */
+    sessionId: SessionIdSchema.optional(),
+    kind: PanelKindSchema,
+    /** Window and screen panels: the source (a window needs it). */
+    sourceId: SourceIdSchema.optional(),
+    /** Screen and region panels: the display (a screen needs this or its sourceId). */
+    displayId: z.string().min(1).max(64).optional(),
+  })
+  .refine((request) => request.kind !== 'window' || request.sourceId !== undefined, {
+    message: 'A window panel needs a sourceId.',
+    path: ['sourceId'],
+  })
+  .refine(
+    (request) =>
+      request.kind !== 'screen' ||
+      request.sourceId !== undefined ||
+      request.displayId !== undefined,
+    { message: 'A screen panel needs a displayId or a sourceId.', path: ['displayId'] },
+  );
+export const AddPanelResponseSchema = z.strictObject({
+  slot: z.number().int().min(1).max(MAX_PANELS),
+});
+export const RemovePanelRequestSchema = z.strictObject({
+  sessionId: SessionIdSchema.optional(),
+  slot: z.number().int().min(1).max(MAX_PANELS),
+});
+export const SetPanelHiddenRequestSchema = z.strictObject({
+  sessionId: SessionIdSchema.optional(),
+  /** Slot 0 is the recording itself. */
+  slot: z.number().int().min(0).max(MAX_PANELS),
+  hidden: z.boolean(),
+  placeholder: PanelPlaceholderSchema,
+});
+export const PanelMenuRequestSchema = z.strictObject({
+  sessionId: SessionIdSchema.optional(),
+  x: z.number().min(0).max(4000),
+  y: z.number().min(0).max(4000),
+});
+
 export const RecordingIdRequestSchema = z.strictObject({ resultId: z.string().min(1).max(64) });
 
 // --- state broadcast (main -> every app window) ----------------------------------------------
@@ -159,8 +202,8 @@ export const RecorderSessionSummarySchema = z.strictObject({
   runningSince: z.number().nullable(),
   progress: z.number().min(0).max(1).nullable(),
   quitting: z.boolean(),
-  /** Reserved for panel recordings (a later phase); always 0 for now. */
-  panels: z.number().int().min(0).max(4),
+  /** How many live panels the recording has right now. */
+  panels: z.number().int().min(0).max(MAX_PANELS),
 });
 export type RecorderSessionSummary = z.infer<typeof RecorderSessionSummarySchema>;
 
@@ -203,6 +246,8 @@ export const RecorderSnapshotSchema = z.object({
   width: z.number().nullable(),
   height: z.number().nullable(),
   result: RecordingResultSchema.nullable(),
+  /** The live panels of the recording the fields above describe (slots 1..3). */
+  panelSlots: z.array(PanelSlotSchema).max(MAX_PANELS),
   /** Every recording (at most three); the fields above describe one of them (see snapshotFor). */
   sessions: z.array(RecorderSessionSummarySchema).max(3),
   /** Another recording may start now (under the cap, and none is starting). */
@@ -243,6 +288,20 @@ export const EnginePrepareSchema = z.object({
   synthetic: z.object({ width: z.number(), height: z.number() }).optional(),
 });
 
+/** Add a panel: another source drawn into the recording's picture (slot 1..3). */
+export const EngineAddPanelSchema = z.object({
+  cmd: z.literal('addPanel'),
+  requestId: RequestIdSchema,
+  slot: z.number().int().min(1).max(MAX_PANELS),
+  sourceId: SourceIdSchema,
+  kind: z.enum(['screen', 'window']),
+  /** Region in PIXELS of the display (screen sources), already clamped and even-aligned by main. */
+  region: RectSchema.strict().nullable(),
+  displaySize: z.object({ width: z.number(), height: z.number() }).nullable(),
+  /** E2E builds only: draw a synthetic picture of this size instead of capturing. */
+  synthetic: z.object({ width: z.number(), height: z.number() }).optional(),
+});
+
 export const EngineCommandSchema = z.discriminatedUnion('cmd', [
   EnginePrepareSchema,
   z.object({ cmd: z.literal('start'), requestId: RequestIdSchema, sessionId: z.string() }),
@@ -253,6 +312,15 @@ export const EngineCommandSchema = z.discriminatedUnion('cmd', [
   z.object({ cmd: z.literal('abort') }),
   z.object({ cmd: z.literal('mute'), source: AudioSourceSchema, muted: z.boolean() }),
   z.object({ cmd: z.literal('levels'), enabled: z.boolean() }),
+  EngineAddPanelSchema,
+  z.object({ cmd: z.literal('removePanel'), slot: z.number().int().min(1).max(MAX_PANELS) }),
+  /** Show a neutral card instead of a tile's picture (audio goes on); the engine re-acquires a window on show. */
+  z.object({
+    cmd: z.literal('setPanelHidden'),
+    slot: z.number().int().min(0).max(MAX_PANELS),
+    hidden: z.boolean(),
+    placeholder: PanelPlaceholderSchema,
+  }),
   /** Follow-mouse recordings: the mouse, 0..1 across the recorded display (main sends ~30 per second). */
   z.object({
     cmd: z.literal('cursor'),
@@ -271,6 +339,7 @@ export const EngineCommandSchema = z.discriminatedUnion('cmd', [
 ]);
 export type EngineCommand = z.infer<typeof EngineCommandSchema>;
 export type EnginePrepareCommand = z.infer<typeof EnginePrepareSchema>;
+export type EngineAddPanelCommand = z.infer<typeof EngineAddPanelSchema>;
 
 export const EngineEventSchema = z.discriminatedUnion('type', [
   z.strictObject({
@@ -314,6 +383,22 @@ export const EngineEventSchema = z.discriminatedUnion('type', [
       .int()
       .min(0)
       .max(MAX_MULTI_SOURCES - 1),
+  }),
+  z.strictObject({
+    type: z.literal('panelAdded'),
+    requestId: z.string(),
+    slot: z.number().int().min(1).max(MAX_PANELS),
+  }),
+  z.strictObject({
+    type: z.literal('panelFailed'),
+    requestId: z.string(),
+    code: z.string().max(60),
+    message: z.string().max(500),
+  }),
+  /** A panel's source ended: the engine took it out of the picture; the recording goes on. */
+  z.strictObject({
+    type: z.literal('panelLost'),
+    slot: z.number().int().min(1).max(MAX_PANELS),
   }),
   z.strictObject({ type: z.literal('trackEnded'), source: AudioSourceSchema }),
   z.strictObject({ type: z.literal('levels'), mic: z.number(), system: z.number() }),

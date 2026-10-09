@@ -270,6 +270,9 @@ describe('engine messages for several sources', () => {
       width: 1,
       height: 1,
       result: null,
+      panelSlots: [],
+      sessions: [],
+      canStartAnother: true,
     };
     expect(RecorderSnapshotSchema.safeParse(base).success).toBe(true);
     expect(RecorderSnapshotSchema.safeParse({ ...base, lostTiles: [7] }).success).toBe(false);
@@ -424,5 +427,51 @@ describe('time fields', () => {
     for (const ms of [0, 100, 59_900, 61_000, 3_600_000, 7_325_400]) {
       expect(parseClock(formatClock(ms))).toBe(ms);
     }
+  });
+});
+
+describe('manifest panels', () => {
+  const base = {
+    version: 1,
+    sessionId: '0f0e0d0c-0b0a-4908-8706-050403020100',
+    createdAt: 1,
+    updatedAt: 2,
+    state: 'recording',
+    mime: 'video/webm',
+    source: { kind: 'screen', name: 'Screen' },
+    options: DEFAULT_RECORD_OPTIONS,
+    width: 1920,
+    height: 1080,
+    chunksWritten: 0,
+    bytesWritten: 0,
+    lastSeq: -1,
+    pausedIntervals: [],
+    appVersion: '0.1.0',
+  };
+
+  it('a manifest without panels still parses', () => {
+    expect(SessionManifestSchema.parse(base).panels).toBeUndefined();
+  });
+
+  it('keeps the panels with their generic names and times', () => {
+    const panels = [
+      { slot: 1, kind: 'region', name: 'Panel 2', addedAtMs: 1500, removedAtMs: 8000 },
+      { slot: 3, kind: 'screen', name: 'Panel 4', addedAtMs: 2000, removedAtMs: null },
+    ];
+    expect(SessionManifestSchema.parse({ ...base, panels }).panels).toEqual(panels);
+  });
+
+  it('refuses a panel in a slot that does not exist or of an unknown kind', () => {
+    const bad = (panel: object) =>
+      SessionManifestSchema.safeParse({
+        ...base,
+        panels: [
+          { slot: 1, kind: 'screen', name: 'Panel 2', addedAtMs: 0, removedAtMs: null, ...panel },
+        ],
+      }).success;
+    expect(bad({})).toBe(true);
+    expect(bad({ slot: 0 })).toBe(false);
+    expect(bad({ slot: 4 })).toBe(false);
+    expect(bad({ kind: 'webcam' })).toBe(false);
   });
 });

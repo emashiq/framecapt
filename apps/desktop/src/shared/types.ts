@@ -24,6 +24,8 @@ export const IPC_ERROR_CODES = [
   'UNKNOWN_CHANNEL',
   'NOT_FOUND',
   'BUSY',
+  // A recording already has the most live panels it can take.
+  'PANEL_LIMIT',
   'INTERNAL',
   // Recording sessions (session:appendChunk / session:finish).
   'SEQ_GAP',

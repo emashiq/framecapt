@@ -1,4 +1,4 @@
-import { Pause, Play, Square } from 'lucide-react';
+import { PanelRightOpen, Pause, Play, Square } from 'lucide-react';
 import { formatDuration } from '../../shared/recording';
 import type { RecorderSessionSummary } from '../../shared/recorder-ipc';
 import { useActiveMs } from '../recorder/use-recorder';
@@ -60,6 +60,25 @@ function SessionRow({ session }: { session: RecorderSessionSummary }) {
           >
             {paused ? 'Resume' : 'Pause'}
           </Button>
+          {session.target !== 'multi' ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<PanelRightOpen className="size-3.5" />}
+              data-testid="session-add-panel"
+              title={session.panels > 0 ? `${session.panels} panel(s) added` : undefined}
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                void window.framecapt.invoke('recorder:panelMenu', {
+                  sessionId: session.sessionId,
+                  x: Math.max(0, Math.round(box.left)),
+                  y: Math.max(0, Math.round(box.bottom)),
+                });
+              }}
+            >
+              Add panel
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="secondary"
