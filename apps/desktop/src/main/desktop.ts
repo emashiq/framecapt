@@ -25,6 +25,7 @@ import {
   trayTooltip,
   type TrayState,
 } from './tray';
+import type { Meetings } from './meeting/setup';
 import { TRAY_ICONS, TRAY_SCALE_FACTORS } from './tray-icons.generated';
 import type { TrayInfo } from './tray-info';
 import {
@@ -37,10 +38,15 @@ import {
 /** Build-time constant of vite.main.config.ts: the literal `false` in every normal build. */
 declare const __FRAMECAPT_E2E__: boolean;
 
+/** What the tray needs of meeting detection. */
+type MeetingTraySource = Pick<Meetings, 'service' | 'onChange' | 'record'>;
+
 export interface Desktop {
   tray: TrayController;
   shortcuts: ShortcutManager;
   trayInfo(): TrayInfo;
+  /** Meeting detection is up: the tray lists the meetings it finds. */
+  setMeetings(source: MeetingTraySource): void;
   /** Quit from the tray or a menu: asks first while a recording runs. */
   requestQuit(): void;
   dispose(): void;
@@ -186,6 +192,8 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     app.quit();
   }
 
+  /** The detected meetings (set once meeting detection is up); the tray offers to record them. */
+  let meetingSource: MeetingTraySource | undefined;
   const tray = new TrayController({
     createTray: (image) => new Tray(image),
     buildMenu: (template) => Menu.buildFromTemplate(template),
@@ -205,6 +213,7 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
         void recorder.stop('user', sessionId);
       },
       stopAll: () => void recorder.stopAll(),
+      recordMeeting: (meetingId) => meetingSource?.record(meetingId),
       quit: requestQuit,
     },
     log,
@@ -231,6 +240,11 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
       screenshotBusy: flow.state.active || steps.active,
       stepsActive: steps.active,
       multiDisplay: screen.getAllDisplays().length > 1,
+      meetings:
+        meetingSource?.service.list().meetings.map(({ meetingId, appLabel }) => ({
+          meetingId,
+          appLabel,
+        })) ?? [],
     };
   };
   let clock: NodeJS.Timeout | undefined;
@@ -322,6 +336,11 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     tray,
     shortcuts,
     trayInfo: () => ({ active: tray.active, bounds: tray.bounds() }),
+    setMeetings(source) {
+      meetingSource = source;
+      source.onChange(refreshTray);
+      refreshTray();
+    },
     requestQuit,
     dispose() {
       if (clock) clearInterval(clock);

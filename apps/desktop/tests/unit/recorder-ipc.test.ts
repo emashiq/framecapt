@@ -16,6 +16,41 @@ import {
 describe('recorder:start', () => {
   const schema = RecorderStartRequestSchema;
 
+  describe('a meeting recording', () => {
+    const meeting = { meetingId: 'm-1', app: 'zoom', sourceId: 'window:123:0' } as const;
+    const options = DEFAULT_RECORD_OPTIONS;
+
+    it('needs a meeting, and only a meeting recording takes one', () => {
+      expect(schema.safeParse({ target: 'meeting', meeting, options }).success).toBe(true);
+      expect(schema.safeParse({ target: 'meeting', options }).success).toBe(false);
+      expect(schema.safeParse({ target: 'screen', meeting, options }).success).toBe(false);
+      expect(
+        schema.safeParse({ target: 'window', sourceId: 'window:1:0', meeting, options }).success,
+      ).toBe(false);
+    });
+
+    it('may name the screen to record beside the meeting', () => {
+      expect(
+        schema.safeParse({ target: 'meeting', meeting, displayId: '1001', options }).success,
+      ).toBe(true);
+    });
+
+    it('checks the meeting and rejects extra keys', () => {
+      expect(
+        schema.safeParse({ target: 'meeting', meeting: { ...meeting, app: 'skype' }, options })
+          .success,
+      ).toBe(false);
+      expect(
+        schema.safeParse({ target: 'meeting', meeting: { ...meeting, sourceId: '../x' }, options })
+          .success,
+      ).toBe(false);
+      expect(
+        schema.safeParse({ target: 'meeting', meeting: { ...meeting, title: 'Q3 plan' }, options })
+          .success,
+      ).toBe(false);
+    });
+  });
+
   it('accepts screen, region and window requests with options', () => {
     expect(schema.safeParse({ target: 'screen', options: DEFAULT_RECORD_OPTIONS }).success).toBe(
       true,

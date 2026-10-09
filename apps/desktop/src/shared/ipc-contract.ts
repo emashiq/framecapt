@@ -67,8 +67,10 @@ import {
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
 import {
+  MeetingAddRequestSchema,
   MeetingListSchema,
   MeetingPromptEventSchema,
+  MeetingRecordRequestSchema,
   MeetingRespondRequestSchema,
 } from './meeting-ipc';
 import {
@@ -473,9 +475,15 @@ export const ipcContract = {
     response: z.void(),
     roles: ['main', 'toolbar'],
   },
-  /** The toolbar reports the width its content needs; main sizes the window to it (no clipping). */
+  /**
+   * The toolbar reports the size its content needs; main sizes the window to it (no clipping). The
+   * height is only sent when a banner row is shown under the pill.
+   */
   'toolbar:resize': {
-    request: z.strictObject({ width: z.number().min(120).max(900) }),
+    request: z.strictObject({
+      width: z.number().min(120).max(900),
+      height: z.number().min(40).max(200).optional(),
+    }),
     response: z.void(),
     roles: ['toolbar'],
   },
@@ -838,6 +846,14 @@ export const ipcContract = {
   },
   /** The meetings being watched right now. */
   'meeting:list': { request: z.undefined(), response: MeetingListSchema, roles: ['main'] },
+  /** Records a detected meeting (with the user's screen beside it, or alone). */
+  'meeting:record': { request: MeetingRecordRequestSchema, response: z.void(), roles: ['main'] },
+  /** Adds a detected meeting's window to the recording that is running. */
+  'meeting:addToRecording': {
+    request: MeetingAddRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;

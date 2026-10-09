@@ -90,6 +90,11 @@ export class MeetingService {
     };
   }
 
+  /** A meeting being watched, with the window facts the list leaves out. */
+  find(meetingId: string): MeetingInfo | undefined {
+    return this.deps.detector.current().find((meeting) => meeting.meetingId === meetingId);
+  }
+
   getWindow(hwnd: string): Promise<WinInfo | null> {
     return this.deps.detector.getWindow(hwnd);
   }

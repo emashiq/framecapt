@@ -26,6 +26,7 @@ export const IDLE_SNAPSHOT: RecorderSnapshot = {
   height: null,
   result: null,
   panelSlots: [],
+  meeting: null,
   sessions: [],
   canStartAnother: true,
 };

@@ -92,7 +92,7 @@ export function registerRecorderHandlers(
     controller.toggleMute(request.source, sessionOf(request, ctx)),
   );
   handle('toolbar:resize', { roles: ['toolbar'] }, (request, ctx) => {
-    controller.resizeToolbar(request.width, ctx.webContentsId);
+    controller.resizeToolbar(request.width, ctx.webContentsId, request.height);
     onStepsToolbarResize?.(request.width);
   });
   handle('recorder:toggleCamera', { roles: ['toolbar'] }, (_request, ctx) =>

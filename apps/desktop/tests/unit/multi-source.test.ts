@@ -271,6 +271,7 @@ describe('engine messages for several sources', () => {
       height: 1,
       result: null,
       panelSlots: [],
+      meeting: null,
       sessions: [],
       canStartAnother: true,
     };

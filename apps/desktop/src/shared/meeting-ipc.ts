@@ -39,3 +39,18 @@ export type MeetingListItem = z.infer<typeof MeetingListItemSchema>;
 
 export const MeetingListSchema = z.object({ meetings: z.array(MeetingListItemSchema).max(16) });
 export type MeetingList = z.infer<typeof MeetingListSchema>;
+
+/** The main window's "Record" on a detected meeting (the prompt's buttons take the same path). */
+export const MeetingRecordRequestSchema = z.strictObject({
+  meetingId: z.string().min(1).max(64),
+  /** Record the user's screen beside the meeting window. */
+  withScreen: z.boolean(),
+  /** With a screen: which one (default: the one under the mouse). */
+  displayId: z.string().min(1).max(64).optional(),
+});
+export type MeetingRecordRequest = z.infer<typeof MeetingRecordRequestSchema>;
+
+/** The main window's "Add to recording" on a detected meeting. */
+export const MeetingAddRequestSchema = z.strictObject({
+  meetingId: z.string().min(1).max(64),
+});

@@ -114,7 +114,12 @@ vi.mock('../../src/main/recorder/windows', () => ({
 import { MediaRegistry } from '../../src/main/recording/media-protocol';
 import { SessionService } from '../../src/main/recording/session-service';
 import { RecorderController, type RecorderDeps } from '../../src/main/recorder/controller';
-import type { EngineEvent, RecordOptions } from '../../src/shared/recorder-ipc';
+import {
+  RecorderSnapshotSchema,
+  type EngineEvent,
+  type RecordOptions,
+  type SessionMeeting,
+} from '../../src/shared/recorder-ipc';
 import { fakeEnginePool } from './fake-engines';
 import { fakeTools } from './fake-tools';
 
@@ -736,5 +741,60 @@ describe('live panels', () => {
       addDisabled: false,
       panels: [{ slot: 1, label: 'Panel 2' }],
     });
+  });
+});
+
+describe('a meeting recording', () => {
+  const MEETING = {
+    meetingId: 'm1',
+    app: 'zoom' as const,
+    sourceId: 'window:123:0',
+  };
+
+  it('hands a meeting request to the meeting code and nothing else', async () => {
+    await expect(
+      controller.start({ target: 'meeting', meeting: MEETING, options: OPTIONS }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const starter = vi.fn(async () => ({ sessionId: 'x' }));
+    controller.setMeetingStarter(starter);
+    await expect(
+      controller.start({ target: 'meeting', meeting: MEETING, options: OPTIONS }),
+    ).resolves.toEqual({ sessionId: 'x' });
+    expect(starter).toHaveBeenCalledTimes(1);
+    expect(controller.sessions()).toHaveLength(0);
+  });
+
+  it('shows what the meeting code says in the snapshot, the session list and the toolbar', async () => {
+    const id = await startWindow();
+    expect(controller.snapshot().meeting).toBeNull();
+    const meeting: SessionMeeting = {
+      app: 'zoom',
+      appLabel: 'Zoom',
+      state: 'hidden',
+      sharing: false,
+      banner: null,
+    };
+    controller.setSessionMeeting(id, meeting);
+    const snapshot = controller.snapshot();
+    expect(snapshot.meeting).toEqual(meeting);
+    expect(snapshot.sessions[0]?.meeting).toEqual(meeting);
+    expect(RecorderSnapshotSchema.safeParse(snapshot).success).toBe(true);
+    // The toolbar of the recording sees it too.
+    const toolbarId = state.toolbars[0]?.id ?? -1;
+    expect(controller.snapshotFor('toolbar', toolbarId).meeting).toEqual(meeting);
+    controller.setSessionMeeting(id, null);
+    expect(controller.snapshot().meeting).toBeNull();
+    // A recording that is gone is ignored.
+    expect(() => controller.setSessionMeeting('nope', meeting)).not.toThrow();
+  });
+
+  it('lists the displays a recording shows whole: its own screen and its screen panels', async () => {
+    const a = await startScreen();
+    const b = await startWindow();
+    expect(controller.shownDisplayIds(a)).toEqual(['1']);
+    expect(controller.shownDisplayIds(b)).toEqual([]);
+    await controller.addPanel({ sessionId: b, kind: 'screen', displayId: '1' });
+    expect(controller.shownDisplayIds(b)).toEqual(['1']);
+    expect(controller.shownDisplayIds('nope')).toEqual([]);
   });
 });

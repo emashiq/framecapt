@@ -65,6 +65,11 @@ interface Prepared {
   /** The compositor when the recording can take panels (every recording except a multi-source one). */
   dynamic: DynamicCompositor | undefined;
   mix: AudioMix | undefined;
+  /**
+   * Streams whose picture was swapped for a fresh one but whose audio track the mix still uses
+   * (the loopback audio rides on slot 0's first stream): kept until the recording is released.
+   */
+  audioHolders: MediaStream[];
   mime: string;
   width: number;
   height: number;
@@ -89,7 +94,8 @@ interface SlotSource {
   kind: 'screen' | 'window';
   stream: MediaStream;
   tile: DynamicTileOptions;
-  acquireFresh: () => Promise<MediaStream>;
+  /** `withAudio` false: a stream without the system audio (its loopback is already captured elsewhere). */
+  acquireFresh: (withAudio: boolean) => Promise<MediaStream>;
 }
 
 /** A frozen window capture (after a minimize and restore) shows no new frame within this time. */
@@ -331,10 +337,10 @@ export class RecorderEngine {
           kind: command.kind,
           stream: this.holdStream(synthetic ? undefined : command.sourceId, displayStream),
           tile: tile.options,
-          acquireFresh: async () =>
+          acquireFresh: async (withAudio) =>
             this.holdStream(
               synthetic ? undefined : command.sourceId,
-              await this.acquireDisplay(command),
+              await this.acquireDisplay(command, undefined, true, withAudio),
             ),
         });
       }
@@ -354,6 +360,7 @@ export class RecorderEngine {
         crop,
         dynamic,
         mix,
+        audioHolders: [],
         mime: formats.defaultMime,
         width,
         height,
@@ -406,8 +413,9 @@ export class RecorderEngine {
     command: EnginePrepareCommand,
     source?: EngineMultiSource,
     primary = true,
+    withAudio = true,
   ): Promise<MediaStream> {
-    const systemAudio = command.options.systemAudio && primary;
+    const systemAudio = command.options.systemAudio && primary && withAudio;
     const synthetic = source?.synthetic ?? command.synthetic;
     if (__FRAMECAPT_E2E__ && synthetic) {
       const { createSyntheticDisplayStream } = await import('../capture/synthetic-stream');
@@ -703,9 +711,10 @@ export class RecorderEngine {
     const dynamic = prepared?.dynamic;
     const source = this.slotSources.get(slot);
     if (!prepared || !dynamic || !source) return false;
-    // The recording's own system audio rides on its stream: it cannot be swapped.
-    if (slot === 0 && prepared.audio.system) return false;
-    const fresh = await source.acquireFresh();
+    // The recording's own system audio rides on slot 0's first stream: the mix keeps listening to
+    // that stream's audio track, so only its picture is swapped (the fresh stream has no audio).
+    const keepAudio = slot === 0 && prepared.audio.system;
+    const fresh = await source.acquireFresh(!keepAudio);
     try {
       await dynamic.attachTile(slot, fresh, source.tile);
     } catch (error) {
@@ -723,8 +732,27 @@ export class RecorderEngine {
       prepared.unwatch();
       prepared.unwatch = this.watchSources(prepared);
     }
-    this.releaseStreamRef(old);
+    if (keepAudio) this.retirePicture(prepared, old);
+    else this.releaseStreamRef(old);
     return true;
+  }
+
+  /**
+   * Stops the picture of a stream the mix still hears: its video track ends, its audio track lives
+   * on (and is stopped with the recording). A stream with other users keeps its picture.
+   */
+  private retirePicture(prepared: Prepared, stream: MediaStream): void {
+    const left = (this.streamRefs.get(stream) ?? 1) - 1;
+    if (left > 0) {
+      this.streamRefs.set(stream, left);
+      return;
+    }
+    this.streamRefs.delete(stream);
+    for (const [key, held] of this.sourceStreams) {
+      if (held === stream) this.sourceStreams.delete(key);
+    }
+    for (const track of stream.getVideoTracks()) track.stop();
+    prepared.audioHolders.push(stream);
   }
 
   // --- start, pause, resume ----------------------------------------------------------------
@@ -928,6 +956,7 @@ export class RecorderEngine {
       stopStream(prepared.micStream);
       stopStream(prepared.cameraStream);
       prepared.displayStreams.forEach((stream) => stopStream(stream));
+      prepared.audioHolders.forEach((stream) => stopStream(stream));
     }
     // Every stream a slot or a share holds (panels included).
     this.streamRefs.forEach((_refs, stream) => stopStream(stream));

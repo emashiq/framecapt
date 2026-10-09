@@ -40,6 +40,8 @@ export interface TrayState {
   multiDisplay: boolean;
   /** A step guide is being captured (the Steps item finishes it). */
   stepsActive?: boolean;
+  /** Meetings being watched right now: while nothing records, each can be recorded from the menu. */
+  meetings?: { meetingId: string; appLabel: string }[];
 }
 
 export interface TrayHandlers {
@@ -51,6 +53,8 @@ export interface TrayHandlers {
   togglePause: (sessionId?: string) => void;
   stop: (sessionId?: string) => void;
   stopAll: () => void;
+  /** Records a detected meeting (its window alone). */
+  recordMeeting?: (meetingId: string) => void;
   quit: () => void;
 }
 
@@ -116,6 +120,18 @@ export function buildTrayTemplate(
   const preRecording = ['selecting', 'preflight', 'countdown', 'starting'].includes(state.status);
   const running = state.sessions ?? [];
   const items: MenuItemConstructorOptions[] = [];
+
+  if (!recording && !preRecording && handlers.recordMeeting) {
+    const record = handlers.recordMeeting;
+    for (const meeting of state.meetings ?? []) {
+      items.push({
+        id: `record-meeting-${meeting.meetingId}`,
+        label: `Record ${meeting.appLabel} meeting`,
+        click: () => record(meeting.meetingId),
+      });
+    }
+    if (state.meetings?.length) items.push({ type: 'separator' });
+  }
 
   if (running.length >= 2) {
     // Several recordings: one submenu each (Pause/Resume, Stop), and a way to end them all.

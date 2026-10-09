@@ -135,7 +135,12 @@ export const NoticeSettingsSchema = z.object({
 export const MeetingSettingsSchema = z.object({
   /** Detect meetings and offer to record them. */
   detect: z.boolean(),
-  apps: z.object({ meet: z.boolean(), zoom: z.boolean(), teams: z.boolean(), webex: z.boolean() }),
+  apps: z.strictObject({
+    meet: z.boolean(),
+    zoom: z.boolean(),
+    teams: z.boolean(),
+    webex: z.boolean(),
+  }),
   /** What happens when the user shares their screen in a meeting that is being recorded. */
   addSharedScreen: z.enum(['auto', 'ask', 'off']),
   /** Apps the user chose "Don't ask for" on the prompt. */

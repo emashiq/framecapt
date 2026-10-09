@@ -9,6 +9,7 @@ import type {
   RecorderSessionSummary,
   RecorderSnapshot,
   RecorderStartRequest,
+  SessionMeeting,
 } from '../../shared/recorder-ipc';
 import type { AudioSource, RecorderStatus } from '../../shared/recorder-machine';
 import {
@@ -34,6 +35,7 @@ import { getMainWindow, isOwnUiFocused, webContentsWithRoles } from '../windows'
 import { settleWithin } from './quit-cap';
 import {
   Cancelled,
+  isSessionRequest,
   RecordingSession,
   StartFailure,
   toGeom,
@@ -93,6 +95,7 @@ const IDLE_SNAPSHOT: SessionSnapshot = {
   height: null,
   result: null,
   panelSlots: [],
+  meeting: null,
 };
 
 /**
@@ -111,6 +114,9 @@ export class RecorderController implements SelectionHost, SessionHost {
   private readonly changeListeners = new Set<() => void>();
   /** The last status seen per recording (a failure that nobody can see is announced). */
   private readonly lastStatus = new Map<string, RecorderStatus>();
+  /** Starts a `meeting` recording (the meeting code resolves it to a window or screen request). */
+  private meetingStarter:
+    ((request: RecorderStartRequest) => Promise<{ sessionId: string }>) | undefined;
 
   constructor(private readonly deps: RecorderDeps) {}
 
@@ -266,7 +272,25 @@ export class RecorderController implements SelectionHost, SessionHost {
 
   // --- commands ----------------------------------------------------------------------------
 
+  /** The meeting code takes over `recorder:start` requests for a meeting. */
+  setMeetingStarter(
+    starter: (request: RecorderStartRequest) => Promise<{ sessionId: string }>,
+  ): void {
+    this.meetingStarter = starter;
+  }
+
+  /** What the toolbar says about the meeting a recording captures (null: nothing). */
+  setSessionMeeting(sessionId: string, meeting: SessionMeeting | null): void {
+    this.find(sessionId)?.setMeeting(meeting);
+  }
+
   async start(request: RecorderStartRequest): Promise<{ sessionId: string }> {
+    if (!isSessionRequest(request)) {
+      if (!this.meetingStarter) {
+        throw new IpcError('NOT_FOUND', 'Meeting recording is not available.');
+      }
+      return this.meetingStarter(request);
+    }
     // The real entry point of every recording (button, shortcut, tray and direct IPC alike).
     this.ensureCanStartAnother();
     if (this.deps.isScreenshotBusy()) {
@@ -483,6 +507,11 @@ export class RecorderController implements SelectionHost, SessionHost {
     };
   }
 
+  /** The displays a recording shows whole (its own screen and its screen panels). */
+  shownDisplayIds(sessionId: string): string[] {
+    return this.find(sessionId)?.shownDisplayIds() ?? [];
+  }
+
   removePanel(sessionId: string | undefined, slot: number): void {
     this.panelSession(sessionId).removePanel(slot);
   }
@@ -523,6 +552,7 @@ export class RecorderController implements SelectionHost, SessionHost {
         sourceId: source.id,
         region: null,
         displaySize: display.physicalSize,
+        displayId: display.id,
       };
     }
     const chosen = await this.selectPanelRegion(session, displays);
@@ -605,10 +635,10 @@ export class RecorderController implements SelectionHost, SessionHost {
   }
 
   /** The toolbar measured its content: its window takes exactly that width (centered on itself). */
-  resizeToolbar(width: number, webContentsId: number): void {
+  resizeToolbar(width: number, webContentsId: number, height?: number): void {
     this.all()
       .find((session) => session.ownsWebContents(webContentsId))
-      ?.resizeToolbar(width);
+      ?.resizeToolbar(width, height);
   }
 
   private cameraOwner(sessionId?: string): RecordingSession {

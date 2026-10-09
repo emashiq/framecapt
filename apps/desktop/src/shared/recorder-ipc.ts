@@ -5,13 +5,14 @@ import { FOLLOW_ZOOMS } from './compositor-layout';
 import { HistoryIdSchema } from './history-ipc';
 import { FPS_VALUES, QUALITY_VALUES } from './recording';
 import { RECORDER_STATUSES } from './recorder-machine';
+import { MeetingAppSchema } from './meeting-ipc';
 import { MAX_PANELS, PanelKindSchema, PanelPlaceholderSchema, PanelSlotSchema } from './panels';
 import { MAX_MULTI_SOURCES } from './recording-layout';
 import { SourceIdSchema } from './shot-ipc';
 
 // --- options and requests (main window -> main) ----------------------------------------------
 
-export const RecordTargetSchema = z.enum(['screen', 'window', 'region', 'multi']);
+export const RecordTargetSchema = z.enum(['screen', 'window', 'region', 'multi', 'meeting']);
 export type RecordTarget = z.infer<typeof RecordTargetSchema>;
 
 const FOLLOW_ZOOM_LITERALS = [
@@ -75,9 +76,24 @@ export const RecorderStartRequestSchema = z
       .min(2)
       .max(MAX_MULTI_SOURCES)
       .optional(),
-    /** Screen recordings: skip the "pick a screen" step. */
+    /**
+     * Screen recordings: skip the "pick a screen" step. Meeting recordings: the screen to record
+     * beside the meeting window ("+ my screen").
+     */
     displayId: z.string().min(1).max(64).optional(),
+    /** Meeting recordings: the meeting window (main checks it against the meetings it detected). */
+    meeting: z
+      .strictObject({
+        meetingId: z.string().min(1).max(64),
+        app: MeetingAppSchema,
+        sourceId: SourceIdSchema,
+      })
+      .optional(),
     options: RecordOptionsSchema,
+  })
+  .refine((request) => (request.target === 'meeting') === (request.meeting !== undefined), {
+    message: 'Only a meeting recording takes a meeting (and it needs one).',
+    path: ['meeting'],
   })
   .refine((request) => request.target !== 'window' || request.sourceId !== undefined, {
     message: 'A window recording needs a sourceId.',
@@ -191,6 +207,21 @@ export const RecordingResultSchema = z.object({
 });
 export type RecordingResult = z.infer<typeof RecordingResultSchema>;
 
+/**
+ * The meeting a recording is capturing, as the toolbar and Home show it: whether its window is in
+ * the picture, and whether the user is sharing their screen in it.
+ */
+export const SessionMeetingSchema = z.strictObject({
+  app: MeetingAppSchema,
+  appLabel: z.string().max(64),
+  /** `hidden`: minimized or not the active browser tab (a card is drawn); `ended`: the meeting is over. */
+  state: z.enum(['visible', 'hidden', 'ended']),
+  sharing: z.boolean(),
+  /** A question or note about a screen share, shown under the toolbar's controls. */
+  banner: z.enum(['share-ask', 'share-already']).nullable(),
+});
+export type SessionMeeting = z.infer<typeof SessionMeetingSchema>;
+
 /** One of the (up to three) recordings running at once, as every window may list it. */
 export const RecorderSessionSummarySchema = z.strictObject({
   sessionId: z.string(),
@@ -204,6 +235,7 @@ export const RecorderSessionSummarySchema = z.strictObject({
   quitting: z.boolean(),
   /** How many live panels the recording has right now. */
   panels: z.number().int().min(0).max(MAX_PANELS),
+  meeting: SessionMeetingSchema.nullable(),
 });
 export type RecorderSessionSummary = z.infer<typeof RecorderSessionSummarySchema>;
 
@@ -248,6 +280,8 @@ export const RecorderSnapshotSchema = z.object({
   result: RecordingResultSchema.nullable(),
   /** The live panels of the recording the fields above describe (slots 1..3). */
   panelSlots: z.array(PanelSlotSchema).max(MAX_PANELS),
+  /** The meeting the recording captures (null: not a meeting recording). */
+  meeting: SessionMeetingSchema.nullable(),
   /** Every recording (at most three); the fields above describe one of them (see snapshotFor). */
   sessions: z.array(RecorderSessionSummarySchema).max(3),
   /** Another recording may start now (under the cap, and none is starting). */

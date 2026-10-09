@@ -397,3 +397,34 @@ describe('TrayController', () => {
     expect(controller.instances).toBe(2);
   });
 });
+
+describe('a detected meeting', () => {
+  const meetings = [
+    { meetingId: 'm1', appLabel: 'Zoom' },
+    { meetingId: 'm2', appLabel: 'Google Meet' },
+  ];
+
+  it('is offered as "Record <App> meeting" at the top while nothing records', () => {
+    const recordMeeting = vi.fn();
+    const h = { ...handlers(), recordMeeting };
+    const template = buildTrayTemplate({ ...idle, meetings }, h);
+    expect(labels(template).slice(0, 4)).toEqual([
+      'Record Zoom meeting',
+      'Record Google Meet meeting',
+      '-',
+      'Screenshot',
+    ]);
+    (find(template, 'record-meeting-m2')?.click as () => void)();
+    expect(recordMeeting).toHaveBeenCalledWith('m2');
+  });
+
+  it('is not offered while a recording runs or starts, or without meetings', () => {
+    const h = { ...handlers(), recordMeeting: vi.fn() };
+    const recording = buildTrayTemplate({ ...idle, status: 'recording', meetings }, h);
+    expect(find(recording, 'record-meeting-m1')).toBeUndefined();
+    const starting = buildTrayTemplate({ ...idle, status: 'countdown', meetings }, h);
+    expect(find(starting, 'record-meeting-m1')).toBeUndefined();
+    expect(labels(buildTrayTemplate(idle, h))[0]).toBe('Screenshot');
+    expect(labels(buildTrayTemplate({ ...idle, meetings: [] }, h))[0]).toBe('Screenshot');
+  });
+});

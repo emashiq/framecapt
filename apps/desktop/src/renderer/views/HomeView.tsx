@@ -24,6 +24,7 @@ import { MAX_MULTI_SOURCES } from '../../shared/recording-layout';
 import { acceleratorKeys, type ShortcutAction } from '../../shared/shortcuts';
 import type { CaptureTarget } from '../../shared/shots';
 import { Loader } from '../components/Loader';
+import { MeetingChip } from '../components/MeetingChip';
 import { OnboardingCard } from '../components/OnboardingCard';
 import { RecentCaptures } from '../components/RecentCaptures';
 import { RecordOptions } from '../components/RecordOptions';
@@ -405,6 +406,8 @@ export function HomeView({
       <RecoveryBanner busy={anythingBusy} />
 
       <RecordingsStrip sessions={recorder.sessions} />
+
+      <MeetingChip recordingLive={recordingLive} />
 
       {recorder.status === 'error' && recorder.error ? (
         <div

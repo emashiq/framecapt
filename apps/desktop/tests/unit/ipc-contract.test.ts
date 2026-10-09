@@ -71,8 +71,10 @@ describe('ipc contract', () => {
       'library:reveal',
       'library:setCaptureFolder',
       'library:tree',
+      'meeting:addToRecording',
       'meeting:getPrompt',
       'meeting:list',
+      'meeting:record',
       'meeting:respond',
       'overlay:cancel',
       'overlay:confirm',
@@ -312,5 +314,32 @@ describe('ipc contract', () => {
         }).success,
       ).toBe(false);
     });
+  });
+});
+
+describe('meeting recording channels', () => {
+  it('are for the main window only and take strict payloads', () => {
+    for (const channel of ['meeting:record', 'meeting:addToRecording'] as const) {
+      expect(ipcContract[channel].roles).toEqual(['main']);
+    }
+    const record = ipcContract['meeting:record'].request;
+    expect(record.safeParse({ meetingId: 'm1', withScreen: false }).success).toBe(true);
+    expect(record.safeParse({ meetingId: 'm1', withScreen: true, displayId: '2' }).success).toBe(
+      true,
+    );
+    expect(record.safeParse({ meetingId: 'm1' }).success).toBe(false);
+    expect(record.safeParse({ meetingId: 'm1', withScreen: false, sourceId: 'x' }).success).toBe(
+      false,
+    );
+    expect(
+      ipcContract['meeting:addToRecording'].request.safeParse({ meetingId: 'm1' }).success,
+    ).toBe(true);
+  });
+
+  it('the toolbar may report a height for a banner row, within bounds', () => {
+    const resize = ipcContract['toolbar:resize'].request;
+    expect(resize.safeParse({ width: 400 }).success).toBe(true);
+    expect(resize.safeParse({ width: 400, height: 96 }).success).toBe(true);
+    expect(resize.safeParse({ width: 400, height: 1000 }).success).toBe(false);
   });
 });

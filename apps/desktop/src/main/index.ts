@@ -128,15 +128,22 @@ function start(): void {
       isSquirrelInstall: () => isSquirrelInstall(process.execPath),
     });
     const appSettings = createAppSettings(store);
+    const provider = await createCaptureProvider();
     const services = registerHandlers(
-      await createCaptureProvider(),
+      provider,
       appSettings,
       () => desktop?.trayInfo() ?? { active: false, bounds: null },
       updates,
     );
     desktop = setupDesktop(appSettings, services);
-    void setupMeetings({ store, recordingLive: () => services.recorder.anyLive }).then((created) => {
+    void setupMeetings({
+      store,
+      recordingLive: () => services.recorder.anyLive,
+      recorder: services.recorder,
+      provider,
+    }).then((created) => {
       meetings = created;
+      if (created) desktop?.setMeetings(created);
     });
     // A start at login (--hidden) lives in the tray; without a tray the window is the only UI.
     const hidden = process.argv.includes(HIDDEN_ARG) && desktop.tray.active;

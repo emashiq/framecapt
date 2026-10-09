@@ -34,6 +34,7 @@ import type {
   RecorderStartRequest,
   RecordingResult,
   RecordTarget,
+  SessionMeeting,
 } from '../../shared/recorder-ipc';
 import {
   activeDurationAt,
@@ -86,6 +87,18 @@ const PANEL_TIMEOUT_MS = 15_000;
 /** How often the mouse is sampled for a follow-mouse recording. */
 const CURSOR_INTERVAL_MS = 1000 / 30;
 
+/**
+ * A request a recording can run: a `meeting` request is turned into a window or a screen request
+ * (by the meeting code) before a recording is made.
+ */
+export type SessionRequest = Omit<RecorderStartRequest, 'target'> & {
+  target: Exclude<RecordTarget, 'meeting'>;
+};
+
+export function isSessionRequest(request: RecorderStartRequest): request is SessionRequest {
+  return request.target !== 'meeting';
+}
+
 /** The user (or a source change) ended the start-up before recording began. */
 export class Cancelled extends Error {}
 
@@ -114,7 +127,7 @@ interface MultiContext {
 
 interface SessionContext {
   sessionId: string;
-  target: RecordTarget;
+  target: SessionRequest['target'];
   options: RecordOptions;
   sourceId: string;
   sourceName: string;
@@ -148,10 +161,13 @@ export interface PanelSpec {
   region: Rect | null;
   /** Physical size of the display (screen and region panels). */
   displaySize: Size | null;
+  /** The display of a screen panel (the meeting code asks which screens a recording shows). */
+  displayId?: string;
 }
 
 /** One panel of the recording; `removedAtMs` is null while it is in the picture. */
 interface PanelState extends ManifestPanel {
+  displayId: string | null;
   hidden: boolean;
   placeholder: PanelPlaceholder | null;
 }
@@ -289,6 +305,8 @@ export class RecordingSession {
   /** Follow-mouse recordings: samples the mouse for the engine. */
   private cursorTimer: ReturnType<typeof setInterval> | undefined;
   private lastCursor: { nx: number; ny: number } | undefined;
+  /** The meeting this recording captures, as the meeting code last described it (null: none). */
+  private meeting: SessionMeeting | null = null;
   /** Every panel this recording had, in the order they were added (removed ones keep their times). */
   private panelLog: PanelState[] = [];
   /** Slots whose panel is being added (the engine is still acquiring the source). */
@@ -302,7 +320,7 @@ export class RecordingSession {
     sessionId: string,
     /** "Recording 1", "Recording 2": shown wherever recordings are listed. */
     readonly label: string,
-    private readonly request: RecorderStartRequest,
+    private readonly request: SessionRequest,
     /** The main window was on screen when this recording was requested (a shortcut may start it from the tray). */
     private readonly mainWasShown: boolean,
     private readonly deps: RecorderDeps,
@@ -388,7 +406,7 @@ export class RecordingSession {
     return this.ctx.options.camera !== undefined;
   }
 
-  get target(): RecordTarget {
+  get target(): SessionRequest['target'] {
     return this.ctx.target;
   }
 
@@ -426,6 +444,7 @@ export class RecordingSession {
       progress: snapshot.progress,
       quitting: snapshot.quitting,
       panels: this.livePanels().length,
+      meeting: this.meeting,
     };
   }
 
@@ -463,6 +482,7 @@ export class RecordingSession {
         hidden: panel.hidden,
         placeholder: panel.placeholder,
       })),
+      meeting: this.meeting,
     };
   }
 
@@ -572,6 +592,13 @@ export class RecordingSession {
     return null;
   }
 
+  /** The displays this recording shows whole: its own screen and its screen panels. */
+  shownDisplayIds(): string[] {
+    const own = this.ctx.target === 'screen' ? this.ctx.display?.id : undefined;
+    const panels = this.livePanels().flatMap((panel) => (panel.displayId ? [panel.displayId] : []));
+    return own === undefined ? panels : [own, ...panels];
+  }
+
   /** Time in the recording (paused time excluded) for the manifest. */
   private recordingMs(): number {
     return Math.round(activeDurationAt(this.machine, performance.now()));
@@ -637,6 +664,7 @@ export class RecordingSession {
       name: panelLabel(slot),
       addedAtMs: this.recordingMs(),
       removedAtMs: null,
+      displayId: spec.kind === 'screen' ? (spec.displayId ?? null) : null,
       hidden: false,
       placeholder: null,
     });
@@ -673,6 +701,12 @@ export class RecordingSession {
     this.host.changed(this);
   }
 
+  /** The meeting code describes the meeting this recording captures (the toolbar shows it). */
+  setMeeting(meeting: SessionMeeting | null): void {
+    this.meeting = meeting;
+    this.host.changed(this);
+  }
+
   /** Aborts the remux that is running (quit past the cap); the session stays for recovery. */
   abortFinalize(): void {
     this.finalizeAbort?.abort();
@@ -688,7 +722,7 @@ export class RecordingSession {
     if (!this.isCurrent(token)) throw new Cancelled();
   }
 
-  private async runStart(token: number, request: RecorderStartRequest): Promise<void> {
+  private async runStart(token: number, request: SessionRequest): Promise<void> {
     const ctx = this.ctx;
     const displays = this.deps.provider.listDisplays();
     await this.host.hideMain();
@@ -846,7 +880,7 @@ export class RecordingSession {
   /** What to record: a window, a whole display, or a region of one. */
   private async select(
     token: number,
-    request: RecorderStartRequest,
+    request: SessionRequest,
     displays: readonly DisplayInfo[],
   ): Promise<Selection> {
     if (request.target === 'window') return { display: undefined, regionPx: null, regionDip: null };
@@ -1150,8 +1184,8 @@ export class RecordingSession {
   }
 
   /** The toolbar measured its content: the window takes exactly that width (centered on itself). */
-  resizeToolbar(width: number): void {
-    this.toolbar?.setWidth(Math.ceil(width));
+  resizeToolbar(width: number, height?: number): void {
+    this.toolbar?.setWidth(Math.ceil(width), height === undefined ? undefined : Math.ceil(height));
   }
 
   private setLevels(enabled: boolean): void {

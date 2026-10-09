@@ -85,6 +85,19 @@ function setup(meetings: Partial<Settings['meetings']> = {}, live = false) {
 }
 
 describe('MeetingService', () => {
+  it('finds a meeting by id, with the window facts the list leaves out', () => {
+    const t = setup();
+    const meeting = t.detector.begin('zoom');
+    expect(t.service.find(meeting.meetingId)).toMatchObject({
+      app: 'zoom',
+      hwnd: '10',
+      sourceId: 'window:10:0',
+    });
+    expect(t.service.find('nope')).toBeUndefined();
+    t.detector.end(meeting.meetingId);
+    expect(t.service.find(meeting.meetingId)).toBeUndefined();
+  });
+
   it('prompts once per meeting, with the app label and the recording state', () => {
     const t = setup({}, true);
     const meeting = t.detector.begin('zoom');
