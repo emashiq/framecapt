@@ -167,7 +167,7 @@ Open native/manual checks (the lead decides when): the real Squirrel uninstall d
 
 ### Parallel and meeting capture (2026-10-10)
 
-Branch `emashiq/parallel-meeting-capture`. Verification status for every item: unit-tested; E2E pending lead run.
+Branch `emashiq/parallel-meeting-capture`. Verification (2026-10-10, Windows, E2E build with mock capture and mock window probe): lint and typecheck clean; unit 2007/2007; E2E 308 passed, 5 skipped (Linux-only), one Playwright worker crash passed on the harness retry; `npm run package` + `check:mocks` OK; `smoke:packaged` OK; the packaged production app logs `window probe: win32 (koffi)`. Known flaky: `recording-multi` "Extract can be cancelled" (about 1 in 7 runs, extract can finish before Cancel is clicked).
 
 - Screenshots of any kind during a recording, plus a toolbar screenshot menu (`recorder:toolbarMenu`).
 - Win32 window and microphone probe via koffi (ADR-052) with a `desktopCapturer` and `reg.exe` fallback; E2E-only mock probe.
