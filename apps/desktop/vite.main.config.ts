@@ -2,6 +2,13 @@ import { defineConfig } from 'vite';
 
 // https://vitejs.dev/config
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      // koffi loads its native addon at run time, so it cannot be bundled: forge.config.ts ships it
+      // as <resources>/node_modules/koffi (ADR-052).
+      external: ['koffi'],
+    },
+  },
   define: {
     // True only for E2E builds (FRAMECAPT_E2E_BUILD=1). Normal builds get the literal `false`, so
     // the mock capture provider is removed from the bundle (checked by scripts/check-no-mocks.mjs).
