@@ -312,6 +312,11 @@ test.describe('title bar and command center', () => {
     await expect(popup).toHaveAttribute('role', 'menu');
     await expect(page.getByTestId('menu-item-file.openImage')).toBeFocused();
     await expect(page.getByTestId('menu-item-file.openImage')).toContainText('Ctrl+O');
+    // Open video and Open project file sit between Open image and the screenshot items.
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByTestId('menu-item-file.openVideo')).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByTestId('menu-item-file.openProject')).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(page.getByTestId('menu-item-shot.region')).toBeFocused();
     await expect(page.getByTestId('menu-item-shot.region')).toContainText('Ctrl+Shift+3');

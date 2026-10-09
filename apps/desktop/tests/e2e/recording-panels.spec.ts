@@ -218,9 +218,10 @@ test('panels are added, hidden, removed and capped at three; the result is one w
     height: 1080,
   });
 
-  // The picture: the recording (blue) fills the left two thirds, three green panels the right third.
+  // The picture (the recording keeps its 16:9 inside the left two thirds, so there are black bars
+  // above and below it; (60, 300) is its blue top-left corner): the recording (blue) fills the left two thirds, three green panels the right third.
   const frame = lastFrame(file, 1920, 1080);
-  const [r, g, b] = pixelAt(frame, 1920, 300, 100);
+  const [r, g, b] = pixelAt(frame, 1920, 60, 300);
   expect(b).toBeGreaterThan(r + 60);
   expect(b).toBeGreaterThan(g + 40);
   for (const y of [40, 400, 760]) {
@@ -245,9 +246,10 @@ test('a recording with one panel keeps its size and shows the panel in the right
     height: 1080,
   });
   const frame = lastFrame(file, 1920, 1080);
-  const [r, g, b] = pixelAt(frame, 1920, 300, 100);
+  const [r, g, b] = pixelAt(frame, 1920, 60, 300);
   expect(b).toBeGreaterThan(r + 60);
-  const [pr, pg, pb] = pixelAt(frame, 1920, 1700, 100);
+  // The 3440 x 1440 panel keeps its shape in the right third: bars above and below it.
+  const [pr, pg, pb] = pixelAt(frame, 1920, 1700, 420);
   expect(pg).toBeGreaterThan(pr + 60);
   expect(pg).toBeGreaterThan(pb + 30);
   expect(g).toBeLessThan(b);

@@ -59,8 +59,8 @@ async function waitForLive(count: number): Promise<void> {
 
 async function startRecording(args: StartArgs) {
   return page.evaluate(
-    (request) => window.framecapt.invoke('recorder:start', { ...request, options: OPTIONS }),
-    args,
+    ({ request, options }) => window.framecapt.invoke('recorder:start', { ...request, options }),
+    { request: args, options: OPTIONS },
   );
 }
 

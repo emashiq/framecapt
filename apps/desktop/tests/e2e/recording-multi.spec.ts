@@ -250,6 +250,34 @@ test('a screen and a window recorded together become one .fcap with a header, sh
   await expect(page.getByTestId('badge-dimensions')).toHaveText('3840 × 1080');
 });
 
+test('the saved recording is split into a video per source, each opened as a tab; the rest of the spec starts without them', async () => {
+  // Several sources in one file: each becomes a video of its own and opens in the video editor.
+  const splitFiles = (): string[] =>
+    fs.existsSync(videosDir())
+      ? fs
+          .readdirSync(videosDir())
+          .filter((f) => f.endsWith(' - Screen 1.mp4') || f.endsWith(' - Window 2.mp4'))
+      : [];
+  await expect.poll(() => splitFiles().length, { timeout: 60_000 }).toBe(2);
+  const tabs = page.getByRole('navigation', { name: 'Open items' });
+  const closeButtons = tabs.getByRole('button', { name: /^Close .* - (Screen 1|Window 2).mp4$/ });
+  await expect(closeButtons).toHaveCount(2, { timeout: 30_000 });
+  const items = await historyItems();
+  const fcap = items.find((item) => item.format === 'fcap');
+  const derived = items.filter((item) => item.derivedFrom === fcap?.id);
+  expect(derived.map((item) => item.fileName).sort()).toEqual(splitFiles().sort());
+
+  // The tests below look at one recording and its own extracts: take the split videos away again.
+  await closeButtons.first().click();
+  await closeButtons.first().click();
+  await expect(closeButtons).toHaveCount(0);
+  for (const item of derived) {
+    await page.evaluate((id) => window.framecapt.invoke('history:remove', { id }), item.id);
+  }
+  for (const file of splitFiles()) fs.rmSync(path.join(videosDir(), file), { force: true });
+  await expect.poll(async () => (await historyItems()).length).toBe(1);
+});
+
 test('History: a Multi badge, Open stays inside FrameCapt, the player has a tab per source', async () => {
   await page.getByTestId('result-history').click();
   const cards = page.getByTestId('history-item');
@@ -496,8 +524,12 @@ test('All screens records both displays at their places on the virtual desktop',
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('button', { name: 'Home' })
     .click();
-  // The finished recording is still shown on the Capture tab: start a new one.
-  await page.getByTestId('result-new').click();
+  // The finished recording may still be shown on the Capture tab: start a new one.
+  // (It goes by itself once its tab was left, so a missed click is fine.)
+  await page
+    .getByTestId('result-new')
+    .click({ timeout: 2000 })
+    .catch(() => undefined);
   await expect(page.getByTestId('record-all-screens')).toBeVisible();
   const before = fcapFiles();
   await page.getByTestId('record-all-screens').click();

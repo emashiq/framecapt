@@ -172,7 +172,11 @@ async function waitUntilRecording(): Promise<Page> {
       async () => {
         const choice = page.getByTestId('choice-dialog');
         if (await choice.isVisible().catch(() => false)) {
-          await page.getByTestId('choice-without').click();
+          // The dialog re-renders while the recorder moves on: a missed click is retried by the poll.
+          await page
+            .getByTestId('choice-without')
+            .click({ timeout: 2000 })
+            .catch(() => undefined);
         }
         return (await state()).status;
       },
