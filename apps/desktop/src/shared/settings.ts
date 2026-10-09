@@ -7,6 +7,7 @@ import {
 } from './camera';
 import type { FollowZoom } from './compositor-layout';
 import { LibraryFolderSchema } from './library';
+import { MEETING_APPS } from './meeting-signatures';
 import type { RecordOptions } from './recorder-ipc';
 import { COMPRESSION_LEVELS, SAVE_FORMATS } from './recording-format';
 import {
@@ -127,6 +128,21 @@ export const NoticeSettingsSchema = z.object({
   editableNoticeShown: z.boolean(),
 });
 
+/**
+ * Meeting detection. Added after version 1 shipped: a file without this section loads with the
+ * defaults (`withDefaults`), so no version bump is needed.
+ */
+export const MeetingSettingsSchema = z.object({
+  /** Detect meetings and offer to record them. */
+  detect: z.boolean(),
+  apps: z.object({ meet: z.boolean(), zoom: z.boolean(), teams: z.boolean(), webex: z.boolean() }),
+  /** What happens when the user shares their screen in a meeting that is being recorded. */
+  addSharedScreen: z.enum(['auto', 'ask', 'off']),
+  /** Apps the user chose "Don't ask for" on the prompt. */
+  mutedApps: z.array(z.enum(MEETING_APPS)).max(MEETING_APPS.length),
+  promptTimeoutSec: z.number().int().min(5).max(300),
+});
+
 export const SettingsSchema = z.object({
   version: z.literal(SETTINGS_VERSION),
   general: GeneralSettingsSchema,
@@ -135,6 +151,7 @@ export const SettingsSchema = z.object({
   shortcuts: ShortcutSettingsSchema,
   editorShortcuts: EditorShortcutSettingsSchema,
   notices: NoticeSettingsSchema,
+  meetings: MeetingSettingsSchema,
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 export type SettingsSection = Exclude<keyof Settings, 'version'>;
@@ -181,6 +198,13 @@ export const DEFAULT_SETTINGS: Settings = {
     onboardingDismissed: false,
     editableNoticeShown: false,
   },
+  meetings: {
+    detect: true,
+    apps: { meet: true, zoom: true, teams: true, webex: true },
+    addSharedScreen: 'auto',
+    mutedApps: [],
+    promptTimeoutSec: 30,
+  },
 };
 
 /**
@@ -206,6 +230,7 @@ export const SettingsPatchSchema = z.strictObject({
       .partial() as unknown as z.ZodType<Partial<EditorShortcutsMap>>
   ).optional(),
   notices: NoticeSettingsSchema.omit({ trayHintShown: true }).partial().strict().optional(),
+  meetings: MeetingSettingsSchema.partial().strict().optional(),
 });
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
 
@@ -215,6 +240,7 @@ export const ResetSectionSchema = z.enum([
   'screenshots',
   'recording',
   'shortcuts',
+  'meetings',
   'storage',
 ]);
 export type ResetSection = z.infer<typeof ResetSectionSchema>;
@@ -299,6 +325,7 @@ const SETTINGS_SECTIONS_WITH_DEFAULTS = [
   'shortcuts',
   'editorShortcuts',
   'notices',
+  'meetings',
 ] as const;
 
 /** Section-wise merge of `partial` over the defaults (unknown keys are dropped by the schema). */
@@ -416,6 +443,9 @@ export function resetSection(current: Settings, section: ResetSection | undefine
     case 'shortcuts':
       next.shortcuts = defaults.shortcuts;
       next.editorShortcuts = defaults.editorShortcuts;
+      break;
+    case 'meetings':
+      next.meetings = defaults.meetings;
       break;
     case 'storage':
       next.screenshots.outputDir = null;

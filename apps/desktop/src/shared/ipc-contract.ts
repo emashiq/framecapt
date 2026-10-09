@@ -62,6 +62,11 @@ import {
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
 import {
+  MeetingListSchema,
+  MeetingPromptEventSchema,
+  MeetingRespondRequestSchema,
+} from './meeting-ipc';
+import {
   LibraryFolderRequestSchema,
   LibraryFolderResponseSchema,
   LibraryMoveItemsRequestSchema,
@@ -794,6 +799,22 @@ export const ipcContract = {
     response: FlowExportResponseSchema,
     roles: ['main'],
   },
+
+  // --- meeting detection ---------------------------------------------------------------------
+  /** The user's answer on the meeting prompt. */
+  'meeting:respond': {
+    request: MeetingRespondRequestSchema,
+    response: z.void(),
+    roles: ['meeting-prompt'],
+  },
+  /** The prompt window asks what it should show (its first event may arrive before it listens). */
+  'meeting:getPrompt': {
+    request: z.undefined(),
+    response: MeetingPromptEventSchema.nullable(),
+    roles: ['meeting-prompt'],
+  },
+  /** The meetings being watched right now. */
+  'meeting:list': { request: z.undefined(), response: MeetingListSchema, roles: ['main'] },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;
@@ -848,6 +869,12 @@ export const ipcEvents = {
   'steps:finished': StepsFinishedEventSchema,
   /** Main -> the hidden recorder window: what the engine should do. */
   'recorder:engineCommand': EngineCommandSchema,
+
+  // --- meeting detection ---------------------------------------------------------------------
+  /** Main -> the prompt window: a meeting was detected. */
+  'meeting:prompt': MeetingPromptEventSchema,
+  /** Main -> the main window: the meetings being watched changed. */
+  'meeting:state': MeetingListSchema,
 } as const satisfies Record<string, z.ZodType>;
 
 export type IpcEvent = keyof typeof ipcEvents;

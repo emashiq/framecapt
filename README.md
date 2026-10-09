@@ -33,6 +33,7 @@ Pending or unverified: code signing (the installer is **unsigned**), automatic u
 apps/
   desktop/    Electron app (capture, editor, recording, local history)
 docs/         Documentation
+website/      GitHub Pages site: downloads and the how-to guide
 ```
 
 Details: [docs/repository-layout.md](docs/repository-layout.md).

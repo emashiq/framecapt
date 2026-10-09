@@ -77,6 +77,7 @@ export const SETTINGS_SECTIONS = [
   'general',
   'screenshots',
   'recording',
+  'meetings',
   'shortcuts',
   'storage',
   'advanced',

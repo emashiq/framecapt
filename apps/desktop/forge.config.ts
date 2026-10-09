@@ -78,6 +78,55 @@ export function copyFfmpegResource(
   });
 }
 
+/**
+ * Ships koffi (external to the Vite main bundle, ADR-052) as `<package>/resources/node_modules/koffi`
+ * plus the prebuilt addon package of the target platform as
+ * `<package>/resources/node_modules/@koromix/koffi-<platform>-<arch>`. The packaged app has no
+ * node_modules inside app.asar, so `require('koffi')` from app.asar/.vite/build resolves it from
+ * the resources folder, and koffi finds its addon in the sibling @koromix package. Only the files
+ * koffi needs at run time are copied (no C++ sources, docs or vendored headers); the .node file is
+ * outside the asar, where Windows can load it. `buildPath` is `<package>/resources/app`.
+ */
+export function copyKoffiResource(
+  modulesRoot: string,
+  buildPath: string,
+  platform: string,
+  arch: string,
+): void {
+  const addon = path.join(modulesRoot, '@koromix', `koffi-${platform}-${arch}`);
+  if (!fs.existsSync(addon)) {
+    throw new Error(
+      `koffi for ${platform}-${arch} is missing: run "npm install" on that platform.`,
+    );
+  }
+  const target = path.join(path.dirname(buildPath), 'node_modules');
+  const skipDirs = new Set(['doc', 'vendor', 'lib', 'abi']);
+  const runtimeFile = /(\.(cjs|js|json|node)|LICENSE\.txt)$/;
+  const filter = (source: string): boolean => {
+    const stat = fs.statSync(source);
+    return stat.isDirectory()
+      ? !skipDirs.has(path.basename(source))
+      : runtimeFile.test(source) && !source.endsWith('.d.ts');
+  };
+  fs.cpSync(path.join(modulesRoot, 'koffi'), path.join(target, 'koffi'), {
+    recursive: true,
+    filter,
+  });
+  fs.cpSync(addon, path.join(target, '@koromix', `koffi-${platform}-${arch}`), {
+    recursive: true,
+    filter,
+  });
+}
+
+/** The node_modules folder that holds koffi: the workspace root's (hoisted) or the app's own. */
+function koffiModulesRoot(): string {
+  return (
+    [path.join(__dirname, 'node_modules'), path.join(__dirname, '..', '..', 'node_modules')].find(
+      (candidate) => fs.existsSync(path.join(candidate, 'koffi', 'package.json')),
+    ) ?? path.join(__dirname, 'node_modules')
+  );
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
     name: PRODUCT_NAME,
@@ -122,8 +171,10 @@ const config: ForgeConfig = {
     // The pinned FFmpeg (npm run fetch:ffmpeg, run by the prepackage/premake/prestart hooks):
     // <resources>/ffmpeg/<platform>-<arch>/{ffmpeg,ffprobe}[.exe]. Only the folder of the target
     // platform is shipped: no Windows .exe in a Linux package and no Linux binary in a Windows one.
-    packageAfterCopy: async (_config, buildPath, _electronVersion, platform, arch) =>
-      copyFfmpegResource(path.join(__dirname, 'vendor', 'ffmpeg'), buildPath, platform, arch),
+    packageAfterCopy: async (_config, buildPath, _electronVersion, platform, arch) => {
+      copyFfmpegResource(path.join(__dirname, 'vendor', 'ffmpeg'), buildPath, platform, arch);
+      copyKoffiResource(koffiModulesRoot(), buildPath, platform, arch);
+    },
     // Release guard: every package/make of a normal build is scanned for mock and test-hook code. A build made with the E2E switch set by mistake fails
     // here instead of shipping. The E2E build itself (package:e2e) is checked with --expect-mock.
     postPackage: async () => {

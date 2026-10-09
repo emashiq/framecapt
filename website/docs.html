@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FrameCapt Guide</title>
+    <meta
+      name="description"
+      content="How to install and use FrameCapt: screenshots, the editor, screen recording, the video editor, step guides and the Library."
+    />
+    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="./"><img src="assets/logo.png" alt="" />FrameCapt</a>
+        <nav class="site-nav" aria-label="Main">
+          <a href="./#download">Download</a>
+          <a href="./#install">Install</a>
+          <a href="docs.html" aria-current="page">How to use</a>
+          <a href="./#about">About</a>
+          <a href="https://github.com/emashiq/framecapt">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="wrap doc-layout">
+      <nav class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#getting-started">Getting started</a></li>
+          <li><a href="#window">The window</a></li>
+          <li><a href="#screenshots">Screenshots</a></li>
+          <li><a href="#editor">The editor</a></li>
+          <li><a href="#recording">Recording</a></li>
+          <li><a href="#formats">Formats and MP4</a></li>
+          <li><a href="#video-editor">Video editor</a></li>
+          <li><a href="#steps">Step guides</a></li>
+          <li><a href="#library">Library and folders</a></li>
+          <li><a href="#settings">Settings and tray</a></li>
+          <li><a href="#files">Where files go</a></li>
+          <li><a href="#linux">Linux notes</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+        </ul>
+      </nav>
+
+      <article class="doc">
+        <h1>How to use FrameCapt</h1>
+        <p class="section-lede">
+          A practical walkthrough of the current build. Everything you capture stays on your
+          computer.
+        </p>
+
+        <section id="getting-started">
+          <h2>Getting started</h2>
+          <ol>
+            <li>
+              <a href="./#download">Download</a> the installer for your system and
+              <a href="./#install">install it</a>.
+            </li>
+            <li>
+              Start FrameCapt. There is no account and nothing to sign in to. The
+              <strong>Home</strong> tab shows a welcome card with your shortcuts;
+              <strong>Got it</strong> hides it for good.
+            </li>
+            <li>
+              Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>3</kbd> anywhere, drag over part of the
+              screen and press <kbd>Enter</kbd>. The screenshot opens in the editor and is already
+              on your clipboard.
+            </li>
+          </ol>
+          <p>
+            Closing the window keeps FrameCapt running in the tray so your shortcuts keep working.
+            Quit from the tray menu, or turn <strong>Close to tray</strong> off in Settings.
+          </p>
+        </section>
+
+        <section id="window">
+          <h2>The window</h2>
+          <ul>
+            <li>
+              <strong>Top bar:</strong> the menus <strong>File</strong>, <strong>View</strong> and
+              <strong>Help</strong>, and the <strong>command center</strong> in the middle. Press
+              <kbd>Ctrl</kbd>+<kbd>K</kbd> to search commands and captures, or
+              <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> for commands only.
+            </li>
+            <li>
+              <strong>Icon rail</strong> on the left: Home, Library, Guides and Settings, with
+              Keyboard shortcuts (<kbd>?</kbd>) at the bottom.
+            </li>
+            <li>
+              <strong>Tabs:</strong> Home is always first. Each capture, opened image, recording or
+              guide opens in its own tab and keeps its own undo history. Switch with
+              <kbd>Ctrl</kbd>+<kbd>Tab</kbd> or <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd>, close with
+              <kbd>Ctrl</kbd>+<kbd>W</kbd>. A dot on a tab means unsaved changes.
+            </li>
+            <li>
+              <strong>Home</strong> has tiles for every capture type, the recording options and your
+              latest captures. Hover a tile to see its shortcut.
+            </li>
+          </ul>
+        </section>
+
+        <section id="screenshots">
+          <h2>Screenshots</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Shortcut</th>
+                  <th>What happens</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Screen</td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd></td>
+                  <td>
+                    One monitor: captured at once. Several: click the one you want (or press
+                    <kbd>Enter</kbd>).
+                  </td>
+                </tr>
+                <tr>
+                  <td>Window</td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd></td>
+                  <td>
+                    Pick from a list of open windows (type to search). Minimized windows are not
+                    listed.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Region</td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>3</kbd></td>
+                  <td>
+                    The screen freezes; drag a rectangle, move or resize it, then <kbd>Enter</kbd>.
+                    <kbd>Esc</kbd> or right-click cancels.
+                  </td>
+                </tr>
+                <tr>
+                  <td>All screens</td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>4</kbd></td>
+                  <td>Every monitor in one image, laid out like your desktop.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Region selection with the keyboard</h3>
+          <p>
+            Arrow keys start a centered selection and move it. Hold <kbd>Shift</kbd> to move 10 px
+            at a time, <kbd>Alt</kbd> to resize. A region stays on one monitor.
+          </p>
+          <h3>Copy and save</h3>
+          <ul>
+            <li>
+              Every screenshot is copied to the clipboard right away (you can turn this off in
+              Settings &gt; Screenshots).
+            </li>
+            <li><kbd>Ctrl</kbd>+<kbd>S</kbd> saves as PNG or JPEG and lets you pick a name.</li>
+            <li>
+              <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> (Quick save) skips the dialog and saves
+              to your screenshots folder, with <strong>Show in folder</strong> and
+              <strong>Undo</strong>.
+            </li>
+            <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copies the edited image again.</li>
+            <li><kbd>Ctrl</kbd>+<kbd>O</kbd> opens any image from disk in a new editor tab.</li>
+          </ul>
+        </section>
+
+        <section id="editor">
+          <h2>The editor</h2>
+          <p>
+            Screenshots open in the editor. The tools are <strong>crop</strong>,
+            <strong>arrow</strong>, <strong>rectangle</strong>, <strong>text</strong> and
+            <strong>redact</strong>, with undo (<kbd>Ctrl</kbd>+<kbd>Z</kbd>) and redo
+            (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd>).
+          </p>
+          <h3>Redaction</h3>
+          <p>
+            Redaction draws a solid, opaque box. It is flattened into the saved file, the clipboard
+            image and the Library thumbnail, so what is under it cannot be recovered from those.
+            Note that FrameCapt keeps an editable original (with the pixels underneath) in its own
+            data folder so you can change annotations later. If you do not want that, turn
+            <strong>Keep editable originals</strong> off in Settings &gt; Screenshots, or use
+            <strong>Delete editable data</strong> on the item.
+          </p>
+          <h3>Editing a saved screenshot</h3>
+          <p>
+            In the Library, choose <strong>Edit</strong>. With an editable original every annotation
+            can still be moved, restyled or deleted. <strong>Save</strong> replaces the image;
+            <strong>Save as copy</strong> keeps both.
+          </p>
+        </section>
+
+        <section id="recording">
+          <h2>Recording</h2>
+          <p>
+            Start from Home &gt; Record or a shortcut:
+            <strong>Screen</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>5</kbd>),
+            <strong>Window</strong> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>6</kbd>) or
+            <strong>Region</strong>
+            (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>7</kbd>). Home also offers
+            <strong>All screens</strong> and <strong>Multiple…</strong> to record several screens or
+            windows together.
+          </p>
+          <h3>Options (Home or Settings &gt; Recording)</h3>
+          <ul>
+            <li><strong>Quality:</strong> 1080p, or Source for the full screen resolution.</li>
+            <li><strong>Frame rate:</strong> 30 (default) or 60.</li>
+            <li>
+              <strong>Microphone</strong> and <strong>System audio</strong> are separate switches
+              and are mixed into one track. System audio is Windows only.
+            </li>
+            <li><strong>Countdown:</strong> 3-2-1 before recording starts (on by default).</li>
+            <li>
+              <strong>Follow mouse:</strong> 1.5×, 2× or 3× zoom that glides to wherever the pointer
+              is (screen recordings).
+            </li>
+            <li><strong>Camera:</strong> add your webcam to the recording.</li>
+          </ul>
+          <h3>While recording</h3>
+          <p>
+            A small floating toolbar shows the timer with Pause/Resume, Mute, a camera button to
+            take a screenshot, and Stop. The toolbar and countdown are kept out of the video on
+            Windows.
+          </p>
+          <ul>
+            <li>
+              Pause or resume: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd>. Paused time is not
+              recorded.
+            </li>
+            <li>
+              Stop: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd>, the toolbar, the tray, or the
+              same record shortcut again.
+            </li>
+            <li>
+              Screenshots taken during a recording go straight to your screenshots folder; no editor
+              pops up into the video.
+            </li>
+          </ul>
+          <p>
+            Video is written to disk as you record, so long recordings do not fill memory. Recording
+            refuses to start below 1 GB of free disk space and stops safely below 500 MB.
+          </p>
+          <h3>If something crashes</h3>
+          <p>
+            The next start shows “We found an unfinished recording” with
+            <strong>Recover</strong> and <strong>Discard</strong>. Recovery is best effort: the last
+            second or so may be missing.
+          </p>
+        </section>
+
+        <section id="formats">
+          <h2>Formats and MP4 export</h2>
+          <p>
+            Recordings are saved as <strong>WebM</strong> by default. In Settings &gt; Recording,
+            <strong>Save recordings as</strong> converts each finished recording to
+            <strong>MP4</strong>, <strong>MKV</strong> or <strong>GIF</strong>, and
+            <strong>Compression</strong> (Light, Balanced, Strong) makes files smaller.
+          </p>
+          <ul>
+            <li>
+              <strong>Export MP4</strong> on any recording in the Library makes an H.264 + AAC copy,
+              with progress and Cancel.
+            </li>
+            <li>
+              <strong>Save in another format…</strong> makes a converted copy, optionally smaller
+              (1920, 1280, 960 or 640 px wide).
+            </li>
+            <li>GIF is for clips up to 60 seconds and has no sound.</li>
+            <li>
+              A conversion only replaces the original after the new file checks out; the original
+              goes to the Recycle Bin.
+            </li>
+          </ul>
+        </section>
+
+        <section id="video-editor">
+          <h2>Video editor</h2>
+          <p>
+            In the Library choose <strong>Edit video</strong>. The editor never changes your
+            recording; <strong>Export</strong> writes a new file named
+            <code>&lt;recording&gt; (edited).mp4</code> next to it.
+          </p>
+          <ul>
+            <li><strong>Trim:</strong> drag the ends of the clip on the timeline.</li>
+            <li>
+              <strong>Cut a piece out:</strong> drag over a range (or press <kbd>I</kbd> and
+              <kbd>O</kbd>), then <kbd>Delete</kbd>.
+            </li>
+            <li>
+              <strong>Hide something:</strong> Redact, Blur, Pixelate or Spotlight boxes, each with
+              its own start and length.
+            </li>
+            <li><strong>Crop</strong> to Free, 16:9, 9:16, 1:1 or 4:3.</li>
+            <li>
+              <strong>Text, images and logos</strong> with fonts, colours, outlines and fades.
+            </li>
+            <li><strong>Audio:</strong> add music or a voice-over track, set volumes and fades.</li>
+            <li><strong>Export</strong> to MP4, WebM or GIF at the original size or smaller.</li>
+          </ul>
+          <p>
+            <kbd>Space</kbd> plays and pauses, arrow keys step a frame (<kbd>Shift</kbd>: a second),
+            <kbd>Ctrl</kbd>+mouse wheel zooms the timeline. Your edits are saved automatically and
+            come back next time you open the recording.
+          </p>
+        </section>
+
+        <section id="steps">
+          <h2>Step guides</h2>
+          <p>
+            Like the old Windows Steps Recorder. Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>8</kbd>
+            (or the <strong>Steps</strong> tile) and do your task. Each time you rest the mouse on
+            something for a moment, FrameCapt takes a step screenshot and marks where the pointer
+            was.
+          </p>
+          <ul>
+            <li>
+              The pill at the bottom of the screen has Auto, Capture step, Pause,
+              <strong>Done</strong> and Cancel.
+            </li>
+            <li>
+              <strong>Done</strong> saves a folder of numbered PNGs and opens the guide: edit the
+              title, write captions, reorder or delete steps, or open a step in the editor.
+            </li>
+            <li>
+              <strong>Export</strong> as numbered PNGs, one self-contained HTML page, an MP4
+              slideshow or a GIF.
+            </li>
+          </ul>
+        </section>
+
+        <section id="library">
+          <h2>Library and folders</h2>
+          <p>
+            The <strong>Library</strong> lists your screenshots, recordings and guides. Search by
+            name, date or type, sort, and switch between grid and list.
+          </p>
+          <ul>
+            <li>
+              <kbd>Ctrl</kbd>-click or <kbd>Shift</kbd>-click to select several, then save copies or
+              remove them in one go.
+            </li>
+            <li>
+              Right-click a card for Edit, Open, Show in folder, Copy, Move to…, Delete file and
+              more.
+            </li>
+            <li>
+              Drag a card out of the window to drop the actual file into chat, email or Explorer.
+            </li>
+            <li>
+              <strong>Remove from history</strong> only removes the entry.
+              <strong>Delete file</strong> moves the file to the Recycle Bin.
+            </li>
+            <li>
+              <strong>Find existing captures</strong> (the ⋯ menu) brings back captures after a
+              reinstall.
+            </li>
+          </ul>
+          <h3>Folders</h3>
+          <p>
+            Folders in the sidebar are real folders on your disk, created in both your screenshots
+            and recordings folders. Drag captures onto a folder to move them, and right-click a
+            folder and choose <strong>Set as save location</strong> to send new captures there.
+          </p>
+        </section>
+
+        <section id="settings">
+          <h2>Settings and tray</h2>
+          <ul>
+            <li>
+              <strong>General:</strong> theme (follow system, light, dark), launch at login, close
+              to tray, notifications.
+            </li>
+            <li>
+              <strong>Screenshots:</strong> format, JPEG quality, what happens after a capture,
+              clipboard.
+            </li>
+            <li>
+              <strong>Recording:</strong> quality, frame rate, audio, countdown, save format,
+              compression.
+            </li>
+            <li>
+              <strong>Shortcuts:</strong> change or turn off any shortcut. A clash offers
+              <strong>Swap</strong>; <strong>Reset all shortcuts</strong> restores the defaults.
+            </li>
+            <li><strong>Storage:</strong> where screenshots and recordings are saved.</li>
+          </ul>
+          <p>
+            The search box at the top of Settings filters every option. The tray icon (red while
+            recording) has the capture actions and Quit.
+          </p>
+        </section>
+
+        <section id="files">
+          <h2>Where files go</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>What</th>
+                  <th>Windows</th>
+                  <th>Linux</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Screenshots</td>
+                  <td><code>Pictures\FrameCapt</code></td>
+                  <td><code>~/Pictures/FrameCapt</code></td>
+                </tr>
+                <tr>
+                  <td>Recordings and exports</td>
+                  <td><code>Videos\FrameCapt</code></td>
+                  <td><code>~/Videos/FrameCapt</code></td>
+                </tr>
+                <tr>
+                  <td>Settings, history, logs</td>
+                  <td><code>%APPDATA%\FrameCapt</code></td>
+                  <td><code>~/.config/FrameCapt</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            File names look like <code>FrameCapt 2026-10-02 at 14.05.09.png</code>. Existing files
+            are never overwritten. Change the folders in Settings &gt; Storage.
+          </p>
+        </section>
+
+        <section id="linux">
+          <h2>Linux notes</h2>
+          <p>The Linux build is experimental. What to expect:</p>
+          <ul>
+            <li>
+              Runs on X11, or through XWayland on a Wayland session. Native Wayland windows may be
+              missing or black.
+            </li>
+            <li>No system audio; the microphone works.</li>
+            <li>The recording toolbar may appear in full-screen recordings.</li>
+            <li>
+              Global shortcuts, tray and microphone have not been verified on a real desktop yet.
+              Reports are welcome.
+            </li>
+            <li>
+              Shortcuts your desktop already uses (for example
+              <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd>) are refused in Settings.
+            </li>
+          </ul>
+        </section>
+
+        <section id="troubleshooting">
+          <h2>Troubleshooting</h2>
+          <h3>SmartScreen warns about the installer</h3>
+          <p>
+            The installer is not code-signed yet. Check its SHA-256 against
+            <code>SHA256SUMS.txt</code> on the release page, then choose More info &gt; Run anyway.
+          </p>
+          <h3>A shortcut does nothing</h3>
+          <p>
+            Another app owns that key combination. Settings &gt; Shortcuts shows “used by another
+            app”; pick a different one. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd> can clash with
+            the Windows input-language hotkey.
+          </p>
+          <h3>Part of the picture is black</h3>
+          <p>
+            Windows blocks capturing DRM-protected video (streaming sites, some players). That area
+            is black in screenshots and recordings.
+          </p>
+          <h3>A window is missing from the list</h3>
+          <p>Minimized windows cannot be captured. Restore the window and try again.</p>
+          <h3>No system audio or a silent microphone</h3>
+          <p>
+            Check your default output device and Windows microphone privacy settings, and the device
+            chosen in FrameCapt. The toolbar shows a badge if a source drops out mid-recording.
+          </p>
+          <h3>Reporting a problem</h3>
+          <p>
+            The log is at <code>%APPDATA%\FrameCapt\logs\main.log</code> (Linux:
+            <code>~/.config/FrameCapt/logs/main.log</code>). It contains diagnostic text only, but
+            read it before attaching it to an
+            <a href="https://github.com/emashiq/framecapt/issues">issue</a>.
+          </p>
+        </section>
+      </article>
+    </div>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>
+          Made by <a href="https://github.com/emashiq">Ashiqur Rahman Emran</a>. Free software under
+          the GNU GPL v3.
+        </span>
+        <span>
+          <a href="https://github.com/emashiq/framecapt">Source</a> ·
+          <a href="https://github.com/emashiq/framecapt/blob/main/PRIVACY.md">Privacy</a> ·
+          <a href="https://github.com/emashiq/framecapt/issues">Report a problem</a>
+        </span>
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>

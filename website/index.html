@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FrameCapt</title>
+    <meta
+      name="description"
+      content="FrameCapt is a free, offline screenshot and screen-recording app for Windows and Linux. Captures never leave your computer."
+    />
+    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="./"><img src="assets/logo.png" alt="" />FrameCapt</a>
+        <nav class="site-nav" aria-label="Main">
+          <a href="#download">Download</a>
+          <a href="#install">Install</a>
+          <a href="docs.html">How to use</a>
+          <a href="#about">About</a>
+          <a href="https://github.com/emashiq/framecapt">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="hero">
+        <div class="wrap">
+          <img class="logo" src="assets/logo.png" alt="FrameCapt logo" width="112" height="112" />
+          <h1>Capture, record, mark up.<br />All on your own computer.</h1>
+          <p class="lede">
+            FrameCapt is a screenshot and screen-recording app for developers, QA engineers and
+            support teams. Press a shortcut, pick a screen, window or region, then copy or save.
+            Nothing is uploaded, ever.
+          </p>
+          <ul class="pills">
+            <li>Free and open source (GPL-3.0)</li>
+            <li>No account</li>
+            <li>No telemetry</li>
+            <li>Windows + Linux</li>
+          </ul>
+          <div class="cta">
+            <a class="btn primary" id="hero-download" href="#download">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16" />
+              </svg>
+              <span>Download</span>
+            </a>
+            <a class="btn" href="docs.html">Read the guide</a>
+          </div>
+          <p class="release-line" id="release-line">Pre-release builds. Unsigned installers.</p>
+        </div>
+      </div>
+
+      <section id="download">
+        <div class="wrap">
+          <h2>Download</h2>
+          <p class="section-lede">
+            Pick your system. Each link points at the newest build published on
+            <a href="https://github.com/emashiq/framecapt/releases">GitHub Releases</a>.
+          </p>
+
+          <div class="downloads">
+            <article class="card" id="card-windows">
+              <div class="card-head">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M3 5.1 10.4 4v7.1H3V5.1Zm0 13.8 7.4 1.1v-7.1H3v6Zm8.3 1.2L21 21.5v-8.6h-9.7v7.2Zm0-16.2v7.2H21V2.5l-9.7 1.4Z"
+                  />
+                </svg>
+                <h3>Windows</h3>
+                <span class="badge">Recommended</span>
+              </div>
+              <p class="req">Windows 10 or 11, 64-bit (x64). About 230 MB.</p>
+              <ul class="dl-list">
+                <li>
+                  <a
+                    class="dl main"
+                    data-asset="windowsSetup"
+                    href="https://github.com/emashiq/framecapt/releases"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16" />
+                    </svg>
+                    <span class="dl-text"
+                      ><strong>Installer (.exe)</strong
+                      ><small data-meta>Per-user install, no admin rights</small></span
+                    >
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dl"
+                    data-asset="windowsZip"
+                    href="https://github.com/emashiq/framecapt/releases"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16" />
+                    </svg>
+                    <span class="dl-text"
+                      ><strong>Portable (.zip)</strong
+                      ><small data-meta>Unzip and run, nothing installed</small></span
+                    >
+                  </a>
+                </li>
+              </ul>
+              <p class="fine">
+                The installer is not code-signed yet, so SmartScreen will warn. See
+                <a href="#install-windows">how to install</a>.
+              </p>
+            </article>
+
+            <article class="card" id="card-linux">
+              <div class="card-head">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                  <path d="m7 9 3 3-3 3M12.5 15H17" />
+                </svg>
+                <h3>Linux</h3>
+                <span class="badge exp">Experimental</span>
+              </div>
+              <p class="req">x64, X11 session (or XWayland). About 190 to 260 MB.</p>
+              <ul class="dl-list">
+                <li>
+                  <a
+                    class="dl main"
+                    data-asset="appImage"
+                    href="https://github.com/emashiq/framecapt/releases"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16" />
+                    </svg>
+                    <span class="dl-text"
+                      ><strong>AppImage</strong
+                      ><small data-meta>Any distribution, runs without installing</small></span
+                    >
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="dl"
+                    data-asset="deb"
+                    href="https://github.com/emashiq/framecapt/releases"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 3v12m0 0-5-5m5 5 5-5M4 21h16" />
+                    </svg>
+                    <span class="dl-text"
+                      ><strong>Debian / Ubuntu (.deb)</strong
+                      ><small data-meta>Installs with apt, adds a menu entry</small></span
+                    >
+                  </a>
+                </li>
+              </ul>
+              <p class="fine">
+                Microphone only (no system audio). Not yet tested on a real Linux desktop. See
+                <a href="#install-linux">how to install</a>.
+              </p>
+            </article>
+          </div>
+
+          <p class="note">
+            <strong>Check your download.</strong> Every release ships a
+            <a data-asset="checksums" href="https://github.com/emashiq/framecapt/releases"
+              >SHA256SUMS.txt</a
+            >. Compare it with <code>Get-FileHash .\FrameCapt-Setup-*.exe</code> on Windows or
+            <code>sha256sum FrameCapt-*</code> on Linux before you run anything.
+          </p>
+        </div>
+      </section>
+
+      <section id="install">
+        <div class="wrap">
+          <h2>Install</h2>
+          <p class="section-lede">A minute or two on either system.</p>
+
+          <div class="downloads">
+            <article class="card" id="install-windows">
+              <div class="card-head"><h3>Windows</h3></div>
+              <ol>
+                <li>Download <strong>FrameCapt-Setup-&lt;version&gt;.exe</strong> and run it.</li>
+                <li>
+                  SmartScreen says “Windows protected your PC”: click <strong>More info</strong>,
+                  then <strong>Run anyway</strong>. (This appears because the installer is not
+                  signed.)
+                </li>
+                <li>
+                  FrameCapt installs for your user only, into <code>%LOCALAPPDATA%\FrameCapt</code>,
+                  and starts. No administrator rights are needed.
+                </li>
+                <li>
+                  Look for it in the Start menu next time, or in the tray near the clock while it
+                  runs.
+                </li>
+              </ol>
+              <p class="fine">
+                <strong>Portable:</strong> unzip <code>FrameCapt-win32-x64-*.zip</code> anywhere and
+                run <code>FrameCapt.exe</code>. <strong>Uninstall:</strong> Settings &gt; Apps &gt;
+                FrameCapt. Your screenshots and recordings stay unless you ask for them to go.
+              </p>
+            </article>
+
+            <article class="card" id="install-linux">
+              <div class="card-head"><h3>Linux</h3></div>
+              <p class="req">AppImage, any distribution:</p>
+              <pre><code>chmod +x FrameCapt-*-x64.AppImage
+./FrameCapt-*-x64.AppImage</code></pre>
+              <p class="req">
+                No FUSE (libfuse2) on your system? Install it (<code
+                  >sudo apt install libfuse2t64</code
+                >
+                on Ubuntu 24.04+) or run with <code>--appimage-extract-and-run</code>.
+              </p>
+              <p class="req">Debian or Ubuntu package:</p>
+              <pre><code>sudo apt install ./framecapt_*_amd64.deb
+framecapt                  # or use the app menu
+sudo apt remove framecapt  # your files stay</code></pre>
+              <p class="fine">
+                Wayland: FrameCapt runs through XWayland; native Wayland windows may show up black.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="start">
+        <div class="wrap">
+          <h2>Your first capture</h2>
+          <p class="section-lede">FrameCapt opens ready to go. There is nothing to sign in to.</p>
+          <ol class="steps">
+            <li>
+              <strong>Press a shortcut</strong>
+              <span><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>3</kbd> for a region, from any app.</span>
+            </li>
+            <li>
+              <strong>Drag a rectangle</strong>
+              <span>Resize with the handles, press <kbd>Enter</kbd> to capture.</span>
+            </li>
+            <li>
+              <strong>Mark it up</strong>
+              <span>Arrows, boxes, text, crop and solid redaction in the editor.</span>
+            </li>
+            <li>
+              <strong>Paste or save</strong>
+              <span>It is already on the clipboard. <kbd>Ctrl</kbd> <kbd>S</kbd> saves a PNG.</span>
+            </li>
+          </ol>
+
+          <h3 style="margin: 32px 0 12px">Default shortcuts</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Screenshot</th>
+                  <th>Record</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Whole screen</td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>1</kbd></td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>5</kbd></td>
+                </tr>
+                <tr>
+                  <td>A window</td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>2</kbd></td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>6</kbd></td>
+                </tr>
+                <tr>
+                  <td>A region</td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>3</kbd></td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>7</kbd></td>
+                </tr>
+                <tr>
+                  <td>All screens (several monitors)</td>
+                  <td class="keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>4</kbd></td>
+                  <td>Home &gt; Record &gt; All screens</td>
+                </tr>
+                <tr>
+                  <td>Step guide</td>
+                  <td colspan="2"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>8</kbd></td>
+                </tr>
+                <tr>
+                  <td>Pause / resume recording</td>
+                  <td colspan="2"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>9</kbd></td>
+                </tr>
+                <tr>
+                  <td>Stop recording</td>
+                  <td colspan="2"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>0</kbd></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="fine" style="margin-top: 10px; color: var(--muted)">
+            Change any of them in Settings &gt; Shortcuts. The full walkthrough is in the
+            <a href="docs.html">user guide</a>.
+          </p>
+        </div>
+      </section>
+
+      <section id="features">
+        <div class="wrap">
+          <h2>What it does</h2>
+          <p class="section-lede">
+            Everything runs locally. No cloud, no upload, no sharing links.
+          </p>
+          <div class="features">
+            <div class="feature">
+              <h3><span class="dot"></span>Screenshots</h3>
+              <p>
+                Screen, window, region or all monitors at once. PNG or JPEG, straight to the
+                clipboard.
+              </p>
+            </div>
+            <div class="feature">
+              <h3><span class="dot"></span>Editor</h3>
+              <p>
+                Crop, arrows, boxes, text and solid redaction that is burned into the saved pixels.
+              </p>
+            </div>
+            <div class="feature">
+              <h3><span class="dot rec"></span>Screen recording</h3>
+              <p>
+                1080p or source resolution, 30 or 60 fps, microphone and system audio, pause and
+                resume.
+              </p>
+            </div>
+            <div class="feature">
+              <h3><span class="dot rec"></span>Video editor</h3>
+              <p>
+                Trim, cut, blur or redact, crop, add text, images and music. Export MP4, WebM or
+                GIF.
+              </p>
+            </div>
+            <div class="feature">
+              <h3><span class="dot"></span>Step guides</h3>
+              <p>
+                Rest the mouse on each step and FrameCapt builds a numbered guide you can export as
+                HTML or video.
+              </p>
+            </div>
+            <div class="feature">
+              <h3><span class="dot"></span>Library</h3>
+              <p>Search, sort and folder your captures. Folders are real folders on your disk.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="about">
+        <div class="wrap">
+          <h2>Who makes it</h2>
+          <p class="section-lede">FrameCapt is built and maintained by one developer.</p>
+          <div class="author card">
+            <img src="assets/author.jpg" alt="Ashiqur Rahman Emran" width="96" height="96" />
+            <div class="author-body">
+              <h3>Ashiqur Rahman Emran</h3>
+              <p class="author-role">Staff Software Engineer at Cefalo · Dhaka, Bangladesh</p>
+              <ul class="author-skills">
+                <li>.NET</li>
+                <li>React</li>
+                <li>Angular</li>
+                <li>Rust</li>
+                <li>SQL</li>
+                <li>NoSQL</li>
+                <li>Azure</li>
+              </ul>
+              <div class="author-links">
+                <a class="btn" href="https://github.com/emashiq"
+                  ><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path
+                      d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+                    /></svg
+                  ><span>GitHub</span></a
+                >
+                <a class="btn" href="https://www.linkedin.com/in/emashiq"
+                  ><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path
+                      d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13ZM7.12 20.45H3.56V9h3.56v11.45ZM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0Z"
+                    /></svg
+                  ><span>LinkedIn</span></a
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>
+          Made by <a href="https://github.com/emashiq">Ashiqur Rahman Emran</a>. Free software under
+          the GNU GPL v3.
+        </span>
+        <span>
+          <a href="https://github.com/emashiq/framecapt">Source</a> ·
+          <a href="https://github.com/emashiq/framecapt/blob/main/PRIVACY.md">Privacy</a> ·
+          <a href="https://github.com/emashiq/framecapt/issues">Report a problem</a>
+        </span>
+      </div>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
