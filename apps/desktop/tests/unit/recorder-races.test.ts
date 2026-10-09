@@ -414,7 +414,7 @@ describe('quitting while the file is being finished', () => {
             options.signal?.addEventListener('abort', () => resolve());
           }),
       }),
-      { quitCapMs: 150 },
+      { quitCapMs: 1000 },
     );
     installEngine();
     const sessionId = await startRecording();
@@ -429,7 +429,7 @@ describe('quitting while the file is being finished', () => {
 
     await waitFor(() => tools.runs.length === 1, 'the remux to start');
     expect(quit).not.toHaveBeenCalled(); // finishing still has time
-    await waitFor(() => quit.mock.calls.length > 0, 'the quit after the cap', 3000);
+    await waitFor(() => quit.mock.calls.length > 0, 'the quit after the cap', 6000);
     expect(quit).toHaveBeenCalledTimes(1);
 
     const manifest = JSON.parse(

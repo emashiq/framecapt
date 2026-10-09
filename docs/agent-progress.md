@@ -164,3 +164,17 @@ Implemented on branch `emashiq/screen-shot-capture-together` (unit, integration 
 - P11 Polish and fixes (this entry): toasts moved from the bottom right to the bottom left, over the sidebar (root cause of three E2E failures: a "Microphone disconnected" warning, which is correct, stayed over "New recording" for 7 s; the right side holds the primary action of every view); camera-bubble size test now waits for the bubble's own state; step guides no longer take a step where Start was clicked (`FlowDetector.start`); the rescan also finds GIFs; `.fcap` recordings open in the video editor with a Source choice (crop to one screen or window) and export as normal MP4/WebM/GIF; guides are named by their folder in History; `quick-actions.spec` no longer mistakes the `.tmp` file of an atomic save for the capture; `docs/security-review.md` section structure repaired (a bad replace had pasted the first 66 lines into the table of section 3).
 
 Open native/manual checks (the lead decides when): the real Squirrel uninstall dialog (P1); a real camera (P5); real multi-monitor `.fcap` recording and editing (P6, P11); real mouse for Steps and Follow mouse (P4, P10); mixed-DPI displays for screenshots, All screens and `.fcap` layouts; `npm run smoke:installed` and `npm run test:native` (not run in P11).
+
+### Parallel and meeting capture (2026-10-10)
+
+Branch `emashiq/parallel-meeting-capture`. Verification status for every item: unit-tested; E2E pending lead run.
+
+- Screenshots of any kind during a recording, plus a toolbar screenshot menu (`recorder:toolbarMenu`).
+- Win32 window and microphone probe via koffi (ADR-052) with a `desktopCapturer` and `reg.exe` fallback; E2E-only mock probe.
+- Up to three concurrent recordings, each its own engine window, toolbar and file; shared audio and camera owned by the first (ADR-051).
+- Meeting detection (Meet, Zoom, Teams, Webex), prompt card (role `meeting-prompt`) and Settings > Meetings (ADR-053).
+- Live panels: add, remove, hide a region, window or screen in a running recording (ADR-051).
+- Meeting recording, hidden-window placeholder with audio continuing, screen-share capture (ADR-053).
+- Docs: ADR-051 to ADR-053, capability matrix, capture feasibility (performance TODO), security review section 21, user guide, changelog, koffi notice.
+
+Open native checks: real Meet, Zoom, Teams and Webex calls; real share indicators (Zoom and Teams classes); WGC restore after minimize; slot-0 loopback audio kept across a video re-acquire; CPU with 3 concurrent recordings; two toolbars on multi-monitor; packaged koffi load inside Electron and under WDAC; Linux fallback probe.

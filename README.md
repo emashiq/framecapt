@@ -4,7 +4,7 @@
 
 > **FrameCapt is a provisional product name.** It has not been checked for trademark conflicts (see [docs/OWNER-TASKS.md](docs/OWNER-TASKS.md)).
 
-FrameCapt is a screenshot and screen-recording app for Windows, made for developers, QA engineers, freelancers and support teams. Press a shortcut, pick a screen, window or region, capture or record, mark it up if you want, then copy or save. **Captures never leave your computer: there is no cloud storage, no upload and no sharing links.** Using the desktop app now requires signing in with a FrameCapt account (personal, or as a member of an organization); after one online sign-in it keeps working offline for a limited time. There is no telemetry. It is free software under the GNU GPL version 3.
+FrameCapt is a screenshot and screen-recording app for Windows, made for developers, QA engineers, freelancers and support teams. Press a shortcut, pick a screen, window or region, capture or record, mark it up if you want, then copy or save. **Captures never leave your computer: there is no cloud storage, no upload and no sharing links.** There is no telemetry. It is free software under the GNU GPL version 3.
 
 This repository holds the Electron desktop app only. The earlier account, organization and website work is preserved on the branch `login-website`.
 
