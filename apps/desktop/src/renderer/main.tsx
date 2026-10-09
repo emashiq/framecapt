@@ -7,6 +7,7 @@ import { installGlobalErrorReporting } from './lib/report-error';
 import { roleFromHash } from './role';
 import { CountdownView } from './views/CountdownView';
 import { CameraView } from './views/camera/CameraView';
+import { MeetingPromptView } from './views/meeting-prompt/MeetingPromptView';
 import { OverlayView } from './views/overlay/OverlayView';
 import { RecorderWorker } from './views/RecorderWorker';
 import { StepsPill } from './views/toolbar/StepsPill';
@@ -25,6 +26,7 @@ const roleViews: Partial<Record<Role, ComponentType>> = {
   toolbar: ToolbarEntry,
   countdown: CountdownView,
   camera: CameraView,
+  'meeting-prompt': MeetingPromptView,
 };
 
 installGlobalErrorReporting();

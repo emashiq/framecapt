@@ -9,6 +9,7 @@ import {
   X,
   SlidersHorizontal,
   Stethoscope,
+  Users,
   Video,
 } from 'lucide-react';
 import type { ResetSection } from '../../shared/settings';
@@ -18,6 +19,7 @@ import { AlertConfirm } from '../components/ui/AlertConfirm';
 import { EmptyState } from '../components/ui/EmptyState';
 import { cn } from '../lib/cn';
 import { resetSettings } from '../settings/store';
+import { MeetingsSection } from './settings/MeetingsSection';
 import { SavedIndicator } from './settings/SettingRow';
 import {
   AboutSection,
@@ -52,6 +54,7 @@ const NAV: {
     resetName: 'Screenshot',
   },
   { id: 'recording', label: 'Recording', icon: Video, reset: 'recording', resetName: 'Recording' },
+  { id: 'meetings', label: 'Meetings', icon: Users, reset: 'meetings', resetName: 'Meetings' },
   {
     id: 'shortcuts',
     label: 'Shortcuts',
@@ -195,6 +198,7 @@ export function SettingsView({ section, onSectionChange }: SettingsViewProps) {
               <GeneralSection onReset={ask('general')} />
               <ScreenshotsSection onReset={ask('screenshots')} />
               <RecordingSection onReset={ask('recording')} />
+              <MeetingsSection onReset={ask('meetings')} />
               <ShortcutsSection onReset={ask('shortcuts')} />
               <StorageSection onReset={ask('storage')} />
               <AdvancedSection />
@@ -213,6 +217,7 @@ export function SettingsView({ section, onSectionChange }: SettingsViewProps) {
             {current === 'general' ? <GeneralSection onReset={ask('general')} /> : null}
             {current === 'screenshots' ? <ScreenshotsSection onReset={ask('screenshots')} /> : null}
             {current === 'recording' ? <RecordingSection onReset={ask('recording')} /> : null}
+            {current === 'meetings' ? <MeetingsSection onReset={ask('meetings')} /> : null}
             {current === 'shortcuts' ? <ShortcutsSection onReset={ask('shortcuts')} /> : null}
             {current === 'storage' ? <StorageSection onReset={ask('storage')} /> : null}
             {current === 'advanced' ? <AdvancedSection /> : null}
