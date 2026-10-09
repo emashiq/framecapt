@@ -135,7 +135,7 @@ function start(): void {
       updates,
     );
     desktop = setupDesktop(appSettings, services);
-    void setupMeetings({ store, recordingLive: () => services.recorder.isLive }).then((created) => {
+    void setupMeetings({ store, recordingLive: () => services.recorder.anyLive }).then((created) => {
       meetings = created;
     });
     // A start at login (--hidden) lives in the tray; without a tray the window is the only UI.
