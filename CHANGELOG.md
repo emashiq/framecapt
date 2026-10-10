@@ -4,11 +4,15 @@ All notable changes to FrameCapt are recorded here. The format follows [Keep a C
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026-10-10
+
 - **Meeting capture.** FrameCapt notices Google Meet, Zoom, Microsoft Teams and Webex calls and offers a small card (Record meeting, Meeting + my screen, Add to current recording, Not now, Don't ask for the app). When the meeting window is minimized, hidden or gone, its place in the video shows a neutral card and the audio keeps recording. A screen you share in the call can be added automatically or on request. Settings > Meetings. English window titles only; Chrome tab sharing is not detected; Teams needs microphone activity. See docs/decisions.md ADR-053.
 - **Live panels.** While a screen, window or region recording runs, add up to three more regions, windows or screens to the same video, and hide or remove them without stopping. See ADR-051.
 - **Several recordings at once.** Up to three recordings run at the same time, each with its own toolbar and file; system audio and the camera belong to the first one. Stop all from the main window. See ADR-051.
 - **Screenshots during a recording.** A toolbar screenshot menu takes any kind of screenshot while recording; it is saved straight to the Library.
 - **Win32 window and microphone probe (koffi).** Richer window facts for meeting detection, with a fallback where koffi cannot load. See ADR-052.
+
+## [0.1.0-alpha.4] - 2026-10-07
 
 - **Captures go to the clipboard automatically.** Every screenshot is copied (as a PNG) when it is captured (also while recording and for All screens) and again, with redactions applied, when you save an edit (Settings > Screenshots > "Copy every screenshot to the clipboard", on by default). Every saved recording, exported video and step guide is copied as a file you can paste into Explorer, chat or email (Settings > Recording, on by default); after a conversion the new file replaces the old one on the clipboard. This replaces "Copy to the clipboard when saving" and the "Copy to the clipboard, then open the editor" choice (an old settings file keeps the same behaviour). See docs/decisions.md ADR-049.
 - **Recording save format and compression.** Settings > Recording > **Save recordings as** (WebM, MP4, MKV, GIF) and **Compression** (Off, Light, Balanced, Strong) replace "Video storage" (Compressed becomes MP4 + Balanced). MKV is a lossless re-wrap; GIF is for clips up to 60 seconds; the original goes to the Recycle Bin only after the new file is verified. History gets **Save in another format...** (format, compression, optional width) that makes a new item and never replaces the original. MKV is now a History format.
