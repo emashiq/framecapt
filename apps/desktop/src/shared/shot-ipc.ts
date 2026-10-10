@@ -32,10 +32,16 @@ export const StartScreenshotRequestSchema = z
     sourceId: SourceIdSchema.optional(),
     /** One image of every screen, joined (target must be 'screen'). */
     allScreens: z.boolean().optional(),
+    /** One given screen, without the display picker (target must be 'screen'). */
+    displayId: z.string().min(1).max(64).optional(),
   })
   .refine((request) => !request.allScreens || request.target === 'screen', {
     message: 'All screens is a screen capture.',
     path: ['allScreens'],
+  })
+  .refine((request) => !request.displayId || (request.target === 'screen' && !request.allScreens), {
+    message: 'A display belongs to a single screen capture.',
+    path: ['displayId'],
   })
   .refine((request) => request.target !== 'window' || request.sourceId !== undefined, {
     message: 'A window capture needs a sourceId.',

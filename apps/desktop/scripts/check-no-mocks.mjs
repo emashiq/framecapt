@@ -25,6 +25,8 @@ const markers = [
   'FRAMECAPT_E2E',
   '__FRAMECAPT_E2E__',
   'MockCaptureProvider',
+  'MockWindowProbe',
+  '__frameCaptProbe',
   'mock-provider',
   'Mock display',
   '__frameCaptTest',

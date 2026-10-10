@@ -19,6 +19,7 @@ const ROLE_HASH: Record<Role, string> = {
   recorder: '/recorder',
   countdown: '/countdown',
   camera: '/camera',
+  'meeting-prompt': '/meeting-prompt',
 };
 
 const roles = new Map<number, Role>();
@@ -38,6 +39,13 @@ export function registerWebContents(contents: WebContents, role: Role): void {
   const id = contents.id;
   roles.set(id, role);
   contents.once('destroyed', () => roles.delete(id));
+}
+
+/** The focused window is FrameCapt's recording toolbar or camera bubble. */
+export function isOwnUiFocused(): boolean {
+  const focused = BrowserWindow.getFocusedWindow();
+  const role = focused && !focused.isDestroyed() ? roles.get(focused.webContents.id) : undefined;
+  return role === 'toolbar' || role === 'camera';
 }
 
 export function getRole(webContentsId: number): Role | undefined {
@@ -100,6 +108,14 @@ export function resolveClose(discard: boolean): boolean {
  */
 export function setMainCloseInterceptor(interceptor: () => boolean): void {
   closeInterceptor = interceptor;
+}
+
+let mainProtected = false;
+
+/** While a recording is live the main window is excluded from capture (it can be shown for a picker). */
+export function setMainProtected(on: boolean): void {
+  mainProtected = on;
+  getMainWindow()?.setContentProtection(on);
 }
 
 export function getMainWindow(): BrowserWindow | undefined {
@@ -172,6 +188,7 @@ export function createMainWindow(options: { show?: boolean } = {}): BrowserWindo
 
   registerWebContents(win.webContents, 'main');
   mainWindow = win;
+  if (mainProtected) win.setContentProtection(true);
   win.once('ready-to-show', () => {
     if (showOnReady) win.show();
   });
@@ -243,6 +260,24 @@ let workerWindow: BrowserWindow | undefined;
  */
 export function getWorkerWindow(): BrowserWindow {
   if (workerWindow && !workerWindow.isDestroyed()) return workerWindow;
+  const win = createHiddenRecorderWindow('');
+  workerWindow = win;
+  win.on('closed', () => {
+    if (workerWindow === win) workerWindow = undefined;
+  });
+  return win;
+}
+
+/**
+ * An extra hidden engine window, for a recording that runs beside the one in the worker window
+ * (each recording has its own engine, so each has its own capture grant and streams). It only
+ * records: it never serves screenshot frame grabs (`?engine=1`). The caller destroys it.
+ */
+export function createEngineWindow(): BrowserWindow {
+  return createHiddenRecorderWindow('?engine=1');
+}
+
+function createHiddenRecorderWindow(search: string): BrowserWindow {
   const win = new BrowserWindow({
     title: 'FrameCapt capture worker',
     show: false,
@@ -252,17 +287,8 @@ export function getWorkerWindow(): BrowserWindow {
     webPreferences: { ...securePreferences(), backgroundThrottling: false },
   });
   registerWebContents(win.webContents, 'recorder');
-  workerWindow = win;
-  win.on('closed', () => {
-    if (workerWindow === win) workerWindow = undefined;
-  });
-  void loadRenderer(win, 'recorder');
+  void loadRenderer(win, 'recorder', search);
   return win;
-}
-
-/** The recorder window if it exists; never creates it. */
-export function peekWorkerWindow(): BrowserWindow | undefined {
-  return workerWindow && !workerWindow.isDestroyed() ? workerWindow : undefined;
 }
 
 export function closeWorkerWindow(): void {

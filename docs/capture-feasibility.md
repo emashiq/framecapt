@@ -210,3 +210,18 @@ Prerequisites: an interactive Windows session with real displays and audio, `ffm
 5. A different or headless host: the suite fails at the first display or audio step; document that as BLOCKED rather than editing expectations.
 
 Related checks: `npm run check:mocks` (no mock provider in a normal bundle; `node scripts/check-no-mocks.mjs --expect-mock` after a `FRAMECAPT_E2E_BUILD=1` build is the positive control, run once in this phase: it found the mock in the E2E bundle and the normal bundle was clean).
+
+## Concurrent recordings, panels and meeting detection (2026-10-10)
+
+Implemented by ADR-051 to ADR-053 and exercised through unit tests and E2E with the mock capture provider. **Native check pending** for all of it: a real second monitor, minimize and restore of a captured window (Windows Graphics Capture can stay frozen, so the engine re-acquires after 1.5 s), real meeting apps, packaged koffi load. On Linux the window probe is the `desktopCapturer` fallback: titles only, no class, exe, minimized or cloaked facts and no microphone signal.
+
+### Performance: 2–3 concurrent recordings
+
+Not measured yet. TODO: run on a named machine (CPU model, GPU, RAM, monitors, Windows build) with 1080p30 VP9 at default settings, system audio on in the first recording, 5 minutes each, and fill in the table (CPU of the main process plus all renderers and the GPU process from Task Manager or `typeperf`; dropped frames from the recording's frame statistics).
+
+| Machine | Recordings | Panels | Total CPU % | Memory (MB) | Achieved fps | Dropped frames | Notes |
+| ------- | ---------- | ------ | ----------- | ----------- | ------------ | -------------- | ----- |
+| TODO    | 1          | 0      | TODO        | TODO        | TODO         | TODO           |       |
+| TODO    | 2          | 0      | TODO        | TODO        | TODO         | TODO           |       |
+| TODO    | 3          | 0      | TODO        | TODO        | TODO         | TODO           |       |
+| TODO    | 1          | 3      | TODO        | TODO        | TODO         | TODO           |       |

@@ -136,6 +136,67 @@ export function fitInside(frame: Size, box: Rect): Rect {
 }
 
 /**
+ * Like `fitInside`, but a frame whose fitted size is within 2 px of the box on both sides fills the
+ * box (a scaled crop whose even-rounded aspect is a hair off must not leave a black hairline).
+ */
+export function fitSnap(frame: Size, box: Rect): Rect {
+  const fitted = fitInside(frame, box);
+  return box.width - fitted.width <= 2 && box.height - fitted.height <= 2 ? box : fitted;
+}
+
+// --- live panels ----------------------------------------------------------------------------
+
+/**
+ * Where the pictures of a recording with panels go. One picture fills the frame. With panels the
+ * primary (first rect) fills the left two thirds, full height, and the panels stack in the right
+ * third with equal heights. Everything is even aligned and inside the output; a picture is drawn
+ * fitted (letterboxed) inside its rect.
+ */
+export function panelLayout(out: Size, n: number): Rect[] {
+  if (n <= 0) return [];
+  if (n === 1) return [{ x: 0, y: 0, width: out.width, height: out.height }];
+  const primaryWidth = evenDown((out.width * 2) / 3);
+  const panels = n - 1;
+  const height = evenDown(out.height / panels);
+  const rects: Rect[] = [{ x: 0, y: 0, width: primaryWidth, height: out.height }];
+  for (let index = 0; index < panels; index += 1) {
+    rects.push({
+      x: primaryWidth,
+      y: index * height,
+      width: out.width - primaryWidth,
+      height,
+    });
+  }
+  return rects;
+}
+
+/** `panelLayout` for the occupied slots: slot -> rect, the lowest slot being the primary. */
+export function slotRects(out: Size, slots: readonly number[]): Map<number, Rect> {
+  const sorted = [...slots].sort((a, b) => a - b);
+  const rects = panelLayout(out, sorted.length);
+  return new Map(sorted.map((slot, index) => [slot, rects[index] as Rect]));
+}
+
+/**
+ * A region of the display scaled to a frame of another size: a display captured at a reduced size
+ * (the quality preset) has its pixel coordinates scaled. Same size: unchanged. The result is whole
+ * numbers inside the frame.
+ */
+export function scaleRegion(region: Rect, display: Size, frame: Size): Rect {
+  if (display.width === frame.width && display.height === frame.height) return region;
+  const sx = frame.width / display.width;
+  const sy = frame.height / display.height;
+  const x = Math.min(frame.width - 1, Math.max(0, Math.round(region.x * sx)));
+  const y = Math.min(frame.height - 1, Math.max(0, Math.round(region.y * sy)));
+  return {
+    x,
+    y,
+    width: Math.max(1, Math.min(frame.width - x, Math.round(region.width * sx))),
+    height: Math.max(1, Math.min(frame.height - y, Math.round(region.height * sy))),
+  };
+}
+
+/**
  * The cap of the WHOLE mosaic (not of each tile): the picture of several sources is one video, so
  * its size and pixel count are bounded as one. "1080p" allows up to 3840 x 2160 but at most
  * 3840 x 1080 pixels (two 1080p screens side by side keep their size); "source" keeps up to 8.3

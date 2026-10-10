@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { BrowserWindow } from 'electron';
 import { handle } from './ipc';
 import { IpcError } from './ipc-core';
 import { sendEvent } from './events';
@@ -32,23 +33,58 @@ interface Pending {
 }
 
 const pending = new Map<string, Pending>();
-let ready: Promise<void> | undefined;
-let markReady: (() => void) | undefined;
 
-/** Waits until the worker renderer has subscribed to its events (it announces itself). */
-export function whenWorkerReady(): Promise<void> {
-  const win = getWorkerWindow();
-  if (!ready) {
-    ready = new Promise<void>((resolve) => {
-      markReady = resolve;
+/** Whether one recorder window (the worker or an extra engine window) has announced itself. */
+interface Readiness {
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}
+const readiness = new Map<number, Readiness>();
+const watchedForClose = new WeakSet<BrowserWindow>();
+const watchedWorkers = new WeakSet<BrowserWindow>();
+
+function readinessOf(id: number): Readiness {
+  let entry = readiness.get(id);
+  if (!entry) {
+    let resolve: () => void = () => undefined;
+    let reject: (error: Error) => void = () => undefined;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
     });
+    promise.catch(() => undefined); // a window that closes unawaited is not an unhandled rejection
+    entry = { promise, resolve, reject };
+    readiness.set(id, entry);
+  }
+  return entry;
+}
+
+/**
+ * Waits until that recorder window's renderer has subscribed to its events (it announces itself).
+ * Rejects when the window closes first.
+ */
+export function whenReady(win: BrowserWindow): Promise<void> {
+  const id = win.webContents.id;
+  const entry = readinessOf(id);
+  if (!watchedForClose.has(win)) {
+    watchedForClose.add(win);
     win.once('closed', () => {
-      ready = undefined;
-      markReady = undefined;
-      failAll('WORKER_CLOSED', 'The capture worker closed unexpectedly.');
+      readiness.delete(id);
+      entry.reject(new WorkerError('WORKER_CLOSED', 'The recorder window closed unexpectedly.'));
     });
   }
-  return ready;
+  return entry.promise;
+}
+
+/** The screenshot worker window is ready; pending frame requests fail when it closes. */
+export function whenWorkerReady(): Promise<void> {
+  const win = getWorkerWindow();
+  if (!watchedWorkers.has(win)) {
+    watchedWorkers.add(win);
+    win.once('closed', () => failAll('WORKER_CLOSED', 'The capture worker closed unexpectedly.'));
+  }
+  return whenReady(win);
 }
 
 function failAll(code: string, message: string): void {
@@ -60,8 +96,9 @@ function failAll(code: string, message: string): void {
 }
 
 export function registerWorkerHandlers(): void {
-  handle('worker:ready', { roles: ['recorder'] }, () => {
-    markReady?.();
+  // Each recorder window announces itself: ready is per window (the engine windows of several recordings).
+  handle('worker:ready', { roles: ['recorder'] }, (_request, ctx) => {
+    readinessOf(ctx.webContentsId).resolve();
   });
 
   handle('worker:frameResult', { roles: ['recorder'] }, (result) => {

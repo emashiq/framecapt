@@ -38,6 +38,9 @@ const ENTRIES = {
   BUSY: {
     text: 'Another capture or recording is already running. Finish or cancel it first.',
   },
+  PANEL_LIMIT: {
+    text: 'A recording can have at most 3 panels. Remove one before adding another.',
+  },
   INTERNAL: { text: `Something went wrong inside FrameCapt. ${RESTART}` },
   SEQ_GAP: {
     text: `The recording data arrived out of order, so it was stopped. ${KEPT} FrameCapt will offer to recover it.`,

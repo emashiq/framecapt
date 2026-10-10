@@ -1,6 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, nativeImage, Notification, screen, session, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  nativeImage,
+  Notification,
+  screen,
+  session,
+  shell,
+  webContents,
+} from 'electron';
 import { BulkExportService } from './history/bulk-export';
 import { AutoCopy } from './clipboard/auto-copy';
 import { FinalizeService } from './history/finalize-service';
@@ -30,7 +40,10 @@ import { registerRecoveryHandlers } from './recording/recovery-handlers';
 import { nodeSessionFs, type SessionFs } from './recording/session-fs';
 import { SessionService } from './recording/session-service';
 import { RecorderController } from './recorder/controller';
+import { HiddenWindowPool } from './recorder/engine-pool';
 import { registerRecorderHandlers } from './recorder/handlers';
+import { buildPanelMenuTemplate, buildScreenshotMenuTemplate } from './recorder/toolbar-menus';
+import { Cancelled } from './recorder/recording-session';
 import { CaptureFlow } from './capture-flow';
 import { StepsController } from './flows/controller';
 import { pickExportFolder, pickGuideSave } from './flows/dialogs';
@@ -54,12 +67,15 @@ import { installDisplayMediaGrants } from './capture/display-media';
 import { registerDiagnosticsHandlers } from './capture/diagnostics';
 import type { CaptureProvider } from './capture/types';
 import type { IpcEventPayload } from '../shared/ipc-contract';
+import { friendlyError } from '../shared/error-messages';
+import type { StartScreenshotRequest } from '../shared/shot-ipc';
 import { sendEvent } from './events';
 import type { UpdateService } from './updates';
 import {
   getMainWindow,
   getOriginConfig,
   setMainCloseInterceptor,
+  setMainProtected,
   showMainWindow,
   webContentsWithRoles,
 } from './windows';
@@ -172,7 +188,7 @@ export function registerHandlers(
 
   handle(
     'app:reportError',
-    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] },
+    { roles: ['main', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera', 'meeting-prompt'] },
     (report, ctx) => {
       const parts = [`Renderer error (${ctx.role}, ${report.source}): ${report.message}`];
       if (report.stack) parts.push(report.stack);
@@ -309,7 +325,7 @@ export function registerHandlers(
   const autoCopy = new AutoCopy({
     settings: () => settings.store.get(),
     notify: (message) => {
-      if (recorder.isLive) {
+      if (recorder.anyLive) {
         recorder.toastToolbar({ level: 'info', message });
       } else if (getMainWindow()?.isVisible()) {
         for (const contents of webContentsWithRoles(['main']))
@@ -426,7 +442,10 @@ export function registerHandlers(
     saveScreenshot: saveDirect,
     sessions,
     media,
+    engines: new HiddenWindowPool(),
     synthetic,
+    // A recording's toolbar lost focus: an open screenshot selection checks whether the user left FrameCapt.
+    onToolbarBlur: () => flow.recheckBlur(),
     isScreenshotBusy: () => flow.state.active || steps.active,
     outputDir,
     tools,
@@ -463,8 +482,10 @@ export function registerHandlers(
     synthetic,
     // A screenshot may start while a recording runs (saved directly), not while one is set up or saved.
     // Nor while a step guide is captured: the pointer and the screen belong to it.
-    isBlocked: () => (recorder.busy && !recorder.isLive) || steps.active,
-    isRecording: () => recorder.isLive,
+    isBlocked: () =>
+      (recorder.anyBusy && !recorder.anyLive) || recorder.startupInProgress || steps.active,
+    isRecording: () => recorder.anyLive,
+    onOverlaysShown: () => recorder.raiseToolbar(),
     saveDirect,
     toast: (event) => recorder.toastToolbar(event),
     afterCapture: createAfterCapture(captureSaving),
@@ -472,7 +493,9 @@ export function registerHandlers(
   });
   // The recording ended (or was stopped) while a screenshot selection was open: drop the selection.
   recorder.onChange(() => {
-    if (flow.duringRecording && !recorder.isLive) flow.cancel();
+    if (flow.duringRecording && !recorder.anyLive) flow.cancel();
+    // The main window can be shown for the window picker during a recording: keep it out of the video.
+    setMainProtected(recorder.anyLive);
   });
   const steps: StepsController = new StepsController({
     now: () => Date.now(),
@@ -493,7 +516,7 @@ export function registerHandlers(
       }
       return saved;
     },
-    isBlocked: () => recorder.busy || flow.state.active,
+    isBlocked: () => recorder.anyBusy || flow.state.active,
     isOverPill: (point) => pill.isOver(point),
     ui: {
       open: () => pill.open(),
@@ -565,7 +588,94 @@ export function registerHandlers(
       appVersion: app.getVersion(),
     }),
   );
-  registerRecorderHandlers(recorder, sessions, media, (width) => pill.resize(width));
+  /** The "Add panel" menu: a region, screen or window joins the picture of a running recording; a panel leaves it. */
+  const popPanelMenu = async (
+    win: BrowserWindow,
+    sessionId: string | undefined,
+    anchor: { x: number; y: number },
+  ): Promise<void> => {
+    const state = recorder.panelState(sessionId);
+    if (!state) return;
+    const displays = provider.listDisplays();
+    const windows = await provider.listSources({ types: ['window'], thumbnailWidth: 0 });
+    const report = (error: unknown): void => {
+      if (error instanceof Cancelled) return;
+      const failure = error as { code?: string; message?: string };
+      recorder.toastToolbar(
+        { level: 'error', message: friendlyError(failure.code, failure.message) },
+        state.sessionId,
+      );
+    };
+    const add = (request: {
+      kind: 'region' | 'screen' | 'window';
+      sourceId?: string;
+      displayId?: string;
+    }) => void recorder.addPanel({ ...request, sessionId: state.sessionId }).catch(report);
+    const menu = Menu.buildFromTemplate(
+      buildPanelMenuTemplate(
+        displays,
+        windows,
+        {
+          panels: state.panels.map(({ slot, label }) => ({ slot, label })),
+          addDisabled: state.addDisabled,
+        },
+        {
+          region: () => add({ kind: 'region' }),
+          screen: (displayId) => add({ kind: 'screen', displayId }),
+          window: (sourceId) => add({ kind: 'window', sourceId }),
+          remove: (slot) => {
+            try {
+              recorder.removePanel(state.sessionId, slot);
+            } catch (error) {
+              report(error);
+            }
+          },
+        },
+      ),
+    );
+    menu.popup({ window: win, x: Math.round(anchor.x), y: Math.round(anchor.y) });
+  };
+  registerRecorderHandlers(
+    recorder,
+    sessions,
+    media,
+    (width) => pill.resize(width),
+    async (request, webContentsId) => {
+      const contents = webContents.fromId(webContentsId);
+      const win = contents && BrowserWindow.fromWebContents(contents);
+      if (!win || win.isDestroyed() || !recorder.anyLive) return;
+      if (request.menu === 'panel') {
+        return popPanelMenu(win, recorder.sessionIdOf(webContentsId), request);
+      }
+      const displays = provider.listDisplays();
+      const windows = await provider.listSources({ types: ['window'], thumbnailWidth: 0 });
+      const report = (error: unknown): void => {
+        const failure = error as { code?: string; message?: string };
+        recorder.toastToolbar({
+          level: 'error',
+          message: friendlyError(failure.code, failure.message),
+        });
+      };
+
+      const shot = (shotRequest: StartScreenshotRequest): void =>
+        void flow.start(shotRequest).catch(report);
+      const menu = Menu.buildFromTemplate(
+        buildScreenshotMenuTemplate(displays, windows, {
+          recordedArea: () =>
+            void recorder.screenshotNow(recorder.sessionIdOf(webContentsId)).catch(() => undefined),
+          region: () => shot({ target: 'region' }),
+          screen: (displayId) => shot({ target: 'screen', displayId }),
+          window: (sourceId) => shot({ target: 'window', sourceId }),
+        }),
+      );
+      menu.popup({ window: win, x: Math.round(request.x), y: Math.round(request.y) });
+    },
+    async (request, webContentsId) => {
+      const contents = webContents.fromId(webContentsId);
+      const win = contents && BrowserWindow.fromWebContents(contents);
+      if (win && !win.isDestroyed()) await popPanelMenu(win, request.sessionId, request);
+    },
+  );
   registerRecoveryHandlers(recovery, recorder, media);
   // Closing the main window during a recording only minimizes it; quitting finishes the recording.
   setMainCloseInterceptor(() => (recorder.isRecording && !recorder.isQuitting) || steps.active);
@@ -635,6 +745,6 @@ export function registerHandlers(
     history,
     sessions,
     store,
-    isBusy: () => recorder.busy || flow.state.active || exports.active || steps.active,
+    isBusy: () => recorder.anyBusy || flow.state.active || exports.active || steps.active,
   };
 }

@@ -401,3 +401,41 @@ describe('the quick save editor shortcut (added after version 1 shipped)', () =>
     expect(parsed.ok && parsed.settings.editorShortcuts.quickSave).toBeNull();
   });
 });
+
+describe('the meetings section (added after version 1 shipped)', () => {
+  it('a settings file from before it loads with the defaults', () => {
+    const { meetings: _meetings, ...older } = structuredClone(DEFAULT_SETTINGS);
+    void _meetings;
+    const parsed = parseSettings(older);
+    expect(parsed.ok && parsed.settings.meetings).toEqual(DEFAULT_SETTINGS.meetings);
+    expect(DEFAULT_SETTINGS.meetings).toMatchObject({
+      detect: true,
+      addSharedScreen: 'auto',
+      mutedApps: [],
+      promptTimeoutSec: 30,
+    });
+  });
+
+  it('keeps what the user chose and fills in keys that are missing', () => {
+    const parsed = parseSettings({
+      ...structuredClone(DEFAULT_SETTINGS),
+      meetings: { detect: false, mutedApps: ['zoom'] },
+    });
+    expect(parsed.ok && parsed.settings.meetings.detect).toBe(false);
+    expect(parsed.ok && parsed.settings.meetings.mutedApps).toEqual(['zoom']);
+    expect(parsed.ok && parsed.settings.meetings.apps.meet).toBe(true);
+  });
+
+  it('rejects an unknown app or a bad timeout', () => {
+    const ok = (meetings: object) =>
+      parseSettings({ ...structuredClone(DEFAULT_SETTINGS), meetings }).ok;
+    expect(ok({ mutedApps: ['skype'] })).toBe(false);
+    expect(ok({ promptTimeoutSec: 0 })).toBe(false);
+  });
+
+  it('is patched and reset like the other sections', () => {
+    const patched = applyPatch(DEFAULT_SETTINGS, { meetings: { addSharedScreen: 'ask' } });
+    expect(patched.meetings.addSharedScreen).toBe('ask');
+    expect(resetSection(patched, 'meetings').meetings).toEqual(DEFAULT_SETTINGS.meetings);
+  });
+});

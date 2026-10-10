@@ -52,22 +52,24 @@ vi.mock('electron', () => ({
   protocol: { handle: () => undefined, registerSchemesAsPrivileged: () => undefined },
 }));
 vi.mock('../../src/main/windows', () => {
-  const worker = { webContents: hoisted.worker, once: () => undefined, isDestroyed: () => false };
   return {
     getMainWindow: () => undefined,
-    getWorkerWindow: () => worker,
-    peekWorkerWindow: () => worker,
     webContentsWithRoles: () => [hoisted.main],
   };
 });
 vi.mock('../../src/main/logger', () => ({
   log: { info: () => undefined, warn: () => undefined, error: () => undefined },
 }));
-vi.mock('../../src/main/worker', () => ({ whenWorkerReady: () => Promise.resolve() }));
+vi.mock('../../src/main/worker', () => ({ requestFrames: async () => [] }));
 vi.mock('../../src/main/overlay', () => ({ OverlaySet: class {} }));
 vi.mock('../../src/main/recorder/windows', () => ({
   createToolbarWindow: () => ({
-    win: { isDestroyed: () => false, showInactive: () => undefined },
+    win: {
+      webContents: hoisted.main,
+      isDestroyed: () => false,
+      showInactive: () => undefined,
+      on: () => undefined,
+    },
     setWidth: () => undefined,
     closeQuietly: () => undefined,
   }),
@@ -78,6 +80,7 @@ import { MediaRegistry } from '../../src/main/recording/media-protocol';
 import { SessionService } from '../../src/main/recording/session-service';
 import { RecorderController } from '../../src/main/recorder/controller';
 import type { EngineEvent, RecordOptions } from '../../src/shared/recorder-ipc';
+import { fakeEnginePool } from './fake-engines';
 import { fakeTools } from './fake-tools';
 
 const { state } = hoisted;
@@ -125,6 +128,7 @@ beforeEach(() => {
     },
     sessions,
     media: new MediaRegistry(),
+    engines: fakeEnginePool(() => hoisted.worker),
     synthetic: false,
     isScreenshotBusy: () => false,
     outputDir: () => out,

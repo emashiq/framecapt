@@ -1,331 +1,211 @@
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { globalShortcut, nativeImage, screen, type BrowserWindow } from 'electron';
+import { screen } from 'electron';
+import type { CameraSetStyleRequest, CameraStyleState } from '../../shared/camera';
+import { framePixelsToDip, overlayRectToFramePixels, type Size } from '../../shared/geometry';
+import type { PanelKind, PanelPlaceholder, PanelSlot } from '../../shared/panels';
 import type {
-  CameraCorner,
-  CameraSetStyleRequest,
-  CameraShape,
-  CameraSize,
-  CameraStyleState,
-} from '../../shared/camera';
-import {
-  framePixelsToDip,
-  globalDipToDisplayLocal,
-  overlayRectToFramePixels,
-  type DisplayGeom,
-} from '../../shared/geometry';
-import { checkPixelRect, type Rect } from '../../shared/rect';
-import { platformCapabilities } from '../../shared/platform';
-import { layoutSourceName, type RecordingLayout } from '../../shared/recording-layout';
-import type {
-  EngineCommand,
   EngineEvent,
-  RecordOptions,
+  RecorderSessionSummary,
   RecorderSnapshot,
   RecorderStartRequest,
-  RecordingResult,
-  RecordTarget,
+  SessionMeeting,
 } from '../../shared/recorder-ipc';
+import type { AudioSource, RecorderStatus } from '../../shared/recorder-machine';
 import {
-  activeDurationAt,
-  createInitialState,
-  isFinished,
-  isPreRecording,
-  reduce,
-  type AudioFlags,
-  type AudioSource,
-  type RecorderEvent,
-  type RecorderMachineState,
-} from '../../shared/recorder-machine';
+  CAMERA_BUSY_MESSAGE,
+  SYSTEM_AUDIO_BUSY_MESSAGE,
+  allocateCamera,
+  allocateSystemAudio,
+  canStart,
+  isActiveStatus,
+  primaryOf,
+} from '../../shared/recorder-sessions';
+import { checkPixelRect, type Rect } from '../../shared/rect';
 import type { ToastEvent } from '../../shared/settings-ipc';
-import type { OverlayInit } from '../../shared/shot-ipc';
-import type { CaptureTarget } from '../../shared/shots';
+import type { OverlayInit, OverlayMode } from '../../shared/shot-ipc';
 import type { Role } from '../../shared/types';
-import {
-  placeToolbar,
-  TOOLBAR_HEIGHT,
-  toolbarWidth,
-  type PlacementDisplay,
-} from '../../shared/toolbar-placement';
-import type { CaptureProvider, DisplayInfo } from '../capture/types';
+import type { DisplayInfo } from '../capture/types';
 import { sendEvent } from '../events';
 import { IpcError } from '../ipc-core';
 import { log } from '../logger';
 import { OverlaySet } from '../overlay';
 import type { SelectionHost } from '../selection-host';
-import { getMainWindow, getWorkerWindow, peekWorkerWindow, webContentsWithRoles } from '../windows';
-import { grabScreensExact } from '../capture/exact-capture';
-import { requestFrames, whenWorkerReady } from '../worker';
-import type { MediaTools } from '../media/ffmpeg';
-import type { HistorySink } from '../history/service';
-import type { MediaRegistry } from '../recording/media-protocol';
-import type { SessionService } from '../recording/session-service';
-import { CameraBubble } from './camera';
+import { getMainWindow, isOwnUiFocused, webContentsWithRoles } from '../windows';
 import { settleWithin } from './quit-cap';
 import {
-  createCountdownWindow,
-  createToolbarWindow,
-  type CountdownWindow,
-  type ToolbarWindow,
-} from './windows';
+  Cancelled,
+  isSessionRequest,
+  RecordingSession,
+  StartFailure,
+  toGeom,
+  type PanelSpec,
+  type RecorderDeps,
+  type Selection,
+  type SessionHost,
+  type SessionSnapshot,
+} from './recording-session';
+
+export type { RecorderDeps } from './recording-session';
 
 /** Time for the window manager to remove a hidden/closed window from the composed desktop. */
 const SETTLE_MS = 200;
-const COUNTDOWN_FROM = 3;
-const PREPARE_TIMEOUT_MS = 20_000;
-const START_TIMEOUT_MS = 10_000;
-const STOP_TIMEOUT_MS = 20_000;
-/** How often the mouse is sampled for a follow-mouse recording. */
-const CURSOR_INTERVAL_MS = 1000 / 30;
-/** On app quit the recording gets this long to finish before its session is left for recovery. */
+/** On app quit the recordings get this long to finish before their sessions are left for recovery. */
 export const QUIT_FINALIZE_CAP_MS = 15_000;
 
-/** The user (or a source change) ended the start-up before recording began. */
-class Cancelled extends Error {}
-
-class StartFailure extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
+/** The one selection step (overlays on the screens) that exists at a time: only one recording starts at once. */
+interface SelectionSlot {
+  session: RecordingSession;
+  overlays: OverlaySet;
+  waiter: { resolve: (value: Selection) => void; reject: (e: Error) => void } | undefined;
+  removeDisplayListeners: () => void;
+  /** The selection picks a live panel's region (the recording is running), not a recording's start. */
+  panel: boolean;
 }
 
-/** The sources of a multi-source recording, in the order the user chose them (the first is the primary). */
-interface MultiContext {
-  sources: {
-    sourceId: string;
-    kind: 'screen' | 'window';
-    /** Generic ("Screen 1", "Window 2"): window titles never reach disk. */
-    name: string;
-    /** Screens only. */
-    display: DisplayInfo | undefined;
-  }[];
-  /** Each source's tile in the recorded picture (known once the engine has prepared). */
-  tiles: Rect[];
+/** What the panel menu and the IPC channel ask for; main resolves it to a source. */
+export interface AddPanelRequest {
+  sessionId?: string | undefined;
+  kind: PanelKind;
+  sourceId?: string | undefined;
+  displayId?: string | undefined;
 }
 
-interface SessionContext {
-  sessionId: string;
-  target: RecordTarget;
-  options: RecordOptions;
-  sourceId: string;
-  sourceName: string;
-  display: DisplayInfo | undefined;
-  /** Multi-source recordings: the sources and where they sit in the picture. */
-  multi: MultiContext | null;
-  /** The ids of the requested sources (multi-source recordings), until they are resolved. */
-  multiIds: string[];
-  /** Multi-source recordings: indexes of the sources that went away (the recording goes on). */
-  lostTiles: Set<number>;
-  /** Region in pixels of the display (even aligned), and in global DIP. */
-  regionPx: Rect | null;
-  regionDip: Rect | null;
-  mime: string;
-  width: number | null;
-  height: number | null;
-  audio: AudioFlags;
-  canUseDefaultMic: boolean;
-  countdown: number | null;
-  /** 0..1 while the file is being finished (remux progress against the active time). */
-  progress: number | null;
-  result: RecordingResult | null;
-  sessionCreated: boolean;
-}
-
-interface Selection {
-  display: DisplayInfo | undefined;
-  regionPx: Rect | null;
-  regionDip: Rect | null;
-}
-
-export interface RecorderDeps {
-  provider: CaptureProvider;
-  sessions: SessionService;
-  media: MediaRegistry;
-  /** E2E mock builds: the engine draws a synthetic picture and positions use real displays. */
-  synthetic: boolean;
-  /** Saves a screenshot taken during the recording (a file in the screenshots folder, plus history). */
-  saveScreenshot: (shot: {
-    kind: CaptureTarget;
-    width: number;
-    height: number;
-    png: Buffer;
-  }) => Promise<{ copied?: boolean } | void>;
-  /** True while a screenshot flow runs (the two never overlap). */
-  isScreenshotBusy: () => boolean;
-  /** Folder of the finished recordings (the setting, else `Videos/FrameCapt`). */
-  outputDir: () => string;
-  /** Throws (OUTPUT_DIR_UNWRITABLE) when finished recordings could not be saved there. */
-  ensureOutputDir?: () => Promise<void>;
-  /** The bundled ffmpeg/ffprobe (remux on finalize). */
-  tools: MediaTools;
-  /** Finished recordings are added here (a failure never fails the recording). */
-  history?: HistorySink;
-  /** A recording was saved (its history id, or null): the automatic MP4 export hooks in here. */
-  onSaved?: (historyId: string | null) => void;
-  /** The camera bubble's size, shape and corner are remembered in the recording settings. */
-  persistCameraStyle?: (patch: {
-    cameraSize?: CameraSize;
-    cameraShape?: CameraShape;
-    cameraCorner?: CameraCorner;
-  }) => void;
-  /** Overrides the 15 s quit cap (E2E builds only). */
-  quitCapMs?: number;
-  /** E2E builds only: the engine's start command is sent this many ms late (a slow PC). */
-  engineStartDelayMs?: number;
-}
-
-/** Where a display sits on the virtual desktop, in physical pixels. */
-function physicalRect(display: DisplayInfo): Rect {
-  return {
-    x: Math.round(display.bounds.x * display.scaleFactor),
-    y: Math.round(display.bounds.y * display.scaleFactor),
-    ...display.physicalSize,
-  };
-}
-
-/** The recorded layout of a multi-source recording, with generic names only. */
-function multiLayout(multi: MultiContext, width: number, height: number): RecordingLayout {
-  return {
-    width,
-    height,
-    sources: multi.sources.map((source, index) => ({
-      name: source.name,
-      kind: source.kind,
-      rect: multi.tiles[index] ?? { x: 0, y: 0, width, height },
-    })),
-  };
-}
-
-function toGeom(display: DisplayInfo): DisplayGeom {
-  return {
-    id: display.id,
-    bounds: display.bounds,
-    scaleFactor: display.scaleFactor,
-    rotation: display.rotation,
-  };
-}
+/** What every window sees while nothing is recording. */
+const IDLE_SNAPSHOT: SessionSnapshot = {
+  status: 'idle',
+  sessionId: null,
+  target: null,
+  startedAt: null,
+  activeMs: 0,
+  runningSince: null,
+  error: null,
+  stopReason: null,
+  audio: { mic: false, system: false },
+  muted: { mic: false, system: false },
+  lost: { mic: false, system: false },
+  lostTiles: [],
+  choice: null,
+  choiceCanUseDefault: false,
+  camera: null,
+  quitting: false,
+  countdown: null,
+  progress: null,
+  width: null,
+  height: null,
+  result: null,
+  panelSlots: [],
+  meeting: null,
+};
 
 /**
- * The authoritative owner of recording state. Windows only send commands (`recorder:*`); this
- * class runs them through the pure state machine and the hidden recorder window's engine, and
- * broadcasts every state change. Commands are idempotent where it matters: a second stop (toolbar
- * button, main window, closing the toolbar, source loss, quitting the app) is a no-op that joins
- * the first.
+ * The coordinator of up to three simultaneous recordings (see recording-session.ts for one). It
+ * owns what they share: the table of recordings, the selection overlays (one start-up at a time),
+ * the main window's hide/restore, the quit and the state broadcast. Windows only send commands
+ * (`recorder:*`); a toolbar's command goes to its own recording, the main window's and the
+ * tray's to a named one or, by default, the primary one (see primaryOf). The public API of the
+ * single-recording era keeps working on the primary recording.
  */
-export class RecorderController implements SelectionHost {
-  private machine: RecorderMachineState = createInitialState();
-  private ctx: SessionContext | null = null;
-  private token = 0;
+export class RecorderController implements SelectionHost, SessionHost {
+  private readonly table = new Map<string, RecordingSession>();
+  private selection: SelectionSlot | undefined;
   private quitting = false;
   private quitAllowed = false;
-  private overlays: OverlaySet | undefined;
-  private selectionWaiter:
-    { resolve: (value: Selection) => void; reject: (e: Error) => void } | undefined;
-  private choiceWaiter:
-    ((answer: 'continue-without' | 'use-default' | 'cancel') => void) | undefined;
-  private countdownWindow: CountdownWindow | undefined;
-  private toolbar: ToolbarWindow | undefined;
-  private camera: CameraBubble | undefined;
-  private stopPromise: Promise<void> | undefined;
-  /** Cancels the running remux (quit past the cap). */
-  private finalizeAbort: AbortController | undefined;
-  private removeDisplayListeners: (() => void) | undefined;
-  private watchedWorker: BrowserWindow | undefined;
-  private levelsOn = false;
-  /** A screenshot of the recording is being taken (a second click waits for it). */
-  private snapping = false;
-  /** Follow-mouse recordings: samples the mouse for the engine. */
-  private cursorTimer: ReturnType<typeof setInterval> | undefined;
-  private lastCursor: { nx: number; ny: number } | undefined;
-  /** The main window was on screen when this recording was requested (a shortcut may start it from the tray). */
-  private mainWasShown = true;
   private readonly changeListeners = new Set<() => void>();
-  private readonly waiters = new Map<
-    string,
-    { types: ReadonlySet<string>; resolve: (event: EngineEvent) => void }
-  >();
+  /** The last status seen per recording (a failure that nobody can see is announced). */
+  private readonly lastStatus = new Map<string, RecorderStatus>();
+  /** Starts a `meeting` recording (the meeting code resolves it to a window or screen request). */
+  private meetingStarter:
+    ((request: RecorderStartRequest) => Promise<{ sessionId: string }>) | undefined;
 
   constructor(private readonly deps: RecorderDeps) {}
 
   // --- reading state -----------------------------------------------------------------------
 
-  get status(): RecorderMachineState['status'] {
-    return this.machine.status;
+  private all(): RecordingSession[] {
+    return [...this.table.values()];
+  }
+
+  private primary(): RecordingSession | undefined {
+    return primaryOf(this.all());
+  }
+
+  private find(sessionId: string): RecordingSession | undefined {
+    return this.table.get(sessionId);
+  }
+
+  /** The status of the primary recording (idle without any). */
+  get status(): RecorderStatus {
+    return this.primary()?.status ?? 'idle';
   }
 
   /** A recording is running (or ending): the app must not quit or close its windows carelessly. */
   get isRecording(): boolean {
-    const { status } = this.machine;
-    return (
-      status === 'recording' ||
-      status === 'paused' ||
-      status === 'stopping' ||
-      status === 'processing'
-    );
+    return this.all().some((session) => session.isRecording);
   }
 
-  /** Recording or paused: the one state in which a screenshot may be taken (and a recording is on screen). */
-  get isLive(): boolean {
-    return this.machine.status === 'recording' || this.machine.status === 'paused';
+  /** At least one recording is recording or paused (a screenshot may be taken; a recording is on screen). */
+  get anyLive(): boolean {
+    return this.all().some((session) => session.isLive);
+  }
+
+  /** Anything that must keep a screenshot from starting (see anyLive: a live recording allows one). */
+  get anyBusy(): boolean {
+    return this.all().some((session) => !session.isFinished);
+  }
+
+  /** A recording is selecting, preflighting, counting down or starting (only one at a time). */
+  get startupInProgress(): boolean {
+    return this.all().some((session) => session.isPreRecording);
   }
 
   /** The recorder owns the overlay windows right now (selection step). */
   get selecting(): boolean {
-    return this.overlays !== undefined;
+    return this.selection !== undefined;
   }
 
-  /** Anything that must keep a screenshot from starting (see isLive: a live recording allows one). */
-  get busy(): boolean {
-    return !isFinished(this.machine.status);
+  /** True while quitting must not close windows by itself. */
+  get isQuitting(): boolean {
+    return this.quitting;
   }
 
-  snapshot(): RecorderSnapshot {
-    const state = this.machine;
-    const ctx = this.ctx;
-    const nowMono = performance.now();
+  /** Every recording, oldest first. */
+  sessions(): RecorderSessionSummary[] {
+    return this.all().map((session) => session.summary());
+  }
+
+  /** The id of the recording the window (engine, toolbar or countdown) belongs to. */
+  sessionIdOf(webContentsId: number): string | undefined {
+    return this.all().find((session) => session.ownsWebContents(webContentsId))?.id;
+  }
+
+  private withList(snapshot: SessionSnapshot, redact: boolean): RecorderSnapshot {
     return {
-      status: state.status,
-      sessionId: state.sessionId,
-      target: ctx?.target ?? null,
-      startedAt: state.startedAt,
-      activeMs: state.activeDurationMs,
-      runningSince:
-        state.segmentStartedAt === null ? null : Date.now() - (nowMono - state.segmentStartedAt),
-      error: state.error,
-      stopReason: state.stopReason,
-      audio: state.audio,
-      muted: state.muted,
-      lost: state.lost,
-      lostTiles: [...(ctx?.lostTiles ?? [])].sort((a, b) => a - b),
-      choice: state.choice,
-      choiceCanUseDefault: ctx?.canUseDefaultMic ?? false,
-      camera: this.camera ? { visible: this.camera.visible } : null,
+      ...snapshot,
+      result: redact ? null : snapshot.result,
+      sessions: this.sessions(),
+      canStartAnother: canStart(this.all()),
       quitting: this.quitting,
-      countdown: ctx?.countdown ?? null,
-      progress: ctx?.progress ?? null,
-      width: ctx?.width ?? null,
-      height: ctx?.height ?? null,
-      result: state.status === 'completed' ? (ctx?.result ?? null) : null,
     };
   }
 
-  private dispatch(event: RecorderEvent): boolean {
-    const before = this.machine;
-    const { state, rejected } = reduce(before, event);
-    if (rejected) {
-      log.info(`Recorder: ${event.type} rejected in ${before.status}`);
-      return false;
-    }
-    this.machine = state;
-    if (state !== before) {
-      if (state.status !== before.status) log.info(`Recorder: ${before.status} -> ${state.status}`);
-      this.broadcast();
-    }
-    return true;
+  /** The primary recording, as the main window and the tray see it. */
+  snapshot(): RecorderSnapshot {
+    return this.withList(this.primary()?.snapshot() ?? IDLE_SNAPSHOT, false);
+  }
+
+  /**
+   * The state as one window may see it. The main window gets the primary recording, including the
+   * finished file (name, path, history id); a toolbar, countdown or recorder window gets its own
+   * recording, without the file.
+   */
+  snapshotFor(role: Role, webContentsId?: number): RecorderSnapshot {
+    if (role === 'main') return this.snapshot();
+    const own =
+      webContentsId === undefined
+        ? undefined
+        : this.all().find((session) => session.ownsWebContents(webContentsId));
+    return this.withList((own ?? this.primary())?.snapshot() ?? IDLE_SNAPSHOT, true);
   }
 
   /** Runs after every state change (the tray follows the recording state). */
@@ -334,34 +214,85 @@ export class RecorderController implements SelectionHost {
     return () => this.changeListeners.delete(listener);
   }
 
-  /**
-   * The state as one role may see it. Only the main window shows the finished file (name, path,
-   * history id); the toolbar, countdown and recorder windows get the same state without it.
-   */
-  snapshotFor(role: Role): RecorderSnapshot {
-    const snapshot = this.snapshot();
-    return role === 'main' ? snapshot : { ...snapshot, result: null };
-  }
-
   private broadcast(): void {
     for (const listener of this.changeListeners) listener();
-    const full = this.snapshot();
-    const redacted: RecorderSnapshot = { ...full, result: null };
     for (const contents of webContentsWithRoles(['main'])) {
-      sendEvent(contents, 'recorder:state', full);
+      sendEvent(contents, 'recorder:state', this.snapshot());
     }
     for (const contents of webContentsWithRoles(['toolbar', 'recorder', 'countdown'])) {
-      sendEvent(contents, 'recorder:state', redacted);
+      sendEvent(contents, 'recorder:state', this.snapshotFor('toolbar', contents.id));
     }
+  }
+
+  // --- SessionHost -------------------------------------------------------------------------
+
+  changed(session: RecordingSession): void {
+    // A cancelled start-up and a reset recording leave the table.
+    if (session.status === 'idle') {
+      this.table.delete(session.id);
+      this.lastStatus.delete(session.id);
+    } else {
+      const before = this.lastStatus.get(session.id);
+      this.lastStatus.set(session.id, session.status);
+      if (session.status === 'error' && before !== 'error') this.announceFailure(session);
+    }
+    this.broadcast();
+  }
+
+  /** A recording failed while the main window (which shows errors) is out of the way: say so in a toolbar. */
+  private announceFailure(session: RecordingSession): void {
+    const main = getMainWindow();
+    if (main?.isVisible() || !this.anyLive) return;
+    const message = session.snapshot().error?.message;
+    if (message) this.toastToolbar({ level: 'error', message });
+  }
+
+  hideMain(): Promise<void> {
+    return hideMainWindow();
+  }
+
+  restoreMain(session: RecordingSession, force = false): void {
+    // Another recording that is starting or on screen still needs the window out of the way.
+    const needed = this.all().some(
+      (other) => other !== session && (other.isPreRecording || other.isLive),
+    );
+    if (needed && !force) return;
+    const main = getMainWindow();
+    if (!main) return;
+    if (main.isMinimized()) main.restore();
+    main.show();
+    main.focus();
+  }
+
+  toolbarBlurred(): void {
+    // The user may have clicked another app from the toolbar while a selection was open.
+    this.selection?.overlays.recheckBlur();
+    this.deps.onToolbarBlur?.();
   }
 
   // --- commands ----------------------------------------------------------------------------
 
+  /** The meeting code takes over `recorder:start` requests for a meeting. */
+  setMeetingStarter(
+    starter: (request: RecorderStartRequest) => Promise<{ sessionId: string }>,
+  ): void {
+    this.meetingStarter = starter;
+  }
+
+  /** What the toolbar says about the meeting a recording captures (null: nothing). */
+  setSessionMeeting(sessionId: string, meeting: SessionMeeting | null): void {
+    this.find(sessionId)?.setMeeting(meeting);
+  }
+
   async start(request: RecorderStartRequest): Promise<{ sessionId: string }> {
-    // The real entry point of every recording (button, shortcut, tray and direct IPC alike).
-    if (!isFinished(this.machine.status)) {
-      throw new IpcError('BUSY', 'A recording is already in progress.');
+    if (!isSessionRequest(request)) {
+      if (!this.meetingStarter) {
+        throw new IpcError('NOT_FOUND', 'Meeting recording is not available.');
+      }
+      return this.meetingStarter(request);
     }
+    // The real entry point of every recording (button, shortcut, tray and direct IPC alike).
+    this.ensureCanStartAnother();
     if (this.deps.isScreenshotBusy()) {
       throw new IpcError('BUSY', 'A capture is already in progress.');
     }
@@ -387,48 +318,56 @@ export class RecorderController implements SelectionHost {
     }
     await this.ensureCanRecord();
     const main = getMainWindow();
-    this.mainWasShown = main !== undefined && main.isVisible() && !main.isMinimized();
-    // A second start while this one awaited the listing is refused above on re-entry.
-    if (!isFinished(this.machine.status))
-      throw new IpcError('BUSY', 'A recording is already in progress.');
-    if (this.machine.status !== 'idle') this.dispatch({ type: 'RESET' });
+    const mainWasShown = main !== undefined && main.isVisible() && !main.isMinimized();
+    // A second start while this one awaited the listing is refused here, on re-entry.
+    this.ensureCanStartAnother();
+
+    // Starting a recording replaces the results nobody reset.
+    for (const session of this.all()) {
+      if (session.isFinished) {
+        this.table.delete(session.id);
+        this.lastStatus.delete(session.id);
+      }
+    }
+    const others = this.all().map((session) => ({
+      status: session.status,
+      systemAudio: session.systemAudioRequested,
+      camera: session.cameraRequested,
+    }));
+    const audio = allocateSystemAudio(others, request.options.systemAudio);
+    const camera = allocateCamera(others, request.options.camera !== undefined);
+    const options = { ...request.options, systemAudio: audio.systemAudio };
+    if (camera.dropped) delete options.camera;
+    if (audio.dropped) this.toastUser({ level: 'info', message: SYSTEM_AUDIO_BUSY_MESSAGE });
+    if (camera.dropped) this.toastUser({ level: 'info', message: CAMERA_BUSY_MESSAGE });
 
     const sessionId = randomUUID();
-    this.token += 1;
-    this.stopPromise = undefined;
-    this.ctx = {
+    const session = new RecordingSession(
       sessionId,
-      target: request.target,
-      options: {
-        ...structuredClone(request.options),
-        // No system audio where the OS has no loopback: the request is dropped up front.
-        systemAudio:
-          request.options.systemAudio && platformCapabilities(process.platform).systemAudio,
-      },
-      sourceId: request.sourceId ?? request.sources?.[0]?.sourceId ?? '',
-      sourceName: '',
-      display: undefined,
-      multi: null,
-      multiIds: request.sources?.map(({ sourceId }) => sourceId) ?? [],
-      lostTiles: new Set(),
-      regionPx: null,
-      regionDip: null,
-      mime: '',
-      width: null,
-      height: null,
-      audio: { mic: false, system: false },
-      canUseDefaultMic: false,
-      countdown: null,
-      progress: null,
-      result: null,
-      sessionCreated: false,
-    };
-    // Only a whole screen follows the mouse (several sources never do).
-    if (request.target !== 'screen') delete this.ctx.options.follow;
-    this.dispatch({ type: 'START_REQUESTED', sessionId });
-    const token = this.token;
-    void this.runStart(token, request).catch((error: unknown) => this.failStart(token, error));
+      this.nextLabel(),
+      { ...request, options },
+      mainWasShown,
+      this.deps,
+      this,
+    );
+    this.table.set(sessionId, session);
+    session.begin();
     return { sessionId };
+  }
+
+  private ensureCanStartAnother(): void {
+    if (this.startupInProgress) throw new IpcError('BUSY', 'A recording is already starting.');
+    if (!canStart(this.all())) {
+      throw new IpcError('BUSY', 'The most recordings that can run at once are already running.');
+    }
+  }
+
+  /** "Recording 1", the lowest number not taken by a recording that exists. */
+  private nextLabel(): string {
+    const taken = new Set(this.all().map((session) => session.label));
+    let n = 1;
+    while (taken.has(`Recording ${n}`)) n += 1;
+    return `Recording ${n}`;
   }
 
   /** Refuses to start when the disk is nearly full or ffmpeg (needed to finish the file) is missing. */
@@ -442,388 +381,392 @@ export class RecorderController implements SelectionHost {
       );
     }
     await this.deps.ensureOutputDir?.();
-    await this.deps.sessions.ensureSpaceToStart();
+    const running = this.all().filter((session) => isActiveStatus(session.status)).length;
+    await this.deps.sessions.ensureSpaceToStart(running);
   }
 
-  pause(): void {
-    if (this.machine.status !== 'recording') return void log.info('Recorder: pause ignored');
-    if (!this.dispatch({ type: 'PAUSE', at: performance.now() })) return;
-    this.send({ cmd: 'pause' });
-    void this.deps.sessions.recordPause(this.machine.sessionId ?? '', true);
+  /** The recording a command is for: the named one, else the primary one. */
+  private target(sessionId: string | undefined): RecordingSession | undefined {
+    return sessionId === undefined ? this.primary() : this.find(sessionId);
   }
 
-  resume(): void {
-    if (this.machine.status !== 'paused') return void log.info('Recorder: resume ignored');
-    if (!this.dispatch({ type: 'RESUME', at: performance.now() })) return;
-    this.send({ cmd: 'resume' });
-    void this.deps.sessions.recordPause(this.machine.sessionId ?? '', false);
+  pause(sessionId?: string): void {
+    const session = this.target(sessionId);
+    if (session) session.pause();
+    else log.info('Recorder: pause ignored');
   }
 
-  toggleMute(source: AudioSource): void {
-    const state = this.machine;
-    if (!state.audio[source] || state.lost[source]) return;
-    const muted = !state.muted[source];
-    if (this.dispatch({ type: 'MUTE_SET', source, muted })) {
-      this.send({ cmd: 'mute', source, muted });
-    }
+  resume(sessionId?: string): void {
+    const session = this.target(sessionId);
+    if (session) session.resume();
+    else log.info('Recorder: resume ignored');
   }
 
-  /** Cancels the start-up (selection, preflight, countdown, starting). Recording itself: use stop. */
-  cancel(): void {
-    if (!isPreRecording(this.machine.status)) return void log.info('Recorder: cancel ignored');
-    log.info('Recording cancelled before it started');
-    this.endStartup(new Cancelled());
-    this.dispatch({ type: 'CANCEL' });
-    this.afterStartupEnded();
+  toggleMute(source: AudioSource, sessionId?: string): void {
+    this.target(sessionId)?.toggleMute(source);
   }
 
   /**
-   * Stops the recording and finalizes it: engine flush, session finish, publish. Idempotent: any
-   * number of calls join the same work. Before recording started it is a cancel.
+   * Cancels the start-up (selection, preflight, countdown, starting; the overlay's Esc calls it
+   * too). A recording itself is ended with stop.
    */
-  stop(reason: 'user' | 'app-quit' | 'engine-closed' = 'user'): Promise<void> {
-    const before = this.machine.status;
-    if (isPreRecording(before)) {
-      this.cancel();
-      return Promise.resolve();
-    }
-    this.dispatch({ type: 'STOP', at: performance.now(), reason });
-    if (this.machine.status === 'stopping') this.stopPromise ??= this.finalize();
-    return this.stopPromise ?? Promise.resolve();
-  }
-
-  reset(): void {
-    if (this.machine.status !== 'completed' && this.machine.status !== 'error') return;
-    this.dispatch({ type: 'RESET' });
-    this.ctx = null;
-    this.stopPromise = undefined;
-  }
-
-  resolveChoice(answer: 'continue-without' | 'use-default' | 'cancel'): void {
-    const waiter = this.choiceWaiter;
-    if (!waiter || this.machine.choice === null) {
-      throw new IpcError('NOT_FOUND', 'There is nothing to decide right now.');
-    }
-    this.choiceWaiter = undefined;
-    waiter(answer);
-  }
-
-  // --- start-up ----------------------------------------------------------------------------
-
-  private isCurrent(token: number): boolean {
-    return this.token === token && isPreRecording(this.machine.status);
-  }
-
-  private guard(token: number): void {
-    if (!this.isCurrent(token)) throw new Cancelled();
-  }
-
-  private async runStart(token: number, request: RecorderStartRequest): Promise<void> {
-    const ctx = this.requireCtx();
-    const displays = this.deps.provider.listDisplays();
-    await this.hideMain();
-    this.guard(token);
-
-    const selection = await this.select(token, request, displays);
-    this.guard(token);
-    ctx.display = selection.display;
-    ctx.regionPx = selection.regionPx;
-    ctx.regionDip = selection.regionDip;
-    await this.resolveSource(ctx);
-    this.closeOverlays();
-    this.dispatch({ type: 'SOURCE_SELECTED' });
-
-    // Preflight: acquire and check every source. Anything missing is the user's decision.
-    for (;;) {
-      this.guard(token);
-      const reply = await this.engineRequest(
-        {
-          cmd: 'prepare',
-          requestId: randomUUID(),
-          sourceId: ctx.sourceId,
-          kind: ctx.target === 'window' ? 'window' : 'screen',
-          region: ctx.regionPx,
-          displaySize: ctx.display?.physicalSize ?? null,
-          options: ctx.options,
-          ...(ctx.multi && {
-            multi: ctx.multi.sources.map((source) => ({
-              sourceId: source.sourceId,
-              kind: source.kind,
-              rect: source.display ? physicalRect(source.display) : null,
-              ...(this.deps.synthetic && {
-                synthetic: source.display
-                  ? { ...source.display.physicalSize }
-                  : { width: 1280, height: 720 },
-              }),
-            })),
-          }),
-          ...(this.deps.synthetic && {
-            synthetic:
-              ctx.display !== undefined
-                ? { ...ctx.display.physicalSize }
-                : { width: 1280, height: 720 },
-          }),
-        },
-        ['prepared', 'needsChoice', 'prepareFailed', 'error'],
-        PREPARE_TIMEOUT_MS,
-      );
-      this.guard(token);
-      if (reply.type === 'prepared') {
-        ctx.mime = reply.mime;
-        ctx.width = reply.width;
-        ctx.height = reply.height;
-        ctx.audio = reply.audio;
-        if (ctx.multi) {
-          if (reply.tiles?.length !== ctx.multi.sources.length) {
-            throw new StartFailure('PREPARE_FAILED', 'Could not get ready to record.');
-          }
-          ctx.multi.tiles = reply.tiles;
-        }
-        break;
-      }
-      if (reply.type === 'needsChoice') {
-        ctx.canUseDefaultMic = reply.canUseDefaultMic;
-        this.dispatch({ type: 'PREFLIGHT_NEEDS_CHOICE', choice: reply.choice });
-        this.restoreMain();
-        const answer = await new Promise<'continue-without' | 'use-default' | 'cancel'>(
-          (resolve) => {
-            this.choiceWaiter = resolve;
-          },
-        );
-        this.guard(token);
-        if (answer === 'cancel') {
-          this.cancel();
-          throw new Cancelled();
-        }
-        await this.hideMain();
-        this.guard(token);
-        if (reply.choice === 'camera-missing') delete ctx.options.camera;
-        else if (answer === 'use-default') ctx.options.mic = { enabled: true };
-        else if (reply.choice === 'system-audio-unavailable') ctx.options.systemAudio = false;
-        else ctx.options.mic = { enabled: false };
-        continue;
-      }
-      throw new StartFailure(
-        reply.type === 'prepareFailed' || reply.type === 'error' ? reply.code : 'PREPARE_FAILED',
-        reply.type === 'prepareFailed' || reply.type === 'error'
-          ? reply.message
-          : 'Could not get ready to record.',
-      );
-    }
-
-    this.dispatch({ type: 'PREFLIGHT_OK' });
-    this.pumpCursor(ctx); // the follow window starts where the mouse is, not mid-screen
-    this.ensureToolbar(ctx);
-    this.ensureCamera(ctx);
-    await this.hideMain();
-    this.guard(token);
-    if (ctx.options.countdown) await this.runCountdown(token, ctx);
-    this.guard(token);
-    this.dispatch({ type: 'COUNTDOWN_DONE' });
-
-    // Starting: the session directory exists before the first chunk can arrive.
-    await this.deps.sessions.create(
-      {
-        mime: ctx.mime,
-        source: {
-          kind: ctx.target,
-          // A generic label, never the window's title: titles name documents and people, and this file
-          // stays on disk for as long as a session is unfinished.
-          name: ctx.multi ? 'Multiple sources' : ctx.target === 'window' ? 'Window' : 'Screen',
-          ...(ctx.display && !ctx.multi && { displayId: ctx.display.id }),
-        },
-        ...(ctx.multi && { layout: multiLayout(ctx.multi, ctx.width ?? 0, ctx.height ?? 0) }),
-        options: ctx.options,
-        width: ctx.width ?? 0,
-        height: ctx.height ?? 0,
-      },
-      ctx.sessionId,
-      peekWorkerWindow()?.webContents.id,
-    );
-    ctx.sessionCreated = true;
-    this.guard(token);
-    if (this.deps.engineStartDelayMs) {
-      await new Promise((resolve) => setTimeout(resolve, this.deps.engineStartDelayMs));
-      this.guard(token);
-    }
-    const started = await this.engineRequest(
-      { cmd: 'start', requestId: randomUUID(), sessionId: ctx.sessionId },
-      ['started', 'error'],
-      START_TIMEOUT_MS,
-    );
-    this.guard(token);
-    if (started.type !== 'started') {
-      throw new StartFailure(
-        started.type === 'error' ? started.code : 'START_FAILED',
-        started.type === 'error' ? started.message : 'Recording could not start.',
-      );
-    }
-    this.dispatch({
-      type: 'STARTED',
-      at: performance.now(),
-      wallClock: Date.now(),
-      audio: ctx.audio,
-    });
-    this.token += 1; // start-up is over: late start-up work can no longer act
-    this.startCursorFollow(ctx);
-    this.showToolbar();
-    log.info(
-      `Recording started: ${ctx.target}, ${ctx.width}x${ctx.height}, ` +
-        `mic=${ctx.audio.mic} system=${ctx.audio.system}`,
-    );
-  }
-
-  private requireCtx(): SessionContext {
-    if (!this.ctx) throw new Cancelled();
-    return this.ctx;
-  }
-
-  /** What to record: a window, a whole display, or a region of one. */
-  private async select(
-    token: number,
-    request: RecorderStartRequest,
-    displays: readonly DisplayInfo[],
-  ): Promise<Selection> {
-    if (request.target === 'window') return { display: undefined, regionPx: null, regionDip: null };
-    if (request.target === 'multi') {
-      // No selection step: the sources are chosen already. The countdown and the toolbar use the primary screen.
-      const primary = displays.find((display) => display.isPrimary) ?? displays[0];
-      if (!primary) throw new StartFailure('SOURCE_MISSING', 'No screen was found to record.');
-      return { display: primary, regionPx: null, regionDip: null };
-    }
-
-    if (request.target === 'screen') {
-      const only = request.displayId
-        ? displays.find((candidate) => candidate.id === request.displayId)
-        : displays.length === 1
-          ? displays[0]
-          : undefined;
-      if (request.displayId && !only) {
-        throw new StartFailure('SOURCE_MISSING', 'That screen is no longer available.');
-      }
-      if (only) return { display: only, regionPx: null, regionDip: null };
-    }
-    if (displays.length === 0)
-      throw new StartFailure('SOURCE_MISSING', 'No screen was found to record.');
-    const mode = request.target === 'screen' ? 'pick-display' : 'record-region';
-    const overlays = new OverlaySet(mode, {
-      onAllBlurred: () => {
-        log.info('Overlays lost focus; cancelling the recording');
-        this.cancel();
-      },
-    });
-    this.overlays = overlays;
-    overlays.open(displays);
-    overlays.setFrames(new Map());
-    this.watchDisplays(token);
-    return new Promise<Selection>((resolve, reject) => {
-      this.selectionWaiter = { resolve, reject };
-    });
-  }
-
-  private async resolveSource(ctx: SessionContext): Promise<void> {
-    if (ctx.target === 'multi') return this.resolveMulti(ctx);
-    if (ctx.target === 'window') {
-      const windows = await this.deps.provider.listSources({
-        types: ['window'],
-        thumbnailWidth: 0,
-      });
-      const found = windows.find((source) => source.id === ctx.sourceId);
-      if (!found) throw new StartFailure('SOURCE_MISSING', 'That window is no longer available.');
-      ctx.sourceName = found.name;
+  cancel(sessionId?: string): void {
+    // The overlay's Esc during a panel's region selection.
+    if (sessionId === undefined && this.selection?.panel) {
+      this.closeSelection(this.selection.session, new Cancelled());
       return;
     }
-    const display = ctx.display;
-    if (!display) throw new StartFailure('SOURCE_MISSING', 'No screen was found to record.');
-    const screens = await this.deps.provider.listSources({ types: ['screen'], thumbnailWidth: 0 });
-    const source = screens.find((candidate) => candidate.displayId === display.id);
-    if (!source) throw new StartFailure('SOURCE_MISSING', 'That screen is no longer available.');
-    ctx.sourceId = source.id;
-    ctx.sourceName = source.name;
+    const session =
+      sessionId === undefined
+        ? this.all().find((candidate) => candidate.isPreRecording)
+        : this.find(sessionId);
+    if (session) session.cancel();
+    else log.info('Recorder: cancel ignored');
   }
 
-  /** Every requested source, checked again against a fresh listing (screens need their display). */
-  private async resolveMulti(ctx: SessionContext): Promise<void> {
-    const listed = await this.deps.provider.listSources({
-      types: ['screen', 'window'],
-      thumbnailWidth: 0,
+  /**
+   * Stops a recording and finalizes it: engine flush, session finish, publish. Idempotent: any
+   * number of calls join the same work. Before recording started it is a cancel.
+   */
+  stop(reason: 'user' | 'app-quit' | 'engine-closed' = 'user', sessionId?: string): Promise<void> {
+    return this.target(sessionId)?.stop(reason) ?? Promise.resolve();
+  }
+
+  /** Stops every recording (the tray's "Stop all recordings"). */
+  stopAll(): Promise<void> {
+    return Promise.all(
+      this.all()
+        .filter((session) => session.isLive || session.isPreRecording)
+        .map((session) => session.stop('user')),
+    ).then(() => undefined);
+  }
+
+  reset(sessionId?: string): void {
+    this.target(sessionId)?.reset();
+  }
+
+  resolveChoice(answer: 'continue-without' | 'use-default' | 'cancel', sessionId?: string): void {
+    const session =
+      sessionId === undefined
+        ? this.all().find((candidate) => candidate.isPreRecording)
+        : this.find(sessionId);
+    if (!session) throw new IpcError('NOT_FOUND', 'There is nothing to decide right now.');
+    session.resolveChoice(answer);
+  }
+
+  /** Free space fell below the minimum while recording: that recording stops and keeps what was written. */
+  onDiskLow(sessionId: string): void {
+    this.find(sessionId)?.onDiskLow();
+  }
+
+  // --- live panels --------------------------------------------------------------------------
+
+  /** The recording a panel command is for: the named one, else the primary one if live, else the newest live one. */
+  private panelSession(sessionId: string | undefined): RecordingSession {
+    const session = this.liveSession(sessionId);
+    if (!session) throw new IpcError('NOT_FOUND', 'There is no recording to change.');
+    return session;
+  }
+
+  /**
+   * Adds a region, window or screen to a running recording (the toolbar's "Add panel", the main
+   * window's). A region opens the selection overlays and resolves when the user has chosen it;
+   * it rejects with Cancelled when the user backs out. Returns the panel's slot (1..3).
+   */
+  async addPanel(request: AddPanelRequest): Promise<{ slot: number }> {
+    const session = this.panelSession(request.sessionId);
+    const refusal = session.panelRefusal();
+    if (refusal) throw refusal;
+    const spec = await this.resolvePanel(session, request);
+    return { slot: await session.addPanel(spec) };
+  }
+
+  /** Adds a source main already knows (a meeting window, a shared screen) to a recording. */
+  async addPanelSource(
+    sessionId: string,
+    source: { kind: PanelKind; sourceId: string; region?: Rect; displaySize?: Size },
+  ): Promise<number> {
+    return this.panelSession(sessionId).addPanel({
+      kind: source.kind,
+      sourceId: source.sourceId,
+      region: source.region ?? null,
+      displaySize: source.displaySize ?? null,
     });
-    const displays = this.deps.provider.listDisplays();
-    const sources: MultiContext['sources'] = [];
-    for (const [index, sourceId] of ctx.multiIds.entries()) {
-      const found = listed.find((source) => source.id === sourceId);
-      const display =
-        found?.kind === 'screen'
-          ? displays.find((candidate) => candidate.id === found.displayId)
-          : undefined;
-      if (!found || (found.kind === 'screen' && !display)) {
-        throw new StartFailure('SOURCE_MISSING', 'One of the sources is no longer available.');
-      }
-      sources.push({
-        sourceId,
-        kind: found.kind,
-        name: layoutSourceName(found.kind, index),
-        display,
-      });
-    }
-    ctx.multi = { sources, tiles: [] };
-    ctx.sourceId = ctx.multiIds[0] ?? '';
-    ctx.sourceName = 'Multiple sources';
   }
 
-  private watchDisplays(token: number): void {
-    const onChange = (): void => {
-      log.warn('Displays changed while selecting; cancelling the recording');
-      this.failStart(
-        token,
-        new StartFailure('DISPLAYS_CHANGED', 'Your screens changed. Please try again.'),
-      );
+  /** What the panel menu shows for a recording (the named one, else the live one the UI follows). */
+  panelState(
+    sessionId: string | undefined,
+  ): { sessionId: string; panels: PanelSlot[]; addDisabled: boolean } | undefined {
+    const session = this.liveSession(sessionId);
+    if (!session?.isLive) return undefined;
+    return {
+      sessionId: session.id,
+      panels: session.snapshot().panelSlots,
+      addDisabled: session.panelRefusal() !== null,
     };
+  }
+
+  /** The displays a recording shows whole (its own screen and its screen panels). */
+  shownDisplayIds(sessionId: string): string[] {
+    return this.find(sessionId)?.shownDisplayIds() ?? [];
+  }
+
+  removePanel(sessionId: string | undefined, slot: number): void {
+    this.panelSession(sessionId).removePanel(slot);
+  }
+
+  setPanelHidden(
+    sessionId: string | undefined,
+    slot: number,
+    hidden: boolean,
+    placeholder: PanelPlaceholder,
+  ): void {
+    this.panelSession(sessionId).setPanelHidden(slot, hidden, placeholder);
+  }
+
+  /** Checks the request against a fresh listing (like a recording's start does) and picks the region. */
+  private async resolvePanel(
+    session: RecordingSession,
+    request: AddPanelRequest,
+  ): Promise<PanelSpec> {
+    const { provider } = this.deps;
+    if (request.kind === 'window') {
+      const windows = await provider.listSources({ types: ['window'], thumbnailWidth: 0 });
+      if (!windows.some((source) => source.id === request.sourceId)) {
+        throw new IpcError('NOT_FOUND', 'That window is no longer available.');
+      }
+      return { kind: 'window', sourceId: request.sourceId ?? '', region: null, displaySize: null };
+    }
+    const screens = await provider.listSources({ types: ['screen'], thumbnailWidth: 0 });
+    const displays = provider.listDisplays();
+    const gone = new IpcError('NOT_FOUND', 'That screen is no longer available.');
+    if (request.kind === 'screen') {
+      const source = request.sourceId
+        ? screens.find((candidate) => candidate.id === request.sourceId)
+        : screens.find((candidate) => candidate.displayId === request.displayId);
+      const display = displays.find((candidate) => candidate.id === source?.displayId);
+      if (!source || !display) throw gone;
+      return {
+        kind: 'screen',
+        sourceId: source.id,
+        region: null,
+        displaySize: display.physicalSize,
+        displayId: display.id,
+      };
+    }
+    const chosen = await this.selectPanelRegion(session, displays);
+    const source = screens.find((candidate) => candidate.displayId === chosen.display?.id);
+    if (!chosen.display || !chosen.regionPx || !source) throw gone;
+    return {
+      kind: 'region',
+      sourceId: source.id,
+      region: chosen.regionPx,
+      displaySize: chosen.display.physicalSize,
+    };
+  }
+
+  /** The region overlay of a running recording: the one selection slot, like a recording's start. */
+  private async selectPanelRegion(
+    session: RecordingSession,
+    displays: readonly DisplayInfo[],
+  ): Promise<Selection> {
+    if (this.selection || this.startupInProgress || this.deps.isScreenshotBusy()) {
+      throw new IpcError('BUSY', 'Another selection is already open.');
+    }
+    if (displays.length === 0) throw new IpcError('NOT_FOUND', 'No screen was found.');
+    const cancel = (): void => this.closeSelection(session, new Cancelled());
+    const picked = this.beginSelection(session, 'record-region', displays, true, {
+      onBlur: cancel,
+      onDisplaysChanged: cancel,
+    });
+    this.raiseToolbar();
+    try {
+      return await picked;
+    } finally {
+      this.closeSelection(session, new Cancelled());
+    }
+  }
+
+  // --- screenshots, toolbars and the camera -------------------------------------------------
+
+  /** The recording a toolbar message is for: the named one, else the newest live one. */
+  private liveSession(sessionId: string | undefined): RecordingSession | undefined {
+    if (sessionId !== undefined) return this.find(sessionId);
+    const primary = this.primary();
+    return primary?.isLive
+      ? primary
+      : this.all()
+          .reverse()
+          .find((session) => session.isLive);
+  }
+
+  /** A short result line in a recording's toolbar pill ("Screenshot saved"). */
+  toastToolbar(event: ToastEvent, sessionId?: string): void {
+    this.liveSession(sessionId)?.toastToolbar(event);
+  }
+
+  /** A message for the user: the main window when it is on screen, else a recording's toolbar. */
+  private toastUser(event: ToastEvent): void {
+    if (getMainWindow()?.isVisible()) {
+      for (const contents of webContentsWithRoles(['main'])) {
+        sendEvent(contents, 'app:toast', event);
+      }
+    } else this.toastToolbar(event);
+  }
+
+  /** The toolbar's camera button: a still of what a recording records, saved to the screenshots folder. */
+  async screenshotNow(sessionId?: string): Promise<void> {
+    const session = this.liveSession(sessionId);
+    if (!session || !session.isLive) {
+      throw new IpcError('NOT_FOUND', 'There is no recording to capture.');
+    }
+    await session.screenshotNow();
+  }
+
+  /** Keeps the toolbars clickable above selection overlays opened during a recording. */
+  raiseToolbar(): void {
+    for (const session of this.all()) session.raiseToolbar();
+  }
+
+  /** The toolbar's camera button. */
+  toggleCamera(sessionId?: string): void {
+    this.cameraOwner(sessionId).toggleCamera();
+  }
+
+  /** The toolbar measured its content: its window takes exactly that width (centered on itself). */
+  resizeToolbar(width: number, webContentsId: number, height?: number): void {
+    this.all()
+      .find((session) => session.ownsWebContents(webContentsId))
+      ?.resizeToolbar(width, height);
+  }
+
+  private cameraOwner(sessionId?: string): RecordingSession {
+    const session =
+      sessionId === undefined
+        ? this.all().find((candidate) => candidate.hasCamera)
+        : this.find(sessionId);
+    if (!session) throw new IpcError('NOT_FOUND', 'This recording has no camera.');
+    return session;
+  }
+
+  /** `camera:getStyle`: what the bubble shows. */
+  cameraStyle(): CameraStyleState {
+    return this.cameraOwner().cameraStyle();
+  }
+
+  /** `camera:setStyle`: the bubble's own size, shape and hide buttons. */
+  setCameraStyle(request: CameraSetStyleRequest): CameraStyleState {
+    return this.cameraOwner().setCameraStyle(request);
+  }
+
+  // --- the engines -------------------------------------------------------------------------
+
+  /** `recorder:engineEvent` from a hidden recorder window (without an id: the primary recording's). */
+  onEngineEvent(event: EngineEvent, webContentsId?: number): void {
+    const session =
+      webContentsId === undefined
+        ? this.primary()
+        : this.all().find((candidate) => candidate.ownsEngine(webContentsId));
+    session?.onEngineEvent(event);
+  }
+
+  // --- the selection overlays (SelectionHost) ----------------------------------------------
+
+  openSelection(
+    session: RecordingSession,
+    token: number,
+    mode: OverlayMode,
+    displays: readonly DisplayInfo[],
+  ): Promise<Selection> {
+    return this.beginSelection(session, mode, displays, false, {
+      onBlur: () => {
+        log.info('Overlays lost focus; cancelling the recording');
+        session.cancel();
+      },
+      onDisplaysChanged: () => {
+        log.warn('Displays changed while selecting; cancelling the recording');
+        session.failStart(
+          token,
+          new StartFailure('DISPLAYS_CHANGED', 'Your screens changed. Please try again.'),
+        );
+      },
+    });
+  }
+
+  private beginSelection(
+    session: RecordingSession,
+    mode: OverlayMode,
+    displays: readonly DisplayInfo[],
+    panel: boolean,
+    handlers: { onBlur: () => void; onDisplaysChanged: () => void },
+  ): Promise<Selection> {
+    const overlays = new OverlaySet(mode, {
+      isOwnUiFocused,
+      onAllBlurred: handlers.onBlur,
+    });
+    const slot: SelectionSlot = {
+      session,
+      overlays,
+      waiter: undefined,
+      removeDisplayListeners: () => undefined,
+      panel,
+    };
+    this.selection = slot;
+    overlays.open(displays);
+    overlays.setFrames(new Map());
+    slot.removeDisplayListeners = this.watchDisplays(handlers.onDisplaysChanged);
+    return new Promise<Selection>((resolve, reject) => {
+      slot.waiter = { resolve, reject };
+    });
+  }
+
+  private watchDisplays(onChange: () => void): () => void {
     screen.on('display-added', onChange);
     screen.on('display-removed', onChange);
     screen.on('display-metrics-changed', onChange);
-    this.removeDisplayListeners = () => {
+    return () => {
       screen.removeListener('display-added', onChange);
       screen.removeListener('display-removed', onChange);
       screen.removeListener('display-metrics-changed', onChange);
     };
   }
 
-  private closeOverlays(): void {
-    this.removeDisplayListeners?.();
-    this.removeDisplayListeners = undefined;
-    this.overlays?.close();
-    this.overlays = undefined;
-    this.selectionWaiter = undefined;
+  closeSelection(session: RecordingSession, reason: Error): void {
+    const slot = this.selection;
+    if (!slot || slot.session !== session) return;
+    this.selection = undefined;
+    slot.waiter?.reject(reason);
+    slot.removeDisplayListeners();
+    slot.overlays.close();
   }
 
-  // Overlay IPC (SelectionHost) ---------------------------------------------------------------
-
   overlayInit(webContentsId: number): Promise<OverlayInit | undefined> {
-    return this.overlays?.initFor(webContentsId) ?? Promise.resolve(undefined);
+    return this.selection?.overlays.initFor(webContentsId) ?? Promise.resolve(undefined);
   }
 
   overlayReady(webContentsId: number): void {
-    this.overlays?.show(webContentsId);
+    this.selection?.overlays.show(webContentsId);
   }
 
   selectionStarted(webContentsId: number): void {
-    this.overlays?.clearSelectionsExcept(this.overlays.displayIdOf(webContentsId));
+    const overlays = this.selection?.overlays;
+    overlays?.clearSelectionsExcept(overlays.displayIdOf(webContentsId));
   }
 
   /** Region mode: map the selection (overlay DIP) to display pixels, even aligned. */
   async confirmRegion(webContentsId: number, displayId: string, rect: Rect): Promise<void> {
-    const overlays = this.overlays;
-    const waiter = this.selectionWaiter;
+    const slot = this.selection;
+    const waiter = slot?.waiter;
     if (
-      !overlays ||
+      !slot ||
       !waiter ||
-      overlays.mode !== 'record-region' ||
-      this.machine.status !== 'selecting'
+      slot.overlays.mode !== 'record-region' ||
+      (slot.panel ? !slot.session.isLive : slot.session.status !== 'selecting')
     ) {
       throw new IpcError('NOT_FOUND', 'There is no selection in progress.');
     }
-    if (overlays.displayIdOf(webContentsId) !== displayId) {
+    if (slot.overlays.displayIdOf(webContentsId) !== displayId) {
       throw new IpcError('INVALID_PAYLOAD', 'Selection does not belong to this screen.');
     }
     const display = this.deps.provider
@@ -842,7 +785,7 @@ export class RecorderController implements SelectionHost {
     const aligned = checkPixelRect(mapped.rect, display.physicalSize, { align: 2 });
     if (!aligned.ok) throw new IpcError('INVALID_PAYLOAD', 'The selection is too small.');
     const local = framePixelsToDip(aligned.rect, geom, display.physicalSize);
-    this.selectionWaiter = undefined;
+    slot.waiter = undefined;
     waiter.resolve({
       display,
       regionPx: aligned.rect,
@@ -857,645 +800,54 @@ export class RecorderController implements SelectionHost {
   }
 
   async pickDisplay(webContentsId: number, displayId: string): Promise<void> {
-    const overlays = this.overlays;
-    const waiter = this.selectionWaiter;
+    const slot = this.selection;
+    const waiter = slot?.waiter;
     if (
-      !overlays ||
+      !slot ||
       !waiter ||
-      overlays.mode !== 'pick-display' ||
-      this.machine.status !== 'selecting'
+      slot.overlays.mode !== 'pick-display' ||
+      slot.session.status !== 'selecting'
     ) {
       throw new IpcError('NOT_FOUND', 'There is no screen selection in progress.');
     }
-    if (overlays.displayIdOf(webContentsId) !== displayId) {
+    if (slot.overlays.displayIdOf(webContentsId) !== displayId) {
       throw new IpcError('INVALID_PAYLOAD', 'That screen is not part of this selection.');
     }
     const display = this.deps.provider
       .listDisplays()
       .find((candidate) => candidate.id === displayId);
     if (!display) throw new IpcError('NOT_FOUND', 'That screen is no longer available.');
-    this.selectionWaiter = undefined;
+    slot.waiter = undefined;
     waiter.resolve({ display, regionPx: null, regionDip: null });
     await Promise.resolve();
-  }
-
-  // --- countdown ---------------------------------------------------------------------------
-
-  private realDisplayFor(display: DisplayInfo | undefined): Electron.Display {
-    const all = screen.getAllDisplays();
-    return (
-      all.find((candidate) => String(candidate.id) === display?.id) ??
-      (display === undefined
-        ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-        : screen.getPrimaryDisplay())
-    );
-  }
-
-  private async runCountdown(token: number, ctx: SessionContext): Promise<void> {
-    const real = this.realDisplayFor(ctx.display);
-    const countdown = createCountdownWindow(real.bounds);
-    this.countdownWindow = countdown;
-    const registered = globalShortcut.register('Escape', () => this.cancel());
-    if (!registered) log.warn('Could not register Esc for the countdown (in use by another app)');
-    try {
-      // The window asks for the state when its page has mounted; show it then.
-      countdown.win.webContents.once('did-finish-load', () =>
-        setTimeout(() => countdown.reveal(), 60),
-      );
-      for (let n = COUNTDOWN_FROM; n >= 1; n -= 1) {
-        ctx.countdown = n;
-        this.broadcast();
-        await sleep(1000);
-        this.guard(token);
-      }
-    } finally {
-      ctx.countdown = null;
-      if (registered) globalShortcut.unregister('Escape');
-      countdown.close();
-      this.countdownWindow = undefined;
-    }
-    // The countdown window is gone (it was content protected as well) before the first frame.
-    await sleep(120);
-  }
-
-  // --- screenshots during a recording --------------------------------------------------------
-
-  /** A short result line in the toolbar's pill ("Screenshot saved"). */
-  toastToolbar(event: ToastEvent): void {
-    for (const contents of webContentsWithRoles(['toolbar']))
-      sendEvent(contents, 'recorder:toast', event);
-  }
-
-  /**
-   * The toolbar's camera button: a still of what is being recorded (the whole screen, the recorded
-   * region, or the recorded window), saved straight to the screenshots folder.
-   */
-  async screenshotNow(): Promise<void> {
-    const ctx = this.ctx;
-    if (!this.isLive || !ctx) throw new IpcError('NOT_FOUND', 'There is no recording to capture.');
-    if (this.snapping) throw new IpcError('BUSY', 'A screenshot is already being taken.');
-    this.snapping = true;
-    try {
-      const shot = await this.grabStill(ctx);
-      const saved = await this.deps.saveScreenshot(shot);
-      log.info(`Screenshot saved during a recording: ${shot.kind} ${shot.width}x${shot.height}`);
-      this.toastToolbar({
-        level: 'info',
-        message: saved && saved.copied ? 'Screenshot saved and copied' : 'Screenshot saved',
-      });
-    } catch (error) {
-      log.warn(`Screenshot during a recording failed: ${String(error)}`);
-      this.toastToolbar({ level: 'error', message: "Couldn't save the screenshot" });
-      throw error;
-    } finally {
-      this.snapping = false;
-    }
-  }
-
-  private async grabStill(
-    ctx: SessionContext,
-  ): Promise<{ kind: CaptureTarget; width: number; height: number; png: Buffer }> {
-    // A multi-source recording takes the still of its primary (first) source.
-    const first = ctx.multi?.sources[0];
-    const kind: CaptureTarget = first ? first.kind : (ctx.target as CaptureTarget);
-    const display = first ? first.display : ctx.display;
-    const regionPx = first ? null : ctx.regionPx;
-    if (kind !== 'window' && display && !this.deps.synthetic) {
-      // Pixel-exact desktopCapturer image; the worker's video frame is the fallback.
-      const grab = await grabScreensExact([display]).catch(() => undefined);
-      const exact = grab?.frames.get(display.id);
-      if (exact) {
-        const image = regionPx ? exact.image.crop(regionPx) : exact.image;
-        const size = image.getSize();
-        return { kind, width: size.width, height: size.height, png: image.toPNG() };
-      }
-    }
-    const [frame] = await requestFrames(
-      [
-        {
-          sourceId: ctx.sourceId,
-          ...(display && { displayId: display.id }),
-          ...(this.deps.synthetic && {
-            syntheticSize: display ? { ...display.physicalSize } : { width: 1280, height: 720 },
-          }),
-        },
-      ],
-      { synthetic: this.deps.synthetic },
-    );
-    if (!frame) throw new Error('The capture returned no image.');
-    if (kind === 'window' || !regionPx) {
-      return { kind, width: frame.width, height: frame.height, png: frame.png };
-    }
-    const cropped = nativeImage.createFromBuffer(frame.png, { scaleFactor: 1 }).crop(regionPx);
-    const size = cropped.getSize();
-    return { kind, width: size.width, height: size.height, png: cropped.toPNG() };
-  }
-
-  // --- the toolbar -------------------------------------------------------------------------
-
-  private placementDisplays(): PlacementDisplay[] {
-    return screen.getAllDisplays().map((display) => ({
-      id: String(display.id),
-      bounds: display.bounds,
-      workArea: display.workArea,
-    }));
-  }
-
-  private ensureToolbar(ctx: SessionContext): void {
-    if (this.toolbar) return;
-    const width = toolbarWidth(ctx.audio);
-    const real = this.realDisplayFor(ctx.display);
-    const target =
-      ctx.regionDip && !this.deps.synthetic && ctx.display
-        ? ({ kind: 'region', displayId: ctx.display.id, region: ctx.regionDip } as const)
-        : ({ kind: 'display', displayId: String(real.id) } as const);
-    const placement = placeToolbar(
-      { width, height: TOOLBAR_HEIGHT },
-      target,
-      this.placementDisplays(),
-    );
-    log.info(
-      `Toolbar placed: ${placement.where}, outside the recording: ${placement.outsideRecording}`,
-    );
-    this.toolbar = createToolbarWindow(placement, width, () => {
-      this.toolbar = undefined;
-      log.info('Toolbar window closed by the user');
-      void this.stop('user');
-    });
-  }
-
-  // --- the camera bubble -------------------------------------------------------------------
-
-  /** A recording with a camera: the bubble appears (during the countdown already) and stays until it ends. */
-  private ensureCamera(ctx: SessionContext): void {
-    const options = ctx.options.camera;
-    if (!options || this.camera) return;
-    // E2E mock displays are not on screen (like the toolbar's placement): the real display stands in.
-    const captureRect = this.deps.synthetic
-      ? ctx.target === 'window' || ctx.target === 'multi'
-        ? null
-        : this.realDisplayFor(ctx.display).bounds
-      : (ctx.regionDip ?? (ctx.target === 'screen' && ctx.display ? ctx.display.bounds : null));
-    this.camera = new CameraBubble({
-      deviceId: options.deviceId,
-      shape: options.shape,
-      size: options.size,
-      corner: options.corner,
-      captureRect,
-      homeArea: this.realDisplayFor(ctx.display).workArea,
-      send: (command) => this.send(command),
-      persist: (patch) => this.deps.persistCameraStyle?.(patch),
-      onVisibleChange: () => this.broadcast(),
-    });
-    this.camera.show();
-  }
-
-  private closeCamera(): void {
-    this.camera?.close();
-    this.camera = undefined;
-  }
-
-  private requireCamera(): CameraBubble {
-    if (!this.camera) throw new IpcError('NOT_FOUND', 'This recording has no camera.');
-    return this.camera;
-  }
-
-  /** `camera:getStyle`: what the bubble shows. */
-  cameraStyle(): CameraStyleState {
-    return this.requireCamera().styleState();
-  }
-
-  /** `camera:setStyle`: the bubble's own size, shape and hide buttons. */
-  setCameraStyle(request: CameraSetStyleRequest): CameraStyleState {
-    return this.requireCamera().setStyle(request);
-  }
-
-  /** The toolbar's camera button. */
-  toggleCamera(): void {
-    const camera = this.requireCamera();
-    camera.setVisible(!camera.visible);
-  }
-
-  private showToolbar(): void {
-    const toolbar = this.toolbar;
-    if (!toolbar || toolbar.win.isDestroyed()) return;
-    toolbar.win.showInactive();
-    this.setLevels(true);
-  }
-
-  private closeToolbar(): void {
-    this.setLevels(false);
-    this.toolbar?.closeQuietly();
-    this.toolbar = undefined;
-  }
-
-  /** The toolbar measured its content: the window takes exactly that width (centered on itself). */
-  resizeToolbar(width: number): void {
-    this.toolbar?.setWidth(Math.ceil(width));
-  }
-
-  private setLevels(enabled: boolean): void {
-    if (this.levelsOn === enabled) return;
-    this.levelsOn = enabled;
-    this.send({ cmd: 'levels', enabled });
-  }
-
-  // --- follow mouse ------------------------------------------------------------------------
-
-  /** Follow-mouse recordings: the mouse goes to the engine ~30 times a second, only when it moved. */
-  private startCursorFollow(ctx: SessionContext): void {
-    if (!ctx.options.follow || !ctx.display || this.cursorTimer !== undefined) return;
-    this.cursorTimer = setInterval(() => this.pumpCursor(ctx), CURSOR_INTERVAL_MS);
-  }
-
-  private stopCursorFollow(): void {
-    if (this.cursorTimer !== undefined) clearInterval(this.cursorTimer);
-    this.cursorTimer = undefined;
-    this.lastCursor = undefined;
-  }
-
-  /** Sends the mouse position on the recorded display; on another display the last one stays. */
-  private pumpCursor(ctx: SessionContext): void {
-    const { display } = ctx;
-    if (!ctx.options.follow || !display) return;
-    const local = globalDipToDisplayLocal(screen.getCursorScreenPoint(), toGeom(display));
-    const { width, height } = display.bounds;
-    if (local.x < 0 || local.y < 0 || local.x >= width || local.y >= height) return;
-    const nx = local.x / width;
-    const ny = local.y / height;
-    if (this.lastCursor?.nx === nx && this.lastCursor.ny === ny) return;
-    this.lastCursor = { nx, ny };
-    this.send({ cmd: 'cursor', nx, ny });
-  }
-
-  // --- stopping ----------------------------------------------------------------------------
-
-  /** Engine flush -> session finish -> remux and publish. Runs once per recording. */
-  private async finalize(): Promise<void> {
-    const ctx = this.requireCtx();
-    const { sessions } = this.deps;
-    const sessionId = ctx.sessionId;
-    try {
-      await sessions.markStopping(sessionId);
-      let complete = false;
-      try {
-        const reply = await this.engineRequest(
-          { cmd: 'stop', requestId: randomUUID() },
-          ['stopped', 'error'],
-          STOP_TIMEOUT_MS,
-        );
-        complete = reply.type === 'stopped';
-        if (reply.type === 'error') {
-          log.warn(`Recorder stopped with an error: ${reply.code}`);
-          this.dispatch({
-            type: 'WRITE_FAILED',
-            at: performance.now(),
-            code: reply.code,
-            message: reply.message,
-          });
-        }
-      } catch (error) {
-        log.warn(
-          `Recorder did not confirm the stop (${error instanceof StartFailure ? error.code : 'error'})`,
-        );
-        this.dispatch({
-          type: 'WRITE_FAILED',
-          at: performance.now(),
-          code: 'ENGINE_LOST',
-          message: 'The recorder stopped unexpectedly. The recording may be incomplete.',
-        });
-      }
-      if (!complete) {
-        await sessions.markStopped(sessionId, {
-          truncated: true,
-          reason: this.machine.stopReason ?? 'unknown',
-        });
-      }
-      this.dispatch({ type: 'STOPPED' });
-
-      const abort = new AbortController();
-      this.finalizeAbort = abort;
-      // Determinate progress: the remux position against the active recording time.
-      const totalMs = activeDurationAt(this.machine, performance.now());
-      let lastShown = -1;
-      const published = await sessions.finalize(sessionId, {
-        outputDir: this.deps.outputDir(),
-        tools: this.deps.tools,
-        signal: abort.signal,
-        onProgress: (progress) => {
-          if (totalMs <= 0) return;
-          const fraction = Math.min(0.99, Math.max(0, progress.outTimeUs / 1000 / totalMs));
-          const percent = Math.round(fraction * 100);
-          if (percent === lastShown) return;
-          lastShown = percent;
-          ctx.progress = fraction;
-          this.broadcast();
-        },
-      });
-      ctx.progress = null;
-      // The file's own duration (probed after the remux); the active time only for a raw copy.
-      const durationMs =
-        published.durationMs ?? Math.round(activeDurationAt(this.machine, performance.now()));
-      const historyId = await this.addToHistory(
-        ctx,
-        published.outputPath,
-        published.bytes,
-        durationMs,
-      );
-      ctx.result = {
-        id: this.deps.media.register(published.outputPath),
-        historyId,
-        fileName: path.basename(published.outputPath),
-        path: published.outputPath,
-        durationMs,
-        bytes: published.bytes,
-        unindexed: published.unindexed,
-        width: ctx.width ?? 0,
-        height: ctx.height ?? 0,
-        mime: ctx.mime,
-        createdAt: Date.now(),
-        hasAudio: ctx.audio.mic || ctx.audio.system,
-      };
-      this.dispatch({ type: 'FINALIZED' });
-      this.deps.onSaved?.(historyId);
-      log.info(
-        `Recording saved: ${Math.round(durationMs)} ms, ${published.bytes} bytes` +
-          (published.unindexed ? ' (no seeking index)' : ''),
-      );
-    } catch (error) {
-      const code = error instanceof IpcError ? error.code : 'FINALIZE_FAILED';
-      const message =
-        error instanceof IpcError
-          ? error.message
-          : 'The recording could not be saved. The recorded data was kept.';
-      log.error('Recording finalize failed', error);
-      if (this.machine.status === 'stopping') this.dispatch({ type: 'STOPPED' });
-      this.dispatch({ type: 'FAILED', code, message });
-    } finally {
-      this.finalizeAbort = undefined;
-      this.stopCursorFollow();
-      this.send({ cmd: 'abort' });
-      this.closeToolbar();
-      this.closeCamera();
-      this.restoreMain();
-    }
-  }
-
-  /** The recording's history entry (it exists before the thumbnail does); null if it failed. */
-  private async addToHistory(
-    ctx: SessionContext,
-    file: string,
-    bytes: number,
-    durationMs: number,
-  ): Promise<string | null> {
-    try {
-      const added = await this.deps.history?.addVideo({
-        path: file,
-        format: ctx.multi ? 'fcap' : 'webm',
-        durationMs,
-        width: ctx.width ?? 0,
-        height: ctx.height ?? 0,
-        sizeBytes: bytes,
-        hasAudio: ctx.audio.mic || ctx.audio.system,
-        source: ctx.target,
-        // The frame rate that was asked for: the video editor exports at it (the file itself is
-        // variable frame rate and does not say).
-        fps: ctx.options.fps,
-      });
-      return added?.id ?? null;
-    } catch (error) {
-      log.error('The recording could not be added to history', error);
-      return null;
-    }
-  }
-
-  /** Free space fell below the minimum while recording: stop and keep everything written so far. */
-  onDiskLow(sessionId: string): void {
-    if (this.ctx?.sessionId !== sessionId) return;
-    if (this.machine.status !== 'recording' && this.machine.status !== 'paused') return;
-    log.warn('Disk space is low; stopping the recording');
-    this.dispatch({
-      type: 'WRITE_FAILED',
-      at: performance.now(),
-      code: 'DISK_LOW',
-      message: 'Your disk is almost full, so the recording was stopped to keep what was saved.',
-    });
-    this.stopPromise ??= this.finalize();
-  }
-
-  // --- the engine --------------------------------------------------------------------------
-
-  /** Sends to the recorder window if there is one (it is created by the first request). */
-  private send(command: EngineCommand): void {
-    const win = peekWorkerWindow();
-    if (win) sendEvent(win.webContents, 'recorder:engineCommand', command);
-  }
-
-  private watchWorker(win: BrowserWindow): void {
-    if (this.watchedWorker === win) return;
-    this.watchedWorker = win;
-    win.once('closed', () => {
-      this.watchedWorker = undefined;
-      for (const [id, waiter] of this.waiters) {
-        waiter.resolve({
-          type: 'error',
-          code: 'ENGINE_CLOSED',
-          message: 'The recorder window closed unexpectedly.',
-          requestId: id,
-        });
-      }
-      this.waiters.clear();
-      if (this.machine.status === 'recording' || this.machine.status === 'paused') {
-        log.warn('Recorder window closed during a recording');
-        void this.stop('engine-closed');
-      } else if (isPreRecording(this.machine.status)) {
-        this.failStart(
-          this.token,
-          new StartFailure('ENGINE_CLOSED', 'The recorder window closed unexpectedly.'),
-        );
-      }
-    });
-  }
-
-  /** Sends a command that has a reply and waits for one of `expect` (or an error) with its id. */
-  private async engineRequest(
-    command: Extract<EngineCommand, { requestId: string }>,
-    expect: readonly EngineEvent['type'][],
-    timeoutMs: number,
-  ): Promise<EngineEvent> {
-    const win = getWorkerWindow();
-    this.watchWorker(win);
-    await Promise.race([
-      whenWorkerReady(),
-      sleep(10_000).then(() => {
-        throw new StartFailure('WORKER_TIMEOUT', 'The recorder did not start.');
-      }),
-    ]);
-    return new Promise<EngineEvent>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.waiters.delete(command.requestId);
-        reject(new StartFailure('ENGINE_TIMEOUT', 'The recorder did not answer in time.'));
-      }, timeoutMs);
-      this.waiters.set(command.requestId, {
-        types: new Set(expect),
-        resolve: (event) => {
-          clearTimeout(timer);
-          this.waiters.delete(command.requestId);
-          resolve(event);
-        },
-      });
-      this.send(command);
-    });
-  }
-
-  /** `recorder:engineEvent` from the hidden window. */
-  onEngineEvent(event: EngineEvent): void {
-    const requestId = 'requestId' in event ? event.requestId : undefined;
-    const waiter = requestId === undefined ? undefined : this.waiters.get(requestId);
-    if (waiter && (waiter.types.has(event.type) || event.type === 'error')) {
-      waiter.resolve(event);
-      return;
-    }
-    switch (event.type) {
-      case 'sourceLost':
-        if (this.machine.status === 'recording' || this.machine.status === 'paused') {
-          log.warn('The recorded source went away; finishing the recording');
-          this.dispatch({ type: 'SOURCE_LOST', at: performance.now() });
-          this.stopPromise ??= this.finalize();
-        } else if (isPreRecording(this.machine.status)) {
-          this.failStart(this.token, new StartFailure('SOURCE_LOST', 'The source went away.'));
-        }
-        return;
-      case 'tileLost':
-        if (this.ctx && !this.ctx.lostTiles.has(event.index)) {
-          log.warn(`A recorded source ended (source ${event.index + 1}); recording continues`);
-          this.ctx.lostTiles.add(event.index);
-          this.broadcast();
-        }
-        return;
-      case 'trackEnded':
-        log.warn(`Audio source ended: ${event.source}`);
-        this.dispatch({ type: 'AUDIO_LOST', source: event.source });
-        return;
-      case 'levels':
-        for (const contents of webContentsWithRoles(['toolbar'])) {
-          sendEvent(contents, 'recorder:levels', { mic: event.mic, system: event.system });
-        }
-        return;
-      case 'error':
-        if (this.machine.status === 'recording' || this.machine.status === 'paused') {
-          log.warn(`Recorder error: ${event.code}`);
-          this.dispatch({
-            type: 'WRITE_FAILED',
-            at: performance.now(),
-            code: event.code,
-            message: event.message,
-          });
-          this.stopPromise ??= this.finalize();
-        }
-        return;
-      default:
-        return;
-    }
-  }
-
-  // --- ending start-up and the window dance ------------------------------------------------
-
-  /** Stops whatever start-up is waiting for. */
-  private endStartup(reason: Error): void {
-    this.token += 1;
-    this.stopCursorFollow();
-    this.selectionWaiter?.reject(reason);
-    this.selectionWaiter = undefined;
-    const choice = this.choiceWaiter;
-    this.choiceWaiter = undefined;
-    choice?.('cancel');
-    for (const [id, waiter] of this.waiters) {
-      waiter.resolve({ type: 'error', code: 'CANCELLED', message: 'Cancelled.', requestId: id });
-    }
-    this.waiters.clear();
-    this.closeOverlays();
-    globalShortcut.unregister('Escape');
-    this.countdownWindow?.close();
-    this.countdownWindow = undefined;
-  }
-
-  /** Releases the engine and the session of a recording that never started. */
-  private afterStartupEnded(): void {
-    const ctx = this.ctx;
-    this.stopCursorFollow();
-    this.send({ cmd: 'abort' });
-    this.closeToolbar();
-    this.closeCamera();
-    if (ctx?.sessionCreated) void this.deps.sessions.abort(ctx.sessionId);
-    if (this.machine.status === 'idle') this.ctx = null;
-    // A cancelled start leaves the window as it was; a failure shows it (the error is there).
-    if (this.machine.status !== 'idle' || this.mainWasShown) this.restoreMain();
-  }
-
-  private failStart(token: number, error: unknown): void {
-    if (error instanceof Cancelled) return;
-    if (this.token !== token || !isPreRecording(this.machine.status)) return;
-    const code = error instanceof StartFailure ? error.code : 'START_FAILED';
-    const message =
-      error instanceof StartFailure
-        ? error.message
-        : 'Recording could not start. Please try again.';
-    if (error instanceof StartFailure) log.warn(`Recording start failed: ${code}`);
-    else log.error('Recording start failed', error);
-    this.endStartup(new Cancelled());
-    this.dispatch({ type: 'FAILED', code, message });
-    this.afterStartupEnded();
-  }
-
-  private async hideMain(): Promise<void> {
-    const main = getMainWindow();
-    // Only a window that is on screen needs to get out of the way (a hidden one must stay hidden).
-    if (main && main.isVisible() && !main.isMinimized()) {
-      await new Promise<void>((resolve) => {
-        const done = setTimeout(resolve, 600);
-        main.once('minimize', () => {
-          clearTimeout(done);
-          resolve();
-        });
-        main.minimize();
-      });
-    }
-    await sleep(SETTLE_MS);
-  }
-
-  private restoreMain(): void {
-    const main = getMainWindow();
-    if (!main) return;
-    if (main.isMinimized()) main.restore();
-    main.show();
-    main.focus();
   }
 
   // --- quitting ----------------------------------------------------------------------------
 
   /**
-   * `before-quit`: a recording in progress is stopped and finalized first (the toolbar says
-   * "Finishing recording..."), with a hard cap; past the cap the session directory stays for
-   * recovery. Returns true when the quit must wait.
+   * `before-quit`: recordings in progress are stopped and finalized first, all at once (their
+   * toolbars say "Finishing recording..."), inside one hard cap; past the cap the session
+   * directories stay for recovery. A recording that is only starting is cancelled.
    */
   handleBeforeQuit(event: { preventDefault: () => void }, quit: () => void): void {
     if (this.quitAllowed) return;
-    if (isPreRecording(this.machine.status)) {
-      this.cancel();
-      return;
+    for (const session of this.all()) {
+      if (session.isPreRecording) session.cancel();
     }
-    if (!this.isRecording) return;
+    const recording = this.all().filter((session) => session.isRecording);
+    if (recording.length === 0) return;
     event.preventDefault();
     if (this.quitting) return;
     this.quitting = true;
     this.broadcast();
-    log.info('Quit requested during a recording; finishing it first');
-    void settleWithin(this.stop('app-quit'), this.deps.quitCapMs ?? QUIT_FINALIZE_CAP_MS).then(
+    log.info(`Quit requested during ${recording.length} recording(s); finishing them first`);
+    const stopped = Promise.all(recording.map((session) => session.stop('app-quit')));
+    void settleWithin(stopped, this.deps.quitCapMs ?? QUIT_FINALIZE_CAP_MS).then(
       async (outcome) => {
         if (outcome === 'timeout') {
-          log.warn('Finalizing took too long; the session is kept for recovery');
-          this.finalizeAbort?.abort(); // kills ffmpeg; the manifest stays for the next start
+          log.warn('Finalizing took too long; the sessions are kept for recovery');
+          // kills ffmpeg; the manifests stay for the next start
+          for (const session of recording) session.abortFinalize();
           await sleep(300);
         }
         this.quitAllowed = true;
@@ -1503,9 +855,21 @@ export class RecorderController implements SelectionHost {
       },
     );
   }
+}
 
-  /** True while quitting must not close windows by itself. */
-  get isQuitting(): boolean {
-    return this.quitting;
+/** Minimizes the main window if it is on screen and lets the desktop settle (it must not be in the picture). */
+async function hideMainWindow(): Promise<void> {
+  const main = getMainWindow();
+  // Only a window that is on screen needs to get out of the way (a hidden one must stay hidden).
+  if (main && main.isVisible() && !main.isMinimized()) {
+    await new Promise<void>((resolve) => {
+      const done = setTimeout(resolve, 600);
+      main.once('minimize', () => {
+        clearTimeout(done);
+        resolve();
+      });
+      main.minimize();
+    });
   }
+  await sleep(SETTLE_MS);
 }

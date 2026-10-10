@@ -2,12 +2,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Camera,
   Check,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   GripVertical,
   Loader2,
   Mic,
   MicOff,
+  PanelRightOpen,
   Pause,
   Play,
   Square,
@@ -20,7 +22,9 @@ import {
 import type { ToastEvent } from '../../../shared/settings-ipc';
 import type { AudioSource } from '../../../shared/recorder-machine';
 import type { RecorderSnapshot } from '../../../shared/recorder-ipc';
+import { meetingBanner } from '../../../shared/meeting-banner';
 import { formatDuration } from '../../../shared/recording';
+import { TOOLBAR_HEIGHT } from '../../../shared/toolbar-placement';
 import { cn } from '../../lib/cn';
 import { useActiveMs, useRecorderState } from '../../recorder/use-recorder';
 
@@ -130,6 +134,63 @@ function AudioControl({ source, snapshot, level, recording }: AudioControlProps)
   );
 }
 
+const bannerButton =
+  'shrink-0 rounded-full bg-surface px-3 py-1 text-xs font-semibold text-fg transition-colors duration-150 hover:bg-surface-3';
+
+/**
+ * The row under the pill for a meeting recording: the meeting's window is hidden or the meeting
+ * ended, or the user shares their screen. It is as wide as the pill (its text wraps), so the window
+ * only grows downward.
+ */
+function MeetingBannerRow({ banner }: { banner: NonNullable<ReturnType<typeof meetingBanner>> }) {
+  const warning = banner.kind === 'meeting-hidden' || banner.kind === 'meeting-ended';
+  return (
+    <div
+      role="status"
+      data-testid="meeting-banner"
+      data-kind={banner.kind}
+      className={cn(
+        'flex w-0 min-w-full items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-medium select-none',
+        warning
+          ? 'border-warning bg-warning-soft text-warning'
+          : 'border-line-strong bg-surface text-fg',
+      )}
+    >
+      {warning ? <TriangleAlert className="size-4 shrink-0" aria-hidden="true" /> : null}
+      <span className="min-w-0 flex-1" data-testid="meeting-banner-text">
+        {banner.text}
+      </span>
+      {banner.kind === 'meeting-ended' ? (
+        <button
+          type="button"
+          className={bannerButton}
+          data-testid="meeting-banner-stop"
+          onClick={() => void window.framecapt.invoke('recorder:stop')}
+        >
+          Stop
+        </button>
+      ) : null}
+      {banner.kind === 'share-ask' ? (
+        <button
+          type="button"
+          className={bannerButton}
+          data-testid="meeting-banner-add"
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            void window.framecapt.invoke('recorder:toolbarMenu', {
+              menu: 'panel',
+              x: Math.max(0, Math.round(box.left)),
+              y: Math.max(0, Math.round(box.bottom)),
+            });
+          }}
+        >
+          Add…
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function Divider(): ReactNode {
   return <span className="h-5 w-px shrink-0 bg-line" aria-hidden="true" />;
 }
@@ -144,7 +205,7 @@ export function ToolbarView() {
   const activeMs = useActiveMs(snapshot);
   const levels = useLevels(snapshot.status === 'recording');
   const toast = useToast();
-  const pillRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   // "Tuck away": the pill shrinks to a recording indicator with one button to bring the controls
   // back. Only this window's layout changes; the recording, its state and the global stop and
   // pause shortcuts are untouched. While saving the full pill always shows.
@@ -154,21 +215,28 @@ export function ToolbarView() {
     document.documentElement.classList.add('overlay-root');
   }, []);
 
-  // The window is exactly as wide as the controls need: the pill reports its measured width
-  // (its content decides it, so a new button or a longer label can never be cut off).
+  // The window is exactly as big as the controls need: the toolbar reports its measured size (its
+  // content decides it, so a new button, a longer label or a banner row can never be cut off).
+  // The height is only sent when a banner row makes it taller than the pill.
   useEffect(() => {
-    const pill = pillRef.current;
-    if (!pill) return;
-    let reported = 0;
+    const root = rootRef.current;
+    if (!root) return;
+    let reported = '';
     const report = (): void => {
-      const width = Math.ceil(pill.getBoundingClientRect().width);
-      if (width > 0 && width !== reported) {
-        reported = width;
-        void window.framecapt.invoke('toolbar:resize', { width });
+      const box = root.getBoundingClientRect();
+      const width = Math.ceil(box.width);
+      const height = Math.ceil(box.height);
+      const key = `${width}x${height}`;
+      if (width > 0 && key !== reported) {
+        reported = key;
+        void window.framecapt.invoke('toolbar:resize', {
+          width,
+          ...(height > TOOLBAR_HEIGHT && { height }),
+        });
       }
     };
     const observer = new ResizeObserver(report);
-    observer.observe(pill);
+    observer.observe(root);
     report();
     return () => observer.disconnect();
   }, []);
@@ -178,6 +246,7 @@ export function ToolbarView() {
   const recording = status === 'recording';
   const saving = status === 'stopping' || status === 'processing';
   const compact = tucked && !saving;
+  const banner = saving ? null : meetingBanner(snapshot.meeting);
   const percent = snapshot.progress === null ? null : Math.round(snapshot.progress * 100);
   const label = saving
     ? snapshot.quitting
@@ -190,216 +259,269 @@ export function ToolbarView() {
       : 'Recording';
 
   return (
-    <div
-      ref={pillRef}
-      role="toolbar"
-      aria-label="Recording controls"
-      data-testid="toolbar"
-      data-status={status}
-      data-compact={compact || undefined}
-      className="app-toolbar flex h-12 w-max items-center gap-2 overflow-hidden rounded-full border border-line-strong bg-surface pr-3 pl-2 text-fg select-none"
-    >
-      <span
-        className="app-drag flex h-full w-4 shrink-0 cursor-grab items-center justify-center text-fg-subtle"
-        title="Drag to move"
-        data-testid="toolbar-grip"
-        aria-hidden="true"
+    <div ref={rootRef} className="flex w-max flex-col items-stretch gap-1.5">
+      <div
+        role="toolbar"
+        aria-label="Recording controls"
+        data-testid="toolbar"
+        data-status={status}
+        data-compact={compact || undefined}
+        className="app-toolbar flex h-12 w-max items-center gap-2 overflow-hidden rounded-full border border-line-strong bg-surface pr-3 pl-2 text-fg select-none"
       >
-        <GripVertical className="size-4" />
-      </span>
-
-      {saving ? (
-        <div
-          role="status"
-          data-testid="toolbar-saving"
-          className="flex min-w-44 items-center gap-2.5 text-sm font-medium tabular-nums"
+        <span
+          className="app-drag flex h-full w-4 shrink-0 cursor-grab items-center justify-center text-fg-subtle"
+          title="Drag to move"
+          data-testid="toolbar-grip"
+          aria-hidden="true"
         >
-          {percent === null ? (
-            <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden="true" />
-          ) : (
-            <span
-              role="progressbar"
-              aria-label="Saving the recording"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={percent}
-              className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-3"
-            >
+          <GripVertical className="size-4" />
+        </span>
+
+        {saving ? (
+          <div
+            role="status"
+            data-testid="toolbar-saving"
+            className="flex min-w-44 items-center gap-2.5 text-sm font-medium tabular-nums"
+          >
+            {percent === null ? (
+              <Loader2 className="size-4 shrink-0 animate-spin text-accent" aria-hidden="true" />
+            ) : (
               <span
-                className="block h-full rounded-full bg-accent-solid"
-                style={{ width: `${percent}%` }}
-              />
-            </span>
-          )}
-          {label}
-        </div>
-      ) : (
-        <>
-          <div className="flex shrink-0 items-center gap-2" data-testid="toolbar-status">
-            <span
-              aria-hidden="true"
-              data-testid="toolbar-dot"
-              className={cn(
-                'size-2.5 shrink-0 rounded-full',
-                paused ? 'bg-warning' : 'animate-pulse bg-danger-solid',
-              )}
-            />
-            <span
-              role="timer"
-              aria-label="Recording time"
-              data-testid="toolbar-timer"
-              className="min-w-[3.1rem] text-sm font-semibold tabular-nums"
-            >
-              {formatDuration(activeMs)}
-            </span>
-            {paused ? (
-              <span
-                data-testid="toolbar-paused-label"
-                className="text-xs font-semibold tracking-wide text-warning uppercase"
+                role="progressbar"
+                aria-label="Saving the recording"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percent}
+                className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-3"
               >
-                Paused
+                <span
+                  className="block h-full rounded-full bg-accent-solid"
+                  style={{ width: `${percent}%` }}
+                />
               </span>
-            ) : null}
-            {snapshot.lostTiles.length > 0 ? (
-              <span
-                role="status"
-                data-testid="badge-lost-tiles"
-                title="A source being recorded went away. The recording continues without it."
-                className="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-warning-soft px-2.5 text-xs font-medium whitespace-nowrap text-warning"
-              >
-                <TriangleAlert className="size-3.5" aria-hidden="true" />
-                {snapshot.lostTiles.length === 1
-                  ? 'A source ended'
-                  : `${snapshot.lostTiles.length} sources ended`}
-              </span>
-            ) : null}
-            {toast ? (
-              <span
-                role="status"
-                data-testid="toolbar-toast"
-                data-level={toast.level}
-                className={cn(
-                  'flex items-center gap-1 text-xs font-semibold whitespace-nowrap',
-                  toast.level === 'error' ? 'text-danger' : 'text-success',
-                )}
-              >
-                {toast.level === 'error' ? (
-                  <TriangleAlert className="size-3.5" aria-hidden="true" />
-                ) : (
-                  <Check className="size-3.5" aria-hidden="true" />
-                )}
-                {toast.message}
-              </span>
-            ) : null}
-            <span className="sr-only" role="status" aria-live="polite">
-              {label}
-            </span>
+            )}
+            {label}
           </div>
-
-          {compact ? (
-            <button
-              type="button"
-              className={iconButton}
-              aria-label="Show recording controls"
-              title="Show controls"
-              data-testid="toolbar-expand"
-              onClick={() => setTucked(false)}
-            >
-              <ChevronsLeft className="size-4" aria-hidden="true" />
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className={iconButton}
-                aria-label={paused ? 'Resume recording' : 'Pause recording'}
-                title={paused ? 'Resume' : 'Pause'}
-                data-testid={paused ? 'toolbar-resume' : 'toolbar-pause'}
-                disabled={!recording && !paused}
-                onClick={() =>
-                  void window.framecapt.invoke(paused ? 'recorder:resume' : 'recorder:pause')
-                }
-              >
-                {paused ? (
-                  <Play className="size-4" aria-hidden="true" />
-                ) : (
-                  <Pause className="size-4" aria-hidden="true" />
+        ) : (
+          <>
+            <div className="flex shrink-0 items-center gap-2" data-testid="toolbar-status">
+              <span
+                aria-hidden="true"
+                data-testid="toolbar-dot"
+                className={cn(
+                  'size-2.5 shrink-0 rounded-full',
+                  paused ? 'bg-warning' : 'animate-pulse bg-danger-solid',
                 )}
-              </button>
+              />
+              <span
+                role="timer"
+                aria-label="Recording time"
+                data-testid="toolbar-timer"
+                className="min-w-[3.1rem] text-sm font-semibold tabular-nums"
+              >
+                {formatDuration(activeMs)}
+              </span>
+              {paused ? (
+                <span
+                  data-testid="toolbar-paused-label"
+                  className="text-xs font-semibold tracking-wide text-warning uppercase"
+                >
+                  Paused
+                </span>
+              ) : null}
+              {snapshot.lostTiles.length > 0 ? (
+                <span
+                  role="status"
+                  data-testid="badge-lost-tiles"
+                  title="A source being recorded went away. The recording continues without it."
+                  className="flex h-7 shrink-0 items-center gap-1.5 rounded-full bg-warning-soft px-2.5 text-xs font-medium whitespace-nowrap text-warning"
+                >
+                  <TriangleAlert className="size-3.5" aria-hidden="true" />
+                  {snapshot.lostTiles.length === 1
+                    ? 'A source ended'
+                    : `${snapshot.lostTiles.length} sources ended`}
+                </span>
+              ) : null}
+              {toast ? (
+                <span
+                  role="status"
+                  data-testid="toolbar-toast"
+                  data-level={toast.level}
+                  className={cn(
+                    'flex items-center gap-1 text-xs font-semibold whitespace-nowrap',
+                    toast.level === 'error' ? 'text-danger' : 'text-success',
+                  )}
+                >
+                  {toast.level === 'error' ? (
+                    <TriangleAlert className="size-3.5" aria-hidden="true" />
+                  ) : (
+                    <Check className="size-3.5" aria-hidden="true" />
+                  )}
+                  {toast.message}
+                </span>
+              ) : null}
+              <span className="sr-only" role="status" aria-live="polite">
+                {label}
+              </span>
+            </div>
 
+            {compact ? (
               <button
                 type="button"
                 className={iconButton}
-                aria-label="Take screenshot"
-                title="Take screenshot"
-                data-testid="toolbar-screenshot"
-                disabled={!recording && !paused}
-                onClick={() => void window.framecapt.invoke('recorder:screenshot')}
+                aria-label="Show recording controls"
+                title="Show controls"
+                data-testid="toolbar-expand"
+                onClick={() => setTucked(false)}
               >
-                <Camera className="size-4" aria-hidden="true" />
+                <ChevronsLeft className="size-4" aria-hidden="true" />
               </button>
-
-              {snapshot.camera ? (
+            ) : (
+              <>
                 <button
                   type="button"
-                  className={cn(iconButton, !snapshot.camera.visible && 'text-danger')}
-                  aria-pressed={!snapshot.camera.visible}
-                  aria-label={snapshot.camera.visible ? 'Hide camera' : 'Show camera'}
-                  title={snapshot.camera.visible ? 'Hide camera' : 'Show camera'}
-                  data-testid="toolbar-camera"
-                  onClick={() => void window.framecapt.invoke('recorder:toggleCamera')}
+                  className={iconButton}
+                  aria-label={paused ? 'Resume recording' : 'Pause recording'}
+                  title={paused ? 'Resume' : 'Pause'}
+                  data-testid={paused ? 'toolbar-resume' : 'toolbar-pause'}
+                  disabled={!recording && !paused}
+                  onClick={() =>
+                    void window.framecapt.invoke(paused ? 'recorder:resume' : 'recorder:pause')
+                  }
                 >
-                  {snapshot.camera.visible ? (
-                    <Video className="size-4" aria-hidden="true" />
+                  {paused ? (
+                    <Play className="size-4" aria-hidden="true" />
                   ) : (
-                    <VideoOff className="size-4" aria-hidden="true" />
+                    <Pause className="size-4" aria-hidden="true" />
                   )}
                 </button>
-              ) : null}
 
-              <button
-                type="button"
-                className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-danger-solid px-3.5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-danger-solid-hover"
-                aria-label="Stop recording"
-                data-testid="toolbar-stop"
-                onClick={() => void window.framecapt.invoke('recorder:stop')}
-              >
-                <Square className="size-3 fill-current" aria-hidden="true" />
-                Stop
-              </button>
+                <button
+                  type="button"
+                  className={iconButton}
+                  aria-label="Take screenshot"
+                  title="Take screenshot"
+                  data-testid="toolbar-screenshot"
+                  disabled={!recording && !paused}
+                  onClick={() => void window.framecapt.invoke('recorder:screenshot')}
+                >
+                  <Camera className="size-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="-ml-2 flex h-8 w-5 shrink-0 items-center justify-center rounded-full text-fg-muted transition-colors duration-150 hover:bg-surface-3 hover:text-fg disabled:opacity-40"
+                  aria-label="More screenshot options"
+                  title="More screenshot options"
+                  data-testid="toolbar-screenshot-more"
+                  disabled={!recording && !paused}
+                  onClick={(event) => {
+                    const box = event.currentTarget.getBoundingClientRect();
+                    void window.framecapt.invoke('recorder:toolbarMenu', {
+                      menu: 'screenshot',
+                      x: Math.max(0, Math.round(box.left)),
+                      y: Math.max(0, Math.round(box.bottom)),
+                    });
+                  }}
+                >
+                  <ChevronDown className="size-3.5" aria-hidden="true" />
+                </button>
 
-              {snapshot.audio.mic || snapshot.audio.system ? <Divider /> : null}
-              {snapshot.audio.mic ? (
-                <AudioControl
-                  source="mic"
-                  snapshot={snapshot}
-                  level={levels.mic}
-                  recording={recording}
-                />
-              ) : null}
-              {snapshot.audio.system ? (
-                <AudioControl
-                  source="system"
-                  snapshot={snapshot}
-                  level={levels.system}
-                  recording={recording}
-                />
-              ) : null}
-              <Divider />
-              <button
-                type="button"
-                className={iconButton}
-                aria-label="Hide recording controls"
-                title="Hide controls (recording continues)"
-                data-testid="toolbar-collapse"
-                onClick={() => setTucked(true)}
-              >
-                <ChevronsRight className="size-4" aria-hidden="true" />
-              </button>
-            </>
-          )}
-        </>
-      )}
+                {snapshot.target !== 'multi' ? (
+                  <button
+                    type="button"
+                    className={cn(iconButton, 'relative')}
+                    aria-label="Add panel"
+                    title={
+                      snapshot.panelSlots.length > 0
+                        ? `Add panel (${snapshot.panelSlots.map((panel) => panel.label).join(', ')})`
+                        : 'Add panel'
+                    }
+                    data-testid="toolbar-add-panel"
+                    disabled={!recording && !paused}
+                    onClick={(event) => {
+                      const box = event.currentTarget.getBoundingClientRect();
+                      void window.framecapt.invoke('recorder:toolbarMenu', {
+                        menu: 'panel',
+                        x: Math.max(0, Math.round(box.left)),
+                        y: Math.max(0, Math.round(box.bottom)),
+                      });
+                    }}
+                  >
+                    <PanelRightOpen className="size-4" aria-hidden="true" />
+                    {snapshot.panelSlots.length > 0 ? (
+                      <span
+                        data-testid="toolbar-panel-count"
+                        className="absolute -top-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-accent-solid text-[9px] font-semibold text-white"
+                      >
+                        {snapshot.panelSlots.length}
+                      </span>
+                    ) : null}
+                  </button>
+                ) : null}
+
+                {snapshot.camera ? (
+                  <button
+                    type="button"
+                    className={cn(iconButton, !snapshot.camera.visible && 'text-danger')}
+                    aria-pressed={!snapshot.camera.visible}
+                    aria-label={snapshot.camera.visible ? 'Hide camera' : 'Show camera'}
+                    title={snapshot.camera.visible ? 'Hide camera' : 'Show camera'}
+                    data-testid="toolbar-camera"
+                    onClick={() => void window.framecapt.invoke('recorder:toggleCamera')}
+                  >
+                    {snapshot.camera.visible ? (
+                      <Video className="size-4" aria-hidden="true" />
+                    ) : (
+                      <VideoOff className="size-4" aria-hidden="true" />
+                    )}
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-danger-solid px-3.5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-danger-solid-hover"
+                  aria-label="Stop recording"
+                  data-testid="toolbar-stop"
+                  onClick={() => void window.framecapt.invoke('recorder:stop')}
+                >
+                  <Square className="size-3 fill-current" aria-hidden="true" />
+                  Stop
+                </button>
+
+                {snapshot.audio.mic || snapshot.audio.system ? <Divider /> : null}
+                {snapshot.audio.mic ? (
+                  <AudioControl
+                    source="mic"
+                    snapshot={snapshot}
+                    level={levels.mic}
+                    recording={recording}
+                  />
+                ) : null}
+                {snapshot.audio.system ? (
+                  <AudioControl
+                    source="system"
+                    snapshot={snapshot}
+                    level={levels.system}
+                    recording={recording}
+                  />
+                ) : null}
+                <Divider />
+                <button
+                  type="button"
+                  className={iconButton}
+                  aria-label="Hide recording controls"
+                  title="Hide controls (recording continues)"
+                  data-testid="toolbar-collapse"
+                  onClick={() => setTucked(true)}
+                >
+                  <ChevronsRight className="size-4" aria-hidden="true" />
+                </button>
+              </>
+            )}
+          </>
+        )}
+      </div>
+      {banner ? <MeetingBannerRow banner={banner} /> : null}
     </div>
   );
 }

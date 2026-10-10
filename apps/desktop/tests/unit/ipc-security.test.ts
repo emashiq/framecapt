@@ -187,7 +187,10 @@ const VALID: Partial<Record<IpcChannel, Record<string, unknown>>> = {
     },
   },
   'recorder:toggleMute': { source: 'mic' },
-  'toolbar:resize': { width: 300 },
+  'toolbar:resize': { width: 300, height: 90 },
+  'meeting:respond': { meetingId: 'm-1', action: 'record' },
+  'meeting:record': { meetingId: 'm-1', withScreen: true, displayId: '1001' },
+  'meeting:addToRecording': { meetingId: 'm-1' },
   'steps:setAuto': { auto: true },
   'flow:get': { historyId: UUID },
   'flow:update': { historyId: UUID, title: 'T', steps: [{ file: 'step-01.png', caption: 'c' }] },
@@ -378,6 +381,9 @@ describe('IPC: payloads are validated strictly', () => {
     );
     expect(parses('toolbar:resize', { width: 5000 })).toBe(false);
     expect(parses('toolbar:resize', { width: Number.NaN })).toBe(false);
+    expect(parses('toolbar:resize', { width: 300, height: 5000 })).toBe(false);
+    expect(parses('meeting:record', { meetingId: 'm-1' })).toBe(false);
+    expect(parses('meeting:record', { meetingId: '', withScreen: false })).toBe(false);
     expect(parses('history:list', { limit: 1e9 })).toBe(false);
     expect(parses('history:list', { query: 'a'.repeat(201) })).toBe(false);
     const long = { action: 'recordScreen', accelerator: 'a'.repeat(65) };

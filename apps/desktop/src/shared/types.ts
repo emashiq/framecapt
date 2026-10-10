@@ -7,7 +7,15 @@ import type {
 } from './ipc-contract';
 
 /** Roles a FrameCapt window can have. One renderer bundle serves every role (see main.tsx). */
-export const ROLES = ['main', 'overlay', 'toolbar', 'recorder', 'countdown', 'camera'] as const;
+export const ROLES = [
+  'main',
+  'overlay',
+  'toolbar',
+  'recorder',
+  'countdown',
+  'camera',
+  'meeting-prompt',
+] as const;
 export type Role = (typeof ROLES)[number];
 
 export const IPC_ERROR_CODES = [
@@ -16,6 +24,8 @@ export const IPC_ERROR_CODES = [
   'UNKNOWN_CHANNEL',
   'NOT_FOUND',
   'BUSY',
+  // A recording already has the most live panels it can take.
+  'PANEL_LIMIT',
   'INTERNAL',
   // Recording sessions (session:appendChunk / session:finish).
   'SEQ_GAP',
@@ -46,10 +56,12 @@ export interface IpcSuccess<T> {
 /** Every IPC call resolves to this shape; raw errors never cross the bridge. */
 export type IpcResult<T> = IpcSuccess<T> | IpcFailure;
 
-/** Arguments for `invoke`: channels whose request is `undefined` take no payload. */
+/** Arguments for `invoke`: channels whose request is `undefined` take no payload, optional ones may omit it. */
 export type InvokeArgs<C extends IpcChannel> = [IpcRequest<C>] extends [undefined]
   ? [payload?: undefined]
-  : [payload: IpcRequest<C>];
+  : undefined extends IpcRequest<C>
+    ? [payload?: IpcRequest<C>]
+    : [payload: IpcRequest<C>];
 
 /** The only surface exposed to the renderer as `window.framecapt`. */
 export interface FrameCaptApi {

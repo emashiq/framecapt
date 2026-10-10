@@ -47,6 +47,8 @@ import {
   ShotSaveOverResponseSchema,
 } from './project-ipc';
 import {
+  AddPanelRequestSchema,
+  AddPanelResponseSchema,
   AppendChunkRequestSchema,
   AppendChunkResponseSchema,
   EngineCommandSchema,
@@ -54,12 +56,23 @@ import {
   FinishSessionRequestSchema,
   FinishSessionResponseSchema,
   LevelsEventSchema,
+  PanelMenuRequestSchema,
   RecorderSnapshotSchema,
   RecorderStartRequestSchema,
   RecordingIdRequestSchema,
+  RemovePanelRequestSchema,
   ResolveChoiceRequestSchema,
+  SessionCommandRequestSchema,
+  SetPanelHiddenRequestSchema,
   ToggleMuteRequestSchema,
 } from './recorder-ipc';
+import {
+  MeetingAddRequestSchema,
+  MeetingListSchema,
+  MeetingPromptEventSchema,
+  MeetingRecordRequestSchema,
+  MeetingRespondRequestSchema,
+} from './meeting-ipc';
 import {
   LibraryFolderRequestSchema,
   LibraryFolderResponseSchema,
@@ -396,20 +409,81 @@ export const ipcContract = {
     response: z.object({ started: z.literal(true), sessionId: z.string() }),
     roles: ['main'],
   },
-  'recorder:pause': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
-  'recorder:resume': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
-  'recorder:stop': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
-  'recorder:cancel': { request: z.undefined(), response: z.void(), roles: ['main', 'toolbar'] },
+  // Up to three recordings run at once: the main window may name one (`sessionId`, default the
+  // primary one); a toolbar's command always acts on the recording that toolbar belongs to.
+  'recorder:pause': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:resume': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:stop': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  /** Stops every running recording (the tray's "Stop all recordings"). */
+  'recorder:stopAll': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  'recorder:cancel': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
   /** A screenshot of what is being recorded, saved straight to the screenshots folder. */
-  'recorder:screenshot': { request: z.undefined(), response: z.void(), roles: ['toolbar'] },
+  'recorder:screenshot': {
+    request: SessionCommandRequestSchema,
+    response: z.void(),
+    roles: ['toolbar'],
+  },
+  /**
+   * The toolbar's chevrons: main pops a native menu under the button (x and y are the button's
+   * bottom-left in the toolbar window's own coordinates).
+   */
+  'recorder:toolbarMenu': {
+    request: z.strictObject({
+      menu: z.enum(['screenshot', 'panel']),
+      x: z.number().min(0).max(2000),
+      y: z.number().min(0).max(2000),
+    }),
+    response: z.void(),
+    roles: ['toolbar'],
+  },
+  // --- live panels: another region, window or screen in the picture of a running recording ---
+  'recorder:addPanel': {
+    request: AddPanelRequestSchema,
+    response: AddPanelResponseSchema,
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:removePanel': {
+    request: RemovePanelRequestSchema,
+    response: z.void(),
+    roles: ['main', 'toolbar'],
+  },
+  'recorder:setPanelHidden': {
+    request: SetPanelHiddenRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
+  /** The main window's "Add panel" button: main pops the panel menu under it. */
+  'recorder:panelMenu': { request: PanelMenuRequestSchema, response: z.void(), roles: ['main'] },
   'recorder:toggleMute': {
     request: ToggleMuteRequestSchema,
     response: z.void(),
     roles: ['main', 'toolbar'],
   },
-  /** The toolbar reports the width its content needs; main sizes the window to it (no clipping). */
+  /**
+   * The toolbar reports the size its content needs; main sizes the window to it (no clipping). The
+   * height is only sent when a banner row is shown under the pill.
+   */
   'toolbar:resize': {
-    request: z.strictObject({ width: z.number().min(120).max(900) }),
+    request: z.strictObject({
+      width: z.number().min(120).max(900),
+      height: z.number().min(40).max(200).optional(),
+    }),
     response: z.void(),
     roles: ['toolbar'],
   },
@@ -437,7 +511,7 @@ export const ipcContract = {
     response: z.void(),
     roles: ['main'],
   },
-  'recorder:reset': { request: z.undefined(), response: z.void(), roles: ['main'] },
+  'recorder:reset': { request: SessionCommandRequestSchema, response: z.void(), roles: ['main'] },
   'recorder:showInFolder': {
     request: RecordingIdRequestSchema,
     response: z.void(),
@@ -756,6 +830,30 @@ export const ipcContract = {
     response: FlowExportResponseSchema,
     roles: ['main'],
   },
+
+  // --- meeting detection ---------------------------------------------------------------------
+  /** The user's answer on the meeting prompt. */
+  'meeting:respond': {
+    request: MeetingRespondRequestSchema,
+    response: z.void(),
+    roles: ['meeting-prompt'],
+  },
+  /** The prompt window asks what it should show (its first event may arrive before it listens). */
+  'meeting:getPrompt': {
+    request: z.undefined(),
+    response: MeetingPromptEventSchema.nullable(),
+    roles: ['meeting-prompt'],
+  },
+  /** The meetings being watched right now. */
+  'meeting:list': { request: z.undefined(), response: MeetingListSchema, roles: ['main'] },
+  /** Records a detected meeting (with the user's screen beside it, or alone). */
+  'meeting:record': { request: MeetingRecordRequestSchema, response: z.void(), roles: ['main'] },
+  /** Adds a detected meeting's window to the recording that is running. */
+  'meeting:addToRecording': {
+    request: MeetingAddRequestSchema,
+    response: z.void(),
+    roles: ['main'],
+  },
 } as const satisfies Record<string, ChannelDef>;
 
 export type IpcContract = typeof ipcContract;
@@ -810,6 +908,12 @@ export const ipcEvents = {
   'steps:finished': StepsFinishedEventSchema,
   /** Main -> the hidden recorder window: what the engine should do. */
   'recorder:engineCommand': EngineCommandSchema,
+
+  // --- meeting detection ---------------------------------------------------------------------
+  /** Main -> the prompt window: a meeting was detected. */
+  'meeting:prompt': MeetingPromptEventSchema,
+  /** Main -> the main window: the meetings being watched changed. */
+  'meeting:state': MeetingListSchema,
 } as const satisfies Record<string, z.ZodType>;
 
 export type IpcEvent = keyof typeof ipcEvents;

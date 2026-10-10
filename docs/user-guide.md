@@ -222,9 +222,31 @@ In the **Library**, choose **Edit video** on a WebM, MP4 or multi-source recordi
 - **Frame rate.** A recording is exported at the frame rate it was recorded at (30 or 60 fps; the recorder remembers it). For older recordings FrameCapt uses the rate the file reports when it is believable, otherwise 30 fps.
 - Not in this version: editing a GIF, speed changes, transitions between cuts, waveforms on the audio track, and editing recordings that are missing or damaged.
 
+### Screenshots while recording
+
+The camera button on the recording toolbar opens a menu: screenshot of what is being recorded, of the screen, of a region or of all screens. The screen, region and all-screens shortcuts also work. Each screenshot is saved to your screenshots folder and listed in the Library; no editor opens and FrameCapt's window is not brought up, so it cannot end up in the video. Window screenshots are not available while recording.
+
+### Recording several things at once
+
+Up to **three recordings** can run at the same time, each with its own toolbar and its own file. Start another from Home or a shortcut while one is running. The main window and the tray show all of them; Pause, Resume and Stop on a toolbar act on its own recording, and **Stop all** in the main window ends every one. System audio and the camera bubble belong to the first recording that asked for them; a later recording starts without them and says so. Only one recording can be in its start-up (choosing the area, countdown) at a time.
+
+### Adding panels to a recording
+
+While a screen, window or region recording runs, **Add panel** (on the toolbar and in the recordings strip on Home) adds a **region**, a **window** or a **screen** to the same video, up to three. The recording keeps the left two thirds of the picture and the panels stack on the right; the video's size never changes. Hide a panel to show a "hidden" card in its place (the source is not drawn) and show it again later, or remove it. A panel whose source goes away shows "Source ended". Multi-source recordings (`.fcap`) take no panels. The result is an ordinary video.
+
+## Recording meetings
+
+FrameCapt can notice **Google Meet** (in Chrome, Edge, Brave or Firefox), **Zoom**, **Microsoft Teams** and **Webex** calls and offer to record them. It looks at open windows on your computer and at which apps use the microphone; nothing is sent anywhere and window titles are never saved.
+
+- **The prompt.** A small card appears in a corner without taking focus, once per meeting. **Record meeting** records the meeting window; **Meeting + my screen** records your screen with the meeting as a panel; **Add to current recording** (while a recording is running) adds it as a panel; **Not now** dismisses it; **Don't ask for** the app stops prompts for that app. Detected meetings also show on Home, where you can start a recording yourself.
+- **When the meeting window is hidden.** If the window is minimized, hidden, a Meet tab you switched away from, or closed, its place in the video shows a neutral card ("Meeting window hidden" or "Meeting ended") instead of its picture, and **the audio keeps recording**. A window that is only covered by other windows is still recorded. Shown again, the picture returns within a moment.
+- **Screen sharing.** When you share your screen or a window in the call, FrameCapt adds the shared screen to the recording on its own when it is clear which one it is, and asks when it is not.
+- **Settings > Meetings.** Turn detection off, choose the apps, choose what happens when you share (add it, ask me, do nothing) and bring back apps you muted.
+- **Limitations.** Only English window titles are recognized. Sharing a Chrome **tab** is not detected (share a window or the screen instead). Teams is recognized only while it uses the microphone. On Linux only window titles are used: minimized windows and microphone use are not detected.
+
 ## Settings
 
-Sections: **General** (theme: follow Windows / light / dark; launch at login; close to tray; notifications), **Screenshots** (format, JPEG quality, what happens after a capture, copy every screenshot to the clipboard), **Recording** (quality, frame rate, follow mouse, countdown, microphone and device, system audio, also save MP4, save format, compression, copy every recording to the clipboard), **Shortcuts** (change or turn off each global shortcut and the editor's own keys; filter the list; a combination another action already has offers **Swap**; combinations Windows keeps for itself are refused with the reason; **Reset all shortcuts** puts everything back; see [keyboard-shortcuts.md](keyboard-shortcuts.md)), **Storage** (screenshots and recordings folders, chosen with a folder dialog and checked for write access), **Advanced** (capture diagnostics for troubleshooting), **About** (version and update status; updates are "Not configured for this build"). The **search box** at the top filters every section by what its options say (try "folder", "microphone" or "shortcut"); clearing it returns to the sections. Each section can be reset. Settings are stored in `%APPDATA%\FrameCapt\settings.json`.
+Sections: **General** (theme: follow Windows / light / dark; launch at login; close to tray; notifications), **Screenshots** (format, JPEG quality, what happens after a capture, copy every screenshot to the clipboard), **Meetings** (detect meetings, apps, what happens when you share, muted apps), **Recording** (quality, frame rate, follow mouse, countdown, microphone and device, system audio, also save MP4, save format, compression, copy every recording to the clipboard), **Shortcuts** (change or turn off each global shortcut and the editor's own keys; filter the list; a combination another action already has offers **Swap**; combinations Windows keeps for itself are refused with the reason; **Reset all shortcuts** puts everything back; see [keyboard-shortcuts.md](keyboard-shortcuts.md)), **Storage** (screenshots and recordings folders, chosen with a folder dialog and checked for write access), **Advanced** (capture diagnostics for troubleshooting), **About** (version and update status; updates are "Not configured for this build"). The **search box** at the top filters every section by what its options say (try "folder", "microphone" or "shortcut"); clearing it returns to the sections. Each section can be reset. Settings are stored in `%APPDATA%\FrameCapt\settings.json`.
 
 ## Tray
 

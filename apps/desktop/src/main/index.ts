@@ -5,6 +5,7 @@ import { registerAppProtocol, registerPrivilegedSchemes } from './app-protocol';
 import { setupDesktop, type Desktop } from './desktop';
 import { registerHandlers } from './handlers';
 import { applyLinuxSwitches } from './linux';
+import { setupMeetings, type Meetings } from './meeting/setup';
 import { initLogger, log } from './logger';
 import {
   installCsp,
@@ -67,6 +68,7 @@ function start(): void {
 
   let desktop: Desktop | undefined;
   let settings: SettingsStore | undefined;
+  let meetings: Meetings | null = null;
 
   // From here on closing windows really closes them (close-to-tray stands down).
   app.on('before-quit', () => setQuitting(true));
@@ -85,6 +87,7 @@ function start(): void {
   // Pending settings are written before the process ends; shortcuts and the tray are released.
   app.on('will-quit', (event) => {
     desktop?.dispose();
+    meetings?.dispose();
     if (settings?.hasPendingWrite) {
       event.preventDefault();
       void settings.flush().finally(() => app.quit());
@@ -125,13 +128,23 @@ function start(): void {
       isSquirrelInstall: () => isSquirrelInstall(process.execPath),
     });
     const appSettings = createAppSettings(store);
+    const provider = await createCaptureProvider();
     const services = registerHandlers(
-      await createCaptureProvider(),
+      provider,
       appSettings,
       () => desktop?.trayInfo() ?? { active: false, bounds: null },
       updates,
     );
     desktop = setupDesktop(appSettings, services);
+    void setupMeetings({
+      store,
+      recordingLive: () => services.recorder.anyLive,
+      recorder: services.recorder,
+      provider,
+    }).then((created) => {
+      meetings = created;
+      if (created) desktop?.setMeetings(created);
+    });
     // A start at login (--hidden) lives in the tray; without a tray the window is the only UI.
     const hidden = process.argv.includes(HIDDEN_ARG) && desktop.tray.active;
     createMainWindow({ show: !hidden });

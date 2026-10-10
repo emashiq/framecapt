@@ -18,7 +18,14 @@ import { log } from './logger';
 import type { AppSettings } from './settings';
 import { registerSettingsHandlers } from './settings/handlers';
 import { hasProblems, ShortcutManager, type GlobalShortcutApi } from './shortcuts';
-import { TrayController, buildTrayTemplate, trayTooltip, type TrayState } from './tray';
+import {
+  TrayController,
+  buildTrayTemplate,
+  isRecordingState,
+  trayTooltip,
+  type TrayState,
+} from './tray';
+import type { Meetings } from './meeting/setup';
 import { TRAY_ICONS, TRAY_SCALE_FACTORS } from './tray-icons.generated';
 import type { TrayInfo } from './tray-info';
 import {
@@ -31,10 +38,15 @@ import {
 /** Build-time constant of vite.main.config.ts: the literal `false` in every normal build. */
 declare const __FRAMECAPT_E2E__: boolean;
 
+/** What the tray needs of meeting detection. */
+type MeetingTraySource = Pick<Meetings, 'service' | 'onChange' | 'record'>;
+
 export interface Desktop {
   tray: TrayController;
   shortcuts: ShortcutManager;
   trayInfo(): TrayInfo;
+  /** Meeting detection is up: the tray lists the meetings it finds. */
+  setMeetings(source: MeetingTraySource): void;
   /** Quit from the tray or a menu: asks first while a recording runs. */
   requestQuit(): void;
   dispose(): void;
@@ -99,7 +111,10 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
         return recorder.status;
       },
       get busy() {
-        return recorder.busy;
+        return recorder.anyBusy;
+      },
+      get canStartAnother() {
+        return recorder.snapshot().canStartAnother;
       },
       start: (request) => recorder.start(request),
       stop: () => recorder.stop('user'),
@@ -177,6 +192,8 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     app.quit();
   }
 
+  /** The detected meetings (set once meeting detection is up); the tray offers to record them. */
+  let meetingSource: MeetingTraySource | undefined;
   const tray = new TrayController({
     createTray: (image) => new Tray(image),
     buildMenu: (template) => Menu.buildFromTemplate(template),
@@ -184,9 +201,19 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     handlers: {
       open: () => void showMainWindow(),
       openView,
-      run: (action: ShortcutAction) => actions.run(action),
-      togglePause: () => actions.run('pauseRecording'),
-      stop: () => actions.run('stopRecording'),
+      run: (action: ShortcutAction, options) => actions.run(action, options),
+      togglePause: (sessionId) => {
+        if (sessionId === undefined) return actions.run('pauseRecording');
+        const session = recorder.sessions().find((candidate) => candidate.sessionId === sessionId);
+        if (session?.status === 'paused') recorder.resume(sessionId);
+        else recorder.pause(sessionId);
+      },
+      stop: (sessionId) => {
+        if (sessionId === undefined) return actions.run('stopRecording');
+        void recorder.stop('user', sessionId);
+      },
+      stopAll: () => void recorder.stopAll(),
+      recordMeeting: (meetingId) => meetingSource?.record(meetingId),
       quit: requestQuit,
     },
     log,
@@ -194,15 +221,30 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
 
   const trayState = (): TrayState => {
     const snapshot = recorder.snapshot();
-    const active =
-      snapshot.activeMs + (snapshot.runningSince === null ? 0 : Date.now() - snapshot.runningSince);
+    const now = Date.now();
+    const activeAt = (summary: { activeMs: number; runningSince: number | null }): number =>
+      summary.activeMs + (summary.runningSince === null ? 0 : now - summary.runningSince);
     return {
       status: snapshot.status,
-      activeMs: active,
+      activeMs: activeAt(snapshot),
+      sessions: snapshot.sessions
+        .filter((session) => isRecordingState(session.status))
+        .map((session) => ({
+          sessionId: session.sessionId,
+          label: session.label,
+          status: session.status,
+          activeMs: activeAt(session),
+        })),
+      canStartAnother: snapshot.canStartAnother,
       shortcuts: shortcuts.status(),
       screenshotBusy: flow.state.active || steps.active,
       stepsActive: steps.active,
       multiDisplay: screen.getAllDisplays().length > 1,
+      meetings:
+        meetingSource?.service.list().meetings.map(({ meetingId, appLabel }) => ({
+          meetingId,
+          appLabel,
+        })) ?? [],
     };
   };
   let clock: NodeJS.Timeout | undefined;
@@ -210,9 +252,10 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     const state = trayState();
     tray.update(state);
     // The tooltip clock ticks only while a recording runs: nothing runs while idle.
-    if (state.status === 'recording' && !clock) {
+    const ticking = state.sessions?.some((session) => session.status === 'recording') ?? false;
+    if (ticking && !clock) {
       clock = setInterval(() => tray.updateTooltip(trayState()), 1000);
-    } else if (state.status !== 'recording' && clock) {
+    } else if (!ticking && clock) {
       clearInterval(clock);
       clock = undefined;
     }
@@ -293,6 +336,11 @@ export function setupDesktop(settings: AppSettings, services: AppServices): Desk
     tray,
     shortcuts,
     trayInfo: () => ({ active: tray.active, bounds: tray.bounds() }),
+    setMeetings(source) {
+      meetingSource = source;
+      source.onChange(refreshTray);
+      refreshTray();
+    },
     requestQuit,
     dispose() {
       if (clock) clearInterval(clock);

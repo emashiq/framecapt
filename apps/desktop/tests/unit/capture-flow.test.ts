@@ -154,13 +154,6 @@ describe('a screenshot during a recording', () => {
     expect(hoisted.main.show).not.toHaveBeenCalled();
   });
 
-  it('refuses a window screenshot with a clear message and starts nothing', async () => {
-    const { flow } = setup([display('1', 0, 0, 4, 3)], { isRecording: () => true });
-    await expect(flow.start({ target: 'window', sourceId: 'window:1:0' })).rejects.toThrow(
-      /while recording/,
-    );
-    expect(flow.state.active).toBe(false);
-  });
 
   it('a cancelled flow leaves the main window alone and frees the flow', async () => {
     const { flow } = setup([display('1', 0, 0, 4, 3)], { isRecording: () => true });

@@ -68,14 +68,18 @@ async function handleGrab(request: GrabFramesEvent): Promise<void> {
 /**
  * The hidden capture worker (role 'recorder'). It has no UI. Main sends `worker:grabFrames` (this
  * answers with frames or an error, one request at a time) and `recorder:engineCommand` (the one
- * and only recorder, see recorder/engine.ts).
+ * and only recorder of this window, see recorder/engine.ts). A recording that runs beside another
+ * gets a window of its own (`?engine=1`): that one only records and never serves frame grabs.
  */
 export function RecorderWorker() {
   useEffect(() => {
     let queue: Promise<void> = Promise.resolve();
-    const offFrames = window.framecapt.on('worker:grabFrames', (request) => {
-      queue = queue.then(() => handleGrab(request)).catch(() => undefined);
-    });
+    const engineOnly = window.location.hash.includes('engine=1');
+    const offFrames = engineOnly
+      ? () => undefined
+      : window.framecapt.on('worker:grabFrames', (request) => {
+          queue = queue.then(() => handleGrab(request)).catch(() => undefined);
+        });
     const engine = new RecorderEngine({
       send: (event) => void window.framecapt.invoke('recorder:engineEvent', event),
       invoke: window.framecapt.invoke,

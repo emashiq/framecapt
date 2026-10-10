@@ -10,8 +10,11 @@ import { friendlyError } from '../shared/error-messages';
 export interface ActionDeps {
   settings: () => Settings;
   recorder: {
+    /** The primary recording's status (see primaryOf). */
     status: RecorderStatus;
     busy: boolean;
+    /** Under the cap of simultaneous recordings, and none is starting. */
+    canStartAnother: boolean;
     start: (request: RecorderStartRequest) => Promise<unknown>;
     stop: () => Promise<void>;
     pause: () => void;
@@ -60,14 +63,17 @@ function errorToast(error: unknown): ToastEvent {
 /**
  * The one place global shortcuts, the tray menu and (through the same functions) the buttons start
  * things. Rules: a screenshot while anything runs is refused (BUSY, said in the UI), except while a
- * recording is live: then screen and region screenshots are saved directly and a window one is
- * refused (its picker needs the main window, which must stay out of the video); a record
- * shortcut while recording stops it; pause toggles; window targets go through the main window,
+ * recording is live: then every kind is saved directly (a window one asks the main window's
+ * picker, which content protection keeps out of the video); a record
+ * shortcut while recording stops the primary recording (the tray's record items start another one
+ * instead); pause toggles the primary one; window targets go through the main window,
  * which needs its picker (the editor is a window of its own and never stands in the way). While a step
  * guide is captured nothing else starts (the pointer and the screen belong to the guide); its own
  * shortcut finishes it.
  */
-export function createActions(deps: ActionDeps): { run: (action: ShortcutAction) => void } {
+export function createActions(deps: ActionDeps): {
+  run: (action: ShortcutAction, options?: { another: true }) => void;
+} {
   const busyToast = (): void =>
     deps.toast({ level: 'info', message: 'A capture is already in progress.' });
 
@@ -76,31 +82,31 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
     const { status } = deps.recorder;
     const live = status === 'recording' || status === 'paused';
     if ((deps.recorder.busy && !live) || deps.screenshotBusy()) return busyToast();
-    if (live) {
-      if (request.target === 'window') {
-        return deps.toast({
-          level: 'error',
-          message:
-            "Window screenshots can't be taken while recording. Use the camera button on the recording toolbar instead.",
-        });
-      }
-    } else if (request.target === 'window') {
+    // A window one asks the main window's picker, also during a recording (that window is kept out of the video).
+    if (request.target === 'window' && !request.sourceId) {
       return deps.askMain({ kind: 'screenshot', ...request });
     }
     void deps.startScreenshot(request).catch((error: unknown) => deps.toast(errorToast(error)));
   }
 
-  function record(target: Exclude<RecorderStartRequest['target'], 'multi'>): void {
+  function record(
+    target: Exclude<RecorderStartRequest['target'], 'multi'>,
+    another: boolean,
+  ): void {
     if (deps.steps.active) return busyToast();
     const { status } = deps.recorder;
-    if (status === 'recording' || status === 'paused') {
+    // One more recording beside the running ones (the tray): no stop, no cancel.
+    if (another) {
+      if (!deps.recorder.canStartAnother || deps.screenshotBusy()) return busyToast();
+    } else if (status === 'recording' || status === 'paused') {
       deps.log.info('Record shortcut pressed while recording: stopping');
       void deps.recorder.stop();
       return;
-    }
-    if (PRE_RECORDING.includes(status)) return deps.recorder.cancel();
-    if (status === 'stopping' || status === 'processing' || deps.screenshotBusy()) {
-      return busyToast();
+    } else {
+      if (PRE_RECORDING.includes(status)) return deps.recorder.cancel();
+      if (status === 'stopping' || status === 'processing' || deps.screenshotBusy()) {
+        return busyToast();
+      }
     }
     if (target === 'window') {
       return deps.askMain({ kind: 'record', target });
@@ -120,7 +126,7 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
   }
 
   return {
-    run(action) {
+    run(action, options) {
       if (action === 'stepsToggle') return stepsToggle();
       if (action === 'stepsCapture') {
         if (!deps.steps.active) {
@@ -133,7 +139,10 @@ export function createActions(deps: ActionDeps): { run: (action: ShortcutAction)
         return screenshot(SCREENSHOT_TARGETS[action as keyof typeof SCREENSHOT_TARGETS]);
       }
       if (action in RECORD_TARGETS) {
-        return record(RECORD_TARGETS[action as keyof typeof RECORD_TARGETS]);
+        return record(
+          RECORD_TARGETS[action as keyof typeof RECORD_TARGETS],
+          options?.another === true,
+        );
       }
       const { status } = deps.recorder;
       if (action === 'stopRecording') {

@@ -6,8 +6,11 @@ import { loadRenderer, registerWebContents, securePreferences } from '../windows
 
 export interface ToolbarWindow {
   win: BrowserWindow;
-  /** Resizes keeping the horizontal center, inside the display's work area. */
-  setWidth(width: number): void;
+  /**
+   * Resizes keeping the horizontal center, inside the display's work area. A taller window (a
+   * banner row under the pill) grows downward, or upward when it would leave the work area.
+   */
+  setWidth(width: number, height?: number): void;
   /** Closes without it counting as the user closing the toolbar. */
   closeQuietly(): void;
 }
@@ -59,14 +62,15 @@ export function createToolbarWindow(
 
   return {
     win,
-    setWidth(next) {
+    setWidth(next, nextHeight = TOOLBAR_HEIGHT) {
       if (win.isDestroyed()) return;
       const bounds = win.getBounds();
-      if (bounds.width === next) return;
+      if (bounds.width === next && bounds.height === nextHeight) return;
       const area = screen.getDisplayMatching(bounds).workArea;
       const centered = bounds.x + Math.round((bounds.width - next) / 2);
       const x = Math.min(Math.max(centered, area.x), area.x + area.width - next);
-      win.setBounds({ x, y: bounds.y, width: next, height: TOOLBAR_HEIGHT });
+      const y = Math.max(area.y, Math.min(bounds.y, area.y + area.height - nextHeight));
+      win.setBounds({ x, y, width: next, height: nextHeight });
     },
     closeQuietly() {
       quiet = true;

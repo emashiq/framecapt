@@ -25,6 +25,10 @@ export const IDLE_SNAPSHOT: RecorderSnapshot = {
   width: null,
   height: null,
   result: null,
+  panelSlots: [],
+  meeting: null,
+  sessions: [],
+  canStartAnother: true,
 };
 
 /**
@@ -61,7 +65,7 @@ const STATUS_ANNOUNCEMENT: Partial<Record<RecorderSnapshot['status'], string>> =
 };
 
 /** Active recording time in ms, ticking while the recording runs (paused time is excluded). */
-export function useActiveMs(snapshot: RecorderSnapshot): number {
+export function useActiveMs(snapshot: Pick<RecorderSnapshot, 'activeMs' | 'runningSince'>): number {
   const [now, setNow] = useState(() => Date.now());
   const running = snapshot.runningSince !== null;
   useEffect(() => {
